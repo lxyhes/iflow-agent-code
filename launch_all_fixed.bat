@@ -1,71 +1,55 @@
 @echo off
-setlocal
+chcp 65001 >nul 2>&1
 title IFlow Agent Launcher
 
 echo ====================================================
-echo    IFlow Agent Master Launcher (ASCII Mode)
+echo    IFlow Agent Launcher
 echo ====================================================
+echo.
 
-:: --- 1. Initialize Paths ---
-:: Get the directory where this script is located
+:: Get script directory
 set "BASE_DIR=%~dp0"
-:: Remove trailing backslash if present
 if "%BASE_DIR:~-1%"=="\" set "BASE_DIR=%BASE_DIR:~0,-1%"
+echo [INFO] Base: %BASE_DIR%
 
-echo [INFO] Project Root: %BASE_DIR%
-
-:: --- 2. Check Python ---
+:: Check Python
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python is not found in your PATH.
-    echo Please install Python or add it to your PATH environment variable.
-    pause
-    exit /b
+if errorlevel 1 (
+    echo [ERROR] Python not found!
+    goto :error
+)
+echo [OK] Python found
+
+:: Start Backend
+echo.
+echo [1/2] Starting Backend...
+start "Backend" cmd /k "cd /d %BASE_DIR% && set PYTHONPATH=%BASE_DIR% && python -u backend/server.py"
+
+echo Waiting 5 seconds...
+ping 127.0.0.1 -n 6 >nul
+
+:: Start Frontend
+echo.
+echo [2/2] Starting Frontend...
+if not exist "%BASE_DIR%\frontend\package.json" (
+    echo [ERROR] frontend/package.json not found!
+    goto :error
 )
 
-:: --- 3. Start Backend ---
-echo.
-echo [STEP 1/2] Starting Python Backend...
-:: We use 'start' to open a new window for the backend
-:: We set PYTHONPATH to ensure imports work correctly
-start "Agent-Backend" cmd /k "cd /d "%BASE_DIR%" && set PYTHONPATH=%BASE_DIR% && python backend/server.py"
+start "Frontend" cmd /k "cd /d %BASE_DIR%\frontend && npm run dev"
 
-echo [WAIT] Waiting 5 seconds for backend to initialize...
-timeout /t 5 /nobreak >nul
-
-:: --- 4. Start Frontend ---
-echo.
-echo [STEP 2/2] Starting Frontend UI...
-
-cd /d "%BASE_DIR%\frontend"
-
-:: Check if we are in the right folder
-if not exist "package.json" (
-    echo [ERROR] Could not find package.json in: %CD%
-    echo Please ensure the directory structure is correct.
-    pause
-    exit /b
-)
-
-:: Check for node_modules
-if not exist "node_modules" (
-    echo [INFO] node_modules folder missing. Running 'npm install'...
-    echo This might take a few minutes...
-    call npm install
-)
-
-echo [INFO] Launching Vite Server in a new window...
-start "Agent-Frontend" cmd /k "npm run dev"
-
-:: --- 5. Finish ---
 echo.
 echo ====================================================
-echo    SUCCESS! Services have been launched.
+echo    Done! 
+echo    Backend: http://localhost:8000
+echo    Frontend: http://localhost:5173
 echo ====================================================
+goto :end
+
+:error
 echo.
-echo    Backend API: http://localhost:8000
-echo    Frontend UI: http://localhost:5173
+echo [ERROR] Something went wrong!
+
+:end
 echo.
-echo    You can now minimize this window (do not close the other two).
-echo ====================================================
 pause

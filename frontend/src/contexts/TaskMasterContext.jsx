@@ -216,7 +216,12 @@ export const TaskMasterProvider = ({ children }) => {
 
   // Load initial data on mount or when auth changes
   useEffect(() => {
-    if (!authLoading && user && token) {
+    // If we have a token, we might be in fast-track auth, proceed if auth is not loading
+    // or if we have both user and token.
+    const isAuthReady = !authLoading && user && token;
+    const isFastTrack = token && token.startsWith('mock-');
+
+    if (isAuthReady || isFastTrack) {
       refreshProjects();
       refreshMCPStatus();
     } else {

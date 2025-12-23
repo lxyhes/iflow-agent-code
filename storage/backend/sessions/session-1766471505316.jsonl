@@ -1,0 +1,22 @@
+{"role": "user", "content": "11", "timestamp": 1766471505.3202343}
+{"role": "assistant", "content": "\n\n💥 **System Critical Error**: ", "timestamp": 1766471505.3211832}
+{"role": "user", "content": "11", "timestamp": 1766475712.874904}
+{"role": "assistant", "content": "\n\n💥 **Backend Error**: ", "timestamp": 1766475712.9142938}
+{"role": "user", "content": "11", "timestamp": 1766475834.4190993}
+{"role": "assistant", "content": "\n\n💥 **Backend Exception**: ", "timestamp": 1766475834.4587827}
+{"role": "user", "content": "111", "timestamp": 1766475841.458308}
+{"role": "assistant", "content": "\n\n💥 **Backend Exception**: ", "timestamp": 1766475841.492324}
+{"role": "user", "content": "你好呀", "timestamp": 1766476401.9836047}
+{"role": "assistant", "content": "\n\n❌ **IFlow SDK 错误**: Failed to connect: Failed to start iFlow process: Failed to start iFlow process: \n\n请确保:\n1. 已安装 iflow-cli-sdk: `pip install iflow-cli-sdk`\n2. iFlow CLI 已正确配置\n3. API Key 有效", "timestamp": 1766476404.0800638}
+{"role": "user", "content": "你好呀", "timestamp": 1766476697.4017708}
+{"role": "assistant", "content": "\n\n❌ **IFlow SDK 错误**: Failed to connect: Failed to start iFlow process: Failed to start iFlow process: \n\n请确保:\n1. 已安装 iflow-cli-sdk: `pip install iflow-cli-sdk`\n2. iFlow CLI 已正确配置\n3. API Key 有效", "timestamp": 1766476699.45803}
+{"role": "user", "content": "你好呀", "timestamp": 1766476918.6085448}
+{"role": "assistant", "content": "\n\n💥 **Backend Exception**: ", "timestamp": 1766476918.6519797}
+{"role": "user", "content": "你好呀", "timestamp": 1766476928.4482622}
+{"role": "assistant", "content": "\n\n💥 **Backend Exception**: ", "timestamp": 1766476928.4522622}
+{"role": "user", "content": "你好呀", "timestamp": 1766476969.080835}
+{"role": "assistant", "content": "\n\n💥 **Backend Exception**: ", "timestamp": 1766476969.1228344}
+{"role": "user", "content": "你好呀", "timestamp": 1766477055.8072414}
+{"role": "assistant", "content": "你好！我是 iFlow CLI，很高兴为你提供帮助。有什么我可以协助你的吗？", "timestamp": 1766477063.3577633}
+{"role": "user", "content": "你能帮我做什么", "timestamp": 1766477073.126606}
+{"role": "assistant", "content": "我可以帮助您完成多种软件工程任务，包括：\n**代码开发与维护**\n- 编写新功能和修复bug\n- 代码重构和优化\n- 添加测试和验证代码质量\n- 检查代码风格和规范\n**文件与项目管理**\n- 读取、编辑和创建文件\n- 搜索代码库中的特定内容\n- Git操作（提交、分支等）\n- 运行构建和测试命令\n**分析与探索**\n- 理解现有代码结构和架构\n- 分析项目依赖和配置\n- 解释复杂代码逻辑\n- 提供技术建议和最佳实践\n**任务自动化**\n- 执行shell命令和脚本\n- 批量处理文件操作\n- 设置开发环境\n- 部署相关任务\n您有什么具体需要帮助的吗？我可以根据您的项目结构和需求提供针对性的协助。", "timestamp": 1766477086.5471845}

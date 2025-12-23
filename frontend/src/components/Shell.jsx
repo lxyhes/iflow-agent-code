@@ -296,7 +296,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               data: text
             }));
           }
-        }).catch(() => {});
+        }).catch(() => { });
         return false;
       }
 
@@ -467,7 +467,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                   `Run ${initialCommand || 'command'} in ${selectedProject.displayName}` :
                   selectedSession ?
                     `Resume session: ${sessionDisplayNameLong}...` :
-                    'Start a new Claude session'
+                    'Start a new IFlow session'
                 }
               </p>
             </div>
@@ -484,7 +484,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               <p className="text-gray-400 text-sm mt-3 px-2">
                 {isPlainShell ?
                   `Running ${initialCommand || 'command'} in ${selectedProject.displayName}` :
-                  `Starting Claude CLI in ${selectedProject.displayName}`
+                  `Starting IFlow CLI in ${selectedProject.displayName}`
                 }
               </p>
             </div>

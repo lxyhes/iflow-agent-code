@@ -54,7 +54,7 @@ export function useWebSocket() {
           const data = JSON.parse(event.data);
           setMessages(prev => [...prev, data]);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          // Quietly ignore
         }
       };
 
@@ -62,14 +62,15 @@ export function useWebSocket() {
         setIsConnected(false);
         setWs(null);
         
-        // Attempt to reconnect after 3 seconds
+        // Attempt to reconnect after 10 seconds (less aggressive)
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
-        }, 3000);
+        }, 10000);
       };
 
       websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        // Only log once to avoid cluttering
+        if (!ws) console.warn('WebSocket connection unavailable (expected in simplified backend)');
       };
 
     } catch (error) {

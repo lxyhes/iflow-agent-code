@@ -1,12 +1,11 @@
 import asyncio
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, List, Dict, Any
 from .iflow_client import create_iflow_client
 
 class Agent:
-    def __init__(self, name: str = "IFlowAgent", cwd: str = None, mode: str = "yolo"):
+    def __init__(self, name: str = "IFlowAgent", cwd: str = None, mode: str = "yolo", model: str = None, mcp_servers: List[Dict[str, Any]] = None):
         self.name = name
-        # 根据参数创建 client
-        self.client = create_iflow_client(cwd=cwd, mode=mode)
+        self.client = create_iflow_client(cwd=cwd, mode=mode, model=model, mcp_servers=mcp_servers)
 
     async def chat(self, user_input: str) -> str:
         full_response = ""

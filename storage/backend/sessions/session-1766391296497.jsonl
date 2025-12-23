@@ -1,0 +1,17 @@
+{"role": "user", "content": "你好呀", "timestamp": 1766391296.5029743}
+{"role": "assistant", "content": "\n\n❌ **Connection Failed**: Could not connect to iFlow CLI. Is it installed?", "timestamp": 1766391298.5831099}
+{"role": "user", "content": "你好呀", "timestamp": 1766394037.515627}
+{"role": "assistant", "content": "\n\n❌ **Connection Failed**: Could not connect to iFlow CLI. Is it installed?", "timestamp": 1766394039.5701573}
+{"role": "user", "content": "你好呀 你是 ", "timestamp": 1766394560.6993086}
+{"role": "user", "content": "你好呀 ", "timestamp": 1766394892.94695}
+{"role": "user", "content": "111", "timestamp": 1766395853.9122446}
+{"role": "assistant", "content": "\n\n❌ **Connection Failed**: Could not connect to iFlow CLI. Is it installed?", "timestamp": 1766395868.622346}
+{"role": "user", "content": "你好呀", "timestamp": 1766396349.4215386}
+{"role": "user", "content": "11", "timestamp": 1766450195.4816022}
+{"role": "user", "content": "你好呀", "timestamp": 1766468890.6097841}
+{"role": "user", "content": "你好呀 ", "timestamp": 1766469204.055371}
+{"role": "user", "content": "111", "timestamp": 1766469598.5436366}
+{"role": "user", "content": "111", "timestamp": 1766470391.8833158}
+{"role": "assistant", "content": "\n\n💥 **Critical Failure**: ", "timestamp": 1766470446.5314362}
+{"role": "user", "content": "你好呀", "timestamp": 1766470457.3081012}
+{"role": "assistant", "content": "\n\n💥 **Critical Failure**: ", "timestamp": 1766470516.5530689}

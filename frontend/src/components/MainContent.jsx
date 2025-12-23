@@ -18,13 +18,14 @@ import CodeEditor from './CodeEditor';
 import StandaloneShell from './StandaloneShell';
 import GitPanel from './GitPanel';
 import ErrorBoundary from './ErrorBoundary';
-import ClaudeLogo from './ClaudeLogo';
+import IFlowLogo from './IFlowLogo';
 import CursorLogo from './CursorLogo';
 import TaskList from './TaskList';
 import TaskDetail from './TaskDetail';
 import PRDEditor from './PRDEditor';
 import Tooltip from './Tooltip';
 import IFlowModeSelector from './IFlowModeSelector';
+import IFlowModelSelector from './IFlowModelSelector';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
@@ -66,17 +67,17 @@ function MainContent({
   const [isResizing, setIsResizing] = useState(false);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const resizeRef = useRef(null);
-  
+
   // PRD Editor state
   const [showPRDEditor, setShowPRDEditor] = useState(false);
   const [selectedPRD, setSelectedPRD] = useState(null);
   const [existingPRDs, setExistingPRDs] = useState([]);
   const [prdNotification, setPRDNotification] = useState(null);
-  
+
   // TaskMaster context
   const { tasks, currentProject, refreshTasks, setCurrentProject } = useTaskMaster();
   const { tasksEnabled, isTaskMasterInstalled, isTaskMasterReady } = useTasksSettings();
-  
+
   // Only show tasks tab if TaskMaster is installed and enabled
   const shouldShowTasksTab = tasksEnabled && isTaskMasterInstalled;
 
@@ -101,7 +102,7 @@ function MainContent({
         setExistingPRDs([]);
         return;
       }
-      
+
       try {
         const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
         if (response.ok) {
@@ -230,16 +231,16 @@ function MainContent({
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-gray-500 dark:text-gray-400">
             <div className="w-12 h-12 mx-auto mb-4">
-              <div 
-                className="w-full h-full rounded-full border-4 border-gray-200 border-t-blue-500" 
-                style={{ 
+              <div
+                className="w-full h-full rounded-full border-4 border-gray-200 border-t-blue-500"
+                style={{
                   animation: 'spin 1s linear infinite',
                   WebkitAnimation: 'spin 1s linear infinite',
                   MozAnimation: 'spin 1s linear infinite'
-                }} 
+                }}
               />
             </div>
-            <h2 className="text-xl font-semibold mb-2">Loading Claude Code UI</h2>
+            <h2 className="text-xl font-semibold mb-2">Loading IFlow UI</h2>
             <p>Setting up your workspace...</p>
           </div>
         </div>
@@ -315,7 +316,7 @@ function MainContent({
                   {selectedSession.__provider === 'cursor' ? (
                     <CursorLogo className="w-4 h-4" />
                   ) : (
-                    <ClaudeLogo className="w-4 h-4" />
+                    <IFlowLogo className="w-4 h-4" />
                   )}
                 </div>
               )}
@@ -342,9 +343,9 @@ function MainContent({
                   <div className="min-w-0">
                     <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
                       {activeTab === 'files' ? 'Project Files' :
-                       activeTab === 'git' ? 'Source Control' :
-                       (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
-                       'Project'}
+                        activeTab === 'git' ? 'Source Control' :
+                          (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
+                            'Project'}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {selectedProject.displayName}
@@ -354,19 +355,23 @@ function MainContent({
               </div>
             </div>
           </div>
-          
+
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:flex items-center">
-            {activeTab === 'chat' && <IFlowModeSelector />}
+            {activeTab === 'chat' && (
+              <>
+                <IFlowModelSelector />
+                <IFlowModeSelector />
+              </>
+            )}
             <div className="relative flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
               <Tooltip content="Chat" position="bottom">
                 <button
                   onClick={() => setActiveTab('chat')}
-                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
-                    activeTab === 'chat'
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${activeTab === 'chat'
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-1 sm:gap-1.5">
                     <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -379,11 +384,10 @@ function MainContent({
               <Tooltip content="Shell" position="bottom">
                 <button
                   onClick={() => setActiveTab('shell')}
-                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                    activeTab === 'shell'
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'shell'
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-1 sm:gap-1.5">
                     <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -396,11 +400,10 @@ function MainContent({
               <Tooltip content="Files" position="bottom">
                 <button
                   onClick={() => setActiveTab('files')}
-                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                    activeTab === 'files'
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'files'
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-1 sm:gap-1.5">
                     <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -413,11 +416,10 @@ function MainContent({
               <Tooltip content="Source Control" position="bottom">
                 <button
                   onClick={() => setActiveTab('git')}
-                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                    activeTab === 'git'
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'git'
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   <span className="flex items-center gap-1 sm:gap-1.5">
                     <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,11 +433,10 @@ function MainContent({
                 <Tooltip content="Tasks" position="bottom">
                   <button
                     onClick={() => setActiveTab('tasks')}
-                    className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                      activeTab === 'tasks'
+                    className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'tasks'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
+                      }`}
                   >
                     <span className="flex items-center gap-1 sm:gap-1.5">
                       <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -446,7 +447,7 @@ function MainContent({
                   </button>
                 </Tooltip>
               )}
-               {/* <button
+              {/* <button
                 onClick={() => setActiveTab('preview')}
                 className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   activeTab === 'preview'
@@ -473,86 +474,86 @@ function MainContent({
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails={true}>
               <ChatInterface
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              ws={ws}
-              sendMessage={sendMessage}
-              messages={messages}
-              onFileOpen={handleFileOpen}
-              onInputFocusChange={onInputFocusChange}
-              onSessionActive={onSessionActive}
-              onSessionInactive={onSessionInactive}
-              onSessionProcessing={onSessionProcessing}
-              onSessionNotProcessing={onSessionNotProcessing}
-              processingSessions={processingSessions}
-              onReplaceTemporarySession={onReplaceTemporarySession}
-              onNavigateToSession={onNavigateToSession}
-              onShowSettings={onShowSettings}
-              autoExpandTools={autoExpandTools}
-              showRawParameters={showRawParameters}
-              showThinking={showThinking}
-              autoScrollToBottom={autoScrollToBottom}
-              sendByCtrlEnter={sendByCtrlEnter}
-              externalMessageUpdate={externalMessageUpdate}
-              onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
-            />
-          </ErrorBoundary>
-        </div>
-        {activeTab === 'files' && (
-          <div className="h-full overflow-hidden">
-            <FileTree selectedProject={selectedProject} />
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                ws={ws}
+                sendMessage={sendMessage}
+                messages={messages}
+                onFileOpen={handleFileOpen}
+                onInputFocusChange={onInputFocusChange}
+                onSessionActive={onSessionActive}
+                onSessionInactive={onSessionInactive}
+                onSessionProcessing={onSessionProcessing}
+                onSessionNotProcessing={onSessionNotProcessing}
+                processingSessions={processingSessions}
+                onReplaceTemporarySession={onReplaceTemporarySession}
+                onNavigateToSession={onNavigateToSession}
+                onShowSettings={onShowSettings}
+                autoExpandTools={autoExpandTools}
+                showRawParameters={showRawParameters}
+                showThinking={showThinking}
+                autoScrollToBottom={autoScrollToBottom}
+                sendByCtrlEnter={sendByCtrlEnter}
+                externalMessageUpdate={externalMessageUpdate}
+                onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
+              />
+            </ErrorBoundary>
           </div>
-        )}
-        {activeTab === 'shell' && (
-          <div className="h-full w-full overflow-hidden">
-            <StandaloneShell
-              project={selectedProject}
-              session={selectedSession}
-              showHeader={false}
-            />
-          </div>
-        )}
-        {activeTab === 'git' && (
-          <div className="h-full overflow-hidden">
-            <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
-          </div>
-        )}
-        {shouldShowTasksTab && (
-          <div className={`h-full ${activeTab === 'tasks' ? 'block' : 'hidden'}`}>
-            <div className="h-full flex flex-col overflow-hidden">
-              <TaskList
-                tasks={tasks || []}
-                onTaskClick={handleTaskClick}
-                showParentTasks={true}
-                className="flex-1 overflow-y-auto p-4"
-                currentProject={currentProject}
-                onTaskCreated={refreshTasks}
-                onShowPRDEditor={(prd = null) => {
-                  setSelectedPRD(prd);
-                  setShowPRDEditor(true);
-                }}
-                existingPRDs={existingPRDs}
-                onRefreshPRDs={(showNotification = false) => {
-                  // Reload existing PRDs
-                  if (currentProject?.name) {
-                    api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`)
-                      .then(response => response.ok ? response.json() : Promise.reject())
-                      .then(data => {
-                        setExistingPRDs(data.prdFiles || []);
-                        if (showNotification) {
-                          setPRDNotification('PRD saved successfully!');
-                          setTimeout(() => setPRDNotification(null), 3000);
-                        }
-                      })
-                      .catch(error => console.error('Failed to refresh PRDs:', error));
-                  }
-                }}
+          {activeTab === 'files' && (
+            <div className="h-full overflow-hidden">
+              <FileTree selectedProject={selectedProject} />
+            </div>
+          )}
+          {activeTab === 'shell' && (
+            <div className="h-full w-full overflow-hidden">
+              <StandaloneShell
+                project={selectedProject}
+                session={selectedSession}
+                showHeader={false}
               />
             </div>
-          </div>
-        )}
-        <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
-          {/* <LivePreviewPanel
+          )}
+          {activeTab === 'git' && (
+            <div className="h-full overflow-hidden">
+              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+            </div>
+          )}
+          {shouldShowTasksTab && (
+            <div className={`h-full ${activeTab === 'tasks' ? 'block' : 'hidden'}`}>
+              <div className="h-full flex flex-col overflow-hidden">
+                <TaskList
+                  tasks={tasks || []}
+                  onTaskClick={handleTaskClick}
+                  showParentTasks={true}
+                  className="flex-1 overflow-y-auto p-4"
+                  currentProject={currentProject}
+                  onTaskCreated={refreshTasks}
+                  onShowPRDEditor={(prd = null) => {
+                    setSelectedPRD(prd);
+                    setShowPRDEditor(true);
+                  }}
+                  existingPRDs={existingPRDs}
+                  onRefreshPRDs={(showNotification = false) => {
+                    // Reload existing PRDs
+                    if (currentProject?.name) {
+                      api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`)
+                        .then(response => response.ok ? response.json() : Promise.reject())
+                        .then(data => {
+                          setExistingPRDs(data.prdFiles || []);
+                          if (showNotification) {
+                            setPRDNotification('PRD saved successfully!');
+                            setTimeout(() => setPRDNotification(null), 3000);
+                          }
+                        })
+                        .catch(error => console.error('Failed to refresh PRDs:', error));
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
+            {/* <LivePreviewPanel
             selectedProject={selectedProject}
             serverStatus={serverStatus}
             serverUrl={serverUrl}
@@ -576,7 +577,7 @@ function MainContent({
             serverLogs={serverLogs}
             onClearLogs={() => setServerLogs([])}
           /> */}
-        </div>
+          </div>
         </div>
 
         {/* Code Editor Right Sidebar - Desktop only, Mobile uses modal */}
@@ -643,14 +644,14 @@ function MainContent({
             setSelectedPRD(null);
           }}
           isNewFile={!selectedPRD?.isExisting}
-          file={{ 
+          file={{
             name: selectedPRD?.name || 'prd.txt',
             content: selectedPRD?.content || ''
           }}
           onSave={async () => {
             setShowPRDEditor(false);
             setSelectedPRD(null);
-            
+
             // Reload existing PRDs with notification
             try {
               const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
@@ -663,7 +664,7 @@ function MainContent({
             } catch (error) {
               console.error('Failed to refresh PRDs:', error);
             }
-            
+
             refreshTasks?.();
           }}
         />

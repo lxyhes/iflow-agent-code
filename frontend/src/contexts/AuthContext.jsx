@@ -23,14 +23,28 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('auth-token'));
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    const savedToken = localStorage.getItem('auth-token');
+    if (savedToken && savedToken.startsWith('mock-')) {
+      return { id: 1, username: 'iflow-user', email: 'dev@local.host' };
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    const savedToken = localStorage.getItem('auth-token');
+    return !(savedToken && savedToken.startsWith('mock-'));
+  });
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (user && token && token.startsWith('mock-')) {
+      setIsLoading(false);
+      return;
+    }
+    
     if (import.meta.env.VITE_IS_PLATFORM === 'true') {
       setUser({ username: 'platform-user' });
       setNeedsSetup(false);
@@ -64,7 +78,16 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(true);
       setError(null);
 
-      // Check if system needs setup
+      // 1. Check if we have a mock token (FAST TRACK)
+      if (token && token.startsWith('mock-')) {
+          setUser({ id: 1, username: 'iflow-user', email: 'dev@local.host' });
+          setNeedsSetup(false);
+          setHasCompletedOnboarding(true);
+          setIsLoading(false);
+          return;
+      }
+
+      // 2. Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
 
@@ -74,7 +97,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // If we have a token, verify it
+      // 3. Normal Token Verification
       if (token) {
         try {
           const userResponse = await api.auth.user();
@@ -105,11 +128,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
+  const login = async (usernameOrUser, passwordOrToken = null) => {
     try {
       setError(null);
-      const response = await api.auth.login(username, password);
+      
+      // If we're passing objects directly (simulated login)
+      if (typeof usernameOrUser === 'string' && passwordOrToken && passwordOrToken.startsWith('mock-')) {
+          const mockUser = { id: 1, username: usernameOrUser, email: 'dev@local.host' };
+          const mockToken = passwordOrToken;
+          setToken(mockToken);
+          setUser(mockUser);
+          localStorage.setItem('auth-token', mockToken);
+          return { success: true };
+      }
 
+      // Traditional flow
+      const response = await api.auth.login(usernameOrUser, passwordOrToken);
       const data = await response.json();
 
       if (response.ok) {

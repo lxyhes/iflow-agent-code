@@ -13,7 +13,7 @@ const LoadingScreen = () => (
           <MessageSquare className="w-8 h-8 text-primary-foreground" />
         </div>
       </div>
-      <h1 className="text-2xl font-bold text-foreground mb-2">Claude Code UI</h1>
+      <h1 className="text-2xl font-bold text-foreground mb-2">IFlow UI</h1>
       <div className="flex items-center justify-center space-x-2">
         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -27,20 +27,13 @@ const LoadingScreen = () => (
 const ProtectedRoute = ({ children }) => {
   const { user, isLoading, needsSetup, hasCompletedOnboarding, refreshOnboardingStatus } = useAuth();
 
-  if (import.meta.env.VITE_IS_PLATFORM === 'true') {
-    if (isLoading) {
-      return <LoadingScreen />;
-    }
-
-    if (!hasCompletedOnboarding) {
-      return <Onboarding onComplete={refreshOnboardingStatus} />;
-    }
-
-    return children;
-  }
-
   if (isLoading) {
     return <LoadingScreen />;
+  }
+
+  // Handle Onboarding if not completed
+  if (!hasCompletedOnboarding) {
+    return <Onboarding onComplete={refreshOnboardingStatus} />;
   }
 
   if (needsSetup) {
@@ -49,10 +42,6 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <LoginForm />;
-  }
-
-  if (!hasCompletedOnboarding) {
-    return <Onboarding onComplete={refreshOnboardingStatus} />;
   }
 
   return children;

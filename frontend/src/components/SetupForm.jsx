@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import ClaudeLogo from './ClaudeLogo';
+import IFlowLogo from './IFlowLogo';
 
 const SetupForm = () => {
   const [username, setUsername] = useState('');
@@ -8,36 +8,36 @@ const SetupForm = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const { register } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    
+
     if (username.length < 3) {
       setError('Username must be at least 3 characters long');
       return;
     }
-    
+
     if (password.length < 6) {
       setError('Password must be at least 6 characters long');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     const result = await register(username, password);
-    
+
     if (!result.success) {
       setError(result.error);
     }
-    
+
     setIsLoading(false);
   };
 
@@ -48,9 +48,9 @@ const SetupForm = () => {
           {/* Logo and Title */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
-              <ClaudeLogo size={64} />
+              <IFlowLogo size={64} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome to Claude Code UI</h1>
+            <h1 className="text-3xl font-extrabold text-foreground mb-2">Welcome to IFlow UI</h1>
             <p className="text-muted-foreground mt-2">
               Set up your account to get started
             </p>

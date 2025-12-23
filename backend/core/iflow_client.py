@@ -1,118 +1,114 @@
 import asyncio
-import json
 import os
-from typing import AsyncGenerator, Optional
+import subprocess
+import shutil
+import logging
+import sys
+import concurrent.futures
+from typing import AsyncGenerator, List, Dict, Any
 
-try:
-    from iflow_sdk import (
-        IFlowClient, 
-        IFlowOptions,
-        AssistantMessage, 
-        ToolCallMessage, 
-        PlanMessage, 
-        TaskFinishMessage,
-        StopReason,
-        ApprovalMode,
-        AuthMethodInfo,
-        ConnectionError,
-        TimeoutError
-    )
-except ImportError:
-    from ..mock_iflow_sdk import (
-        IFlowClient, 
-        IFlowOptions,
-        AssistantMessage, 
-        ToolCallMessage, 
-        PlanMessage, 
-        TaskFinishMessage,
-        StopReason,
-        ApprovalMode,
-        AuthMethodInfo,
-        ConnectionError,
-        TimeoutError
-    )
+# 配置日志
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger("IFlowClient")
+
+def find_iflow_path():
+    """查找 iflow 可执行文件路径"""
+    npm_global = os.path.join(os.environ.get('APPDATA', ''), 'npm')
+    possible_paths = [
+        shutil.which("iflow"),
+        shutil.which("iflow.cmd"),
+        os.path.join(npm_global, "iflow.cmd"),
+        os.path.join(npm_global, "iflow"),
+        "iflow"
+    ]
+    for p in possible_paths:
+        if p and os.path.exists(p):
+            logger.info(f"Found iflow at: {p}")
+            return p
+    logger.warning("iflow not found, using 'iflow'")
+    return "iflow"
+
+# 线程池用于运行同步的子进程
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+def _run_iflow_sync(iflow_path: str, user_input: str, model: str, cwd: str) -> str:
+    """同步运行 iflow CLI（在线程中执行）"""
+    safe_input = user_input.replace('"', '\\"').replace('\n', ' ')
+    cmd = f'"{iflow_path}" -p "{safe_input}" --model "{model}" -y'
+    logger.info(f"Running CLI: {cmd}")
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=300,
+            encoding='utf-8',
+            errors='ignore'
+        )
+        
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        
+        logger.debug(f"stdout length: {len(stdout)}")
+        if stderr:
+            logger.error(f"stderr: {stderr[:500]}")
+        
+        # 过滤输出
+        lines = []
+        for line in stdout.split('\n'):
+            if any(x in line for x in ["[ACP]", "🚀", "Checking", "INFO:", "DEBUG:", "Attempt", "Error when", "<Execution Info>", "session-id", "conversation-id", "assistantRounds", "executionTimeMs", "tokenUsage"]):
+                continue
+            if line.strip():
+                lines.append(line)
+        
+        output = '\n'.join(lines).strip()
+        
+        if not output:
+            if "404" in stderr:
+                return "⚠️ API 错误: iFlow API 返回 404。请检查配置。"
+            elif stderr.strip():
+                return f"❌ Error: {stderr[:200]}"
+            else:
+                return "⚠️ iFlow 没有返回内容"
+        
+        return output
+        
+    except subprocess.TimeoutExpired:
+        return "⚠️ 请求超时"
+    except Exception as e:
+        logger.exception(f"Exception: {e}")
+        return f"❌ Exception: {str(e)}"
+
 
 class IFlowWrapper:
-    def __init__(self, cwd: str = None, approval_mode: str = "yolo"):
-        # Map generic modes to SDK enums
-        mode_map = {
-            "default": ApprovalMode.DEFAULT,
-            "auto_edit": ApprovalMode.AUTO_EDIT,
-            "yolo": ApprovalMode.YOLO,
-            "plan": ApprovalMode.PLAN
-        }
-        
-        # Advanced configuration from the latest SDK documentation
-        self.options = IFlowOptions(
-            auto_start_process=True,
-            timeout=300.0,
-            log_level="INFO",
-            cwd=cwd or os.getcwd(),
-            approval_mode=mode_map.get(approval_mode, ApprovalMode.YOLO),
-            file_access=True,
-            file_max_size=20 * 1024 * 1024, # Increased to 20MB
-            # If we had real keys, we would put them here
-            auth_method_id="iflow",
-            auth_method_info=AuthMethodInfo(
-                api_key=os.environ.get("IFLOW_API_KEY", "your-api-key"),
-                model_name="iflow-default-model"
-            )
-        )
+    def __init__(self, cwd: str = None, approval_mode: str = "yolo", model: str = None, mcp_servers: List[Dict[str, Any]] = None):
+        self.model = model or "GLM-4.6"
+        self.cwd = cwd or os.getcwd()
+        self.iflow_path = find_iflow_path()
+        logger.info(f"IFlowWrapper: cwd={self.cwd}, model={self.model}")
 
     async def chat_stream(self, user_input: str) -> AsyncGenerator[str, None]:
-        print(f"[IFlow] CWD: {self.options.cwd} | Mode: {self.options.approval_mode}")
+        """流式对话"""
+        logger.info(f"chat_stream: {user_input[:50]}...")
         
-        try:
-            async with IFlowClient(self.options) as client:
-                await client.send_message(user_input)
-                
-                async for message in client.receive_messages():
-                    
-                    # 1. Text Content
-                    if isinstance(message, AssistantMessage):
-                        if message.chunk and message.chunk.text:
-                            yield message.chunk.text
-                    
-                    # 2. Planning (Enhanced UI)
-                    elif isinstance(message, PlanMessage):
-                        if hasattr(message, 'entries') and message.entries:
-                            yield "\n\n---\n**📋 Agent Plan**\n\n"
-                            for entry in message.entries:
-                                icon = "✅" if entry.status == "completed" else "⚪"
-                                yield f"{icon} **{entry.content}**\n"
-                            yield "---\n\n"
-                        elif hasattr(message, 'plan_details'):
-                            yield f"\n\n> **📋 Plan**: {message.plan_details}\n\n"
-                    
-                    # 3. Tool Execution (Enhanced UI)
-                    elif isinstance(message, ToolCallMessage):
-                        tool_name = getattr(message, 'tool_name', 'System')
-                        status = getattr(message, 'status', 'executing')
-                        
-                        # Use blockquotes and bold for tools to make them stand out
-                        if tool_name == "list_files" or tool_name == "ls":
-                             yield f"\n> 📂 **List Files**: `Executing...`\n\n"
-                        elif tool_name == "read_file":
-                             yield f"\n> 📖 **Read File**: `Reading...`\n\n"
-                        elif tool_name == "edit_file":
-                             yield f"\n> ✏️ **Edit File**: `Applying changes...`\n\n"
-                        elif tool_name == "bash":
-                             yield f"\n> 💻 **Terminal**: `Running command...`\n\n"
-                        else:
-                             yield f"\n> 🔧 **{tool_name}**: `{status}`\n\n"
+        loop = asyncio.get_event_loop()
+        
+        # 在线程池中运行同步的子进程
+        result = await loop.run_in_executor(
+            _executor,
+            _run_iflow_sync,
+            self.iflow_path,
+            user_input,
+            self.model,
+            self.cwd
+        )
+        
+        # 返回结果
+        yield result
 
-                    # 4. Finish
-                    elif isinstance(message, TaskFinishMessage):
-                        if message.stop_reason == StopReason.MAX_TOKENS:
-                            yield "\n\n*(Response truncated due to length limit)*"
-                        break
-                        
-        except ConnectionError:
-            yield "\n\n❌ **Connection Failed**: Could not connect to iFlow CLI. Is it installed?"
-        except TimeoutError:
-            yield "\n\n⏱️ **Timeout**: The agent took too long to respond."
-        except Exception as e:
-            yield f"\n\n💥 **System Error**: {str(e)}"
 
-def create_iflow_client(cwd: str = None, mode: str = "yolo"):
-    return IFlowWrapper(cwd=cwd, approval_mode=mode)
+def create_iflow_client(cwd: str = None, mode: str = "yolo", model: str = None, mcp_servers: List[Dict[str, Any]] = None):
+    return IFlowWrapper(cwd=cwd, approval_mode=mode, model=model, mcp_servers=mcp_servers)

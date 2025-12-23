@@ -7,9 +7,9 @@ import { useTaskMaster } from '../contexts/TaskMasterContext';
 import Shell from './Shell';
 import { api } from '../utils/api';
 
-const TaskList = ({ 
-  tasks = [], 
-  onTaskClick, 
+const TaskList = ({
+  tasks = [],
+  onTaskClick,
   className = '',
   showParentTasks = false,
   defaultView = 'kanban', // 'list', 'grid', or 'kanban'
@@ -31,7 +31,7 @@ const TaskList = ({
   const [showHelpGuide, setShowHelpGuide] = useState(false);
   const [isTaskMasterComplete, setIsTaskMasterComplete] = useState(false);
   const [showPRDDropdown, setShowPRDDropdown] = useState(false);
-  
+
   const { projectTaskMaster, refreshProjects, refreshTasks, setCurrentProject } = useTaskMaster();
 
   // Close PRD dropdown when clicking outside
@@ -63,7 +63,7 @@ const TaskList = ({
     let filtered = tasks.filter(task => {
       // Text search
       const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         task.title.toLowerCase().includes(searchLower) ||
         task.description?.toLowerCase().includes(searchLower) ||
         task.id.toString().includes(searchLower);
@@ -80,7 +80,7 @@ const TaskList = ({
     // Sort tasks
     filtered.sort((a, b) => {
       let aVal, bVal;
-      
+
       switch (sortBy) {
         case 'title':
           aVal = a.title.toLowerCase();
@@ -109,10 +109,10 @@ const TaskList = ({
             const parts = id.toString().split('.');
             return parts.map(part => parseInt(part, 10));
           };
-          
+
           const aIds = parseId(a.id);
           const bIds = parseId(b.id);
-          
+
           // Compare each part
           for (let i = 0; i < Math.max(aIds.length, bIds.length); i++) {
             const aId = aIds[i] || 0;
@@ -129,11 +129,11 @@ const TaskList = ({
       if (sortBy === 'updated') {
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
-      
+
       if (typeof aVal === 'string') {
         return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
-      
+
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
 
@@ -143,45 +143,45 @@ const TaskList = ({
   // Organize tasks by status for Kanban view
   const kanbanColumns = useMemo(() => {
     const allColumns = [
-      { 
-        id: 'pending', 
-        title: '📋 To Do', 
-        status: 'pending', 
+      {
+        id: 'pending',
+        title: '📋 To Do',
+        status: 'pending',
         color: 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700',
         headerColor: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
       },
-      { 
-        id: 'in-progress', 
-        title: '🚀 In Progress', 
-        status: 'in-progress', 
+      {
+        id: 'in-progress',
+        title: '🚀 In Progress',
+        status: 'in-progress',
         color: 'bg-blue-50 dark:bg-blue-900/50 border-blue-200 dark:border-blue-700',
         headerColor: 'bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200'
       },
-      { 
-        id: 'done', 
-        title: '✅ Done', 
-        status: 'done', 
+      {
+        id: 'done',
+        title: '✅ Done',
+        status: 'done',
         color: 'bg-emerald-50 dark:bg-emerald-900/50 border-emerald-200 dark:border-emerald-700',
         headerColor: 'bg-emerald-100 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200'
       },
-      { 
-        id: 'blocked', 
-        title: '🚫 Blocked', 
-        status: 'blocked', 
+      {
+        id: 'blocked',
+        title: '🚫 Blocked',
+        status: 'blocked',
         color: 'bg-red-50 dark:bg-red-900/50 border-red-200 dark:border-red-700',
         headerColor: 'bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-200'
       },
-      { 
-        id: 'deferred', 
-        title: '⏳ Deferred', 
-        status: 'deferred', 
+      {
+        id: 'deferred',
+        title: '⏳ Deferred',
+        status: 'deferred',
         color: 'bg-amber-50 dark:bg-amber-900/50 border-amber-200 dark:border-amber-700',
         headerColor: 'bg-amber-100 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
       },
-      { 
-        id: 'cancelled', 
-        title: '❌ Cancelled', 
-        status: 'cancelled', 
+      {
+        id: 'cancelled',
+        title: '❌ Cancelled',
+        status: 'cancelled',
         color: 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
         headerColor: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
       }
@@ -223,9 +223,9 @@ const TaskList = ({
 
   if (tasks.length === 0) {
     // Check if TaskMaster is configured by looking for .taskmaster directory
-    const hasTaskMasterDirectory = currentProject?.taskMasterConfigured || 
-                                   currentProject?.taskmaster?.hasTaskmaster ||
-                                   projectTaskMaster?.hasTaskmaster;
+    const hasTaskMasterDirectory = currentProject?.taskMasterConfigured ||
+      currentProject?.taskmaster?.hasTaskmaster ||
+      projectTaskMaster?.hasTaskmaster;
 
     return (
       <div className={cn('text-center py-12', className)}>
@@ -241,7 +241,7 @@ const TaskList = ({
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               TaskMaster helps break down complex projects into manageable tasks with AI-powered assistance
             </p>
-            
+
             {/* What is TaskMaster section */}
             <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg text-left">
               <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-3">
@@ -255,7 +255,7 @@ const TaskList = ({
                 <p>• <strong>CLI Integration:</strong> Use taskmaster commands for advanced workflows</p>
               </div>
             </div>
-            
+
             <button
               onClick={() => {
                 setIsTaskMasterComplete(false); // Reset completion state
@@ -280,7 +280,7 @@ const TaskList = ({
                   <p className="text-sm text-gray-600 dark:text-gray-400">TaskMaster is initialized! Here's what to do next:</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4 text-left">
                 <div className="grid gap-3">
                   {/* Step 1 */}
@@ -298,7 +298,7 @@ const TaskList = ({
                         <FileText className="w-3 h-3" />
                         Add PRD
                       </button>
-                      
+
                       {/* Show existing PRDs if any */}
                       {existingPRDs.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -389,7 +389,7 @@ const TaskList = ({
             </div>
           </div>
         )}
-        
+
         {/* TaskMaster CLI Setup Modal */}
         {showCLI && (
           <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-black/50 backdrop-blur-sm">
@@ -422,11 +422,11 @@ const TaskList = ({
                   <Plus className="w-5 h-5 rotate-45" />
                 </button>
               </div>
-              
+
               {/* Terminal Container */}
               <div className="flex-1 p-4">
-                <div 
-                  className="h-full bg-black rounded-lg overflow-hidden" 
+                <div
+                  className="h-full bg-black rounded-lg overflow-hidden"
                   onClick={(e) => {
                     // Focus the terminal when clicked
                     const terminalElement = e.currentTarget.querySelector('.xterm-screen');
@@ -435,7 +435,7 @@ const TaskList = ({
                     }
                   }}
                 >
-                  <Shell 
+                  <Shell
                     selectedProject={currentProject}
                     selectedSession={null}
                     isActive={true}
@@ -456,7 +456,7 @@ const TaskList = ({
                   />
                 </div>
               </div>
-              
+
               {/* Modal Footer */}
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                 <div className="flex items-center justify-between">
@@ -485,8 +485,8 @@ const TaskList = ({
                     }}
                     className={cn(
                       "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                      isTaskMasterComplete 
-                        ? "bg-green-600 hover:bg-green-700 text-white" 
+                      isTaskMasterComplete
+                        ? "bg-green-600 hover:bg-green-700 text-white"
                         : "text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     )}
                   >
@@ -525,8 +525,8 @@ const TaskList = ({
               onClick={() => setViewMode('kanban')}
               className={cn(
                 'p-2 rounded-md transition-colors',
-                viewMode === 'kanban' 
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                viewMode === 'kanban'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               )}
               title="Kanban view"
@@ -537,8 +537,8 @@ const TaskList = ({
               onClick={() => setViewMode('list')}
               className={cn(
                 'p-2 rounded-md transition-colors',
-                viewMode === 'list' 
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               )}
               title="List view"
@@ -549,8 +549,8 @@ const TaskList = ({
               onClick={() => setViewMode('grid')}
               className={cn(
                 'p-2 rounded-md transition-colors',
-                viewMode === 'grid' 
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                viewMode === 'grid'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               )}
               title="Grid view"
@@ -564,8 +564,8 @@ const TaskList = ({
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
-              showFilters 
-                ? 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300' 
+              showFilters
+                ? 'bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300'
                 : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
             )}
           >
@@ -573,7 +573,7 @@ const TaskList = ({
             <span className="hidden sm:inline">Filters</span>
             <ChevronDown className={cn('w-4 h-4 transition-transform', showFilters && 'rotate-180')} />
           </button>
-          
+
           {/* Action Buttons */}
           {currentProject && (
             <>
@@ -603,7 +603,7 @@ const TaskList = ({
                       </span>
                       <ChevronDown className={cn('w-3 h-3 transition-transform hidden sm:block', showPRDDropdown && 'rotate-180')} />
                     </button>
-                    
+
                     {showPRDDropdown && (
                       <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-30">
                         <div className="p-2">
@@ -663,7 +663,7 @@ const TaskList = ({
                   </button>
                 )}
               </div>
-              
+
               {/* Add Task Button */}
               {((currentProject?.taskMasterConfigured || currentProject?.taskmaster?.hasTaskmaster || projectTaskMaster?.hasTaskmaster) || tasks.length > 0) && (
                 <button
@@ -769,8 +769,8 @@ const TaskList = ({
           onClick={() => handleSortChange('id')}
           className={cn(
             'flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors',
-            sortBy === 'id' 
-              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
+            sortBy === 'id'
+              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
           )}
         >
@@ -780,8 +780,8 @@ const TaskList = ({
           onClick={() => handleSortChange('status')}
           className={cn(
             'flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors',
-            sortBy === 'status' 
-              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
+            sortBy === 'status'
+              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
           )}
         >
@@ -791,8 +791,8 @@ const TaskList = ({
           onClick={() => handleSortChange('priority')}
           className={cn(
             'flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors',
-            sortBy === 'priority' 
-              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
+            sortBy === 'priority'
+              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
           )}
         >
@@ -812,7 +812,7 @@ const TaskList = ({
       ) : viewMode === 'kanban' ? (
         /* Kanban Board Layout - Dynamic grid based on column count */
         <div className={cn(
-          "grid gap-6", 
+          "grid gap-6",
           kanbanColumns.length === 1 && "grid-cols-1 max-w-md mx-auto",
           kanbanColumns.length === 2 && "grid-cols-1 md:grid-cols-2",
           kanbanColumns.length === 3 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
@@ -835,7 +835,7 @@ const TaskList = ({
                   </div>
                 </div>
               </div>
-              
+
               {/* Column Tasks */}
               <div className="p-3 space-y-3 min-h-[200px] max-h-[calc(100vh-300px)] overflow-y-auto">
                 {column.tasks.length === 0 ? (
@@ -848,9 +848,9 @@ const TaskList = ({
                     </div>
                     <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                       {column.status === 'pending' ? 'Tasks will appear here' :
-                       column.status === 'in-progress' ? 'Move tasks here when started' :
-                       column.status === 'done' ? 'Completed tasks appear here' :
-                       'Tasks with this status will appear here'}
+                        column.status === 'in-progress' ? 'Move tasks here when started' :
+                          column.status === 'done' ? 'Completed tasks appear here' :
+                            'Tasks with this status will appear here'}
                     </div>
                   </div>
                 ) : (
@@ -872,8 +872,8 @@ const TaskList = ({
       ) : (
         <div className={cn(
           'gap-4',
-          viewMode === 'grid' 
-            ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3' 
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
             : 'space-y-4'
         )}>
           {filteredAndSortedTasks.map((task) => (
@@ -887,7 +887,7 @@ const TaskList = ({
           ))}
         </div>
       )}
-      
+
       {/* Create Task Modal */}
       {showCreateModal && (
         <CreateTaskModal
@@ -899,7 +899,7 @@ const TaskList = ({
           }}
         />
       )}
-      
+
       {/* Help Guide Modal */}
       {showHelpGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -922,7 +922,7 @@ const TaskList = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
               <div className="space-y-4">
@@ -954,7 +954,7 @@ const TaskList = ({
                     <div className="bg-white dark:bg-gray-800/50 rounded border border-green-200 dark:border-green-700/50 p-3 mb-2">
                       <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">💬 Example:</p>
                       <p className="text-xs text-gray-900 dark:text-white font-mono">
-                        "I've just initialized a new project with Claude Task Master. I have a PRD at .taskmaster/docs/prd.txt. Can you help me parse it and set up the initial tasks?"
+                        "I've just initialized a new project with IFlow Task Master. I have a PRD at .taskmaster/docs/prd.txt. Can you help me parse it and set up the initial tasks?"
                       </p>
                     </div>
                   </div>
@@ -1027,9 +1027,9 @@ const TaskList = ({
                   <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
                     TaskMaster AI is an advanced task management system built for developers. Get documentation, examples, and contribute to the project.
                   </p>
-                  <a 
-                    href="https://github.com/eyaltoledano/claude-task-master" 
-                    target="_blank" 
+                  <a
+                    href="https://github.com/eyaltoledano/claude-task-master"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium transition-colors"
                   >
