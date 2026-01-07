@@ -297,9 +297,8 @@ function Sidebar({
       const response = await api.renameProject(projectName, editingName);
 
       if (response.ok) {
-        // Refresh projects to get updated data
         if (window.refreshProjects) {
-          window.refreshProjects();
+          await window.refreshProjects();
         } else {
           window.location.reload();
         }
@@ -387,9 +386,8 @@ function Sidebar({
         setShowNewProject(false);
         setNewProjectPath('');
 
-        // Refresh projects to show the new one
         if (window.refreshProjects) {
-          window.refreshProjects();
+          await window.refreshProjects();
         } else {
           window.location.reload();
         }
@@ -453,13 +451,22 @@ function Sidebar({
   const filteredProjects = sortedProjects.filter(project => {
     if (!searchFilter.trim()) return true;
 
+    const displayName = (project.displayName || project.name || '').toLowerCase();
+    const projectName = (project.name || '').toLowerCase();
     const searchLower = searchFilter.toLowerCase();
-    const displayName = (project.displayName || project.name).toLowerCase();
-    const projectName = project.name.toLowerCase();
 
     // Search in both display name and actual project name/path
     return displayName.includes(searchLower) || projectName.includes(searchLower);
   });
+
+  // Debug logging for project visibility
+  useEffect(() => {
+    console.log('[Sidebar Debug] projects:', projects);
+    console.log('[Sidebar Debug] sortedProjects:', sortedProjects);
+    console.log('[Sidebar Debug] filteredProjects:', filteredProjects);
+    console.log('[Sidebar Debug] isLoading:', isLoading);
+    console.log('[Sidebar Debug] projects.length:', projects.length);
+  }, [projects, sortedProjects, filteredProjects, isLoading]);
 
   // Enhanced project selection that updates both the main UI and TaskMaster context
   const handleProjectSelect = (project) => {
@@ -476,12 +483,17 @@ function Sidebar({
       {showNewProject && ReactDOM.createPortal(
         <ProjectCreationWizard
           onClose={() => setShowNewProject(false)}
-          onProjectCreated={(project) => {
-            // Refresh projects list after creation
+          onProjectCreated={async (project) => {
             if (window.refreshProjects) {
-              window.refreshProjects();
+              await window.refreshProjects();
             } else {
               window.location.reload();
+            }
+            const projectToSelect = projects.find(p => p.fullPath === project.fullPath);
+            if (projectToSelect) {
+              onProjectSelect(projectToSelect);
+            } else {
+              onProjectSelect(project);
             }
           }}
         />,
@@ -489,7 +501,7 @@ function Sidebar({
       )}
 
       <div
-        className="h-full flex flex-col bg-card md:select-none"
+        className="h-full flex flex-col glass-sidebar md:select-none"
         style={isPWA && isMobile ? { paddingTop: '44px' } : {}}
       >
         {/* Header */}

@@ -1,8 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, Folder, Settings, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { api } from '../utils/api';
+
+// Simple debounce utility hook
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   // Wizard state
@@ -24,12 +36,37 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const [pathSuggestions, setPathSuggestions] = useState([]);
   const [showPathDropdown, setShowPathDropdown] = useState(false);
 
+  // Path validation state
+  const debouncedPath = useDebounce(workspacePath, 500);
+  const [pathStatus, setPathStatus] = useState('idle'); // 'idle' | 'checking' | 'valid' | 'warning' | 'error'
+  const [pathMessage, setPathMessage] = useState('');
+  const [pathMetadata, setPathMetadata] = useState(null); // info about the path if it exists
+
+  // Load user's home directory as default base path
+  const [userHome, setUserHome] = useState('');
+
   // Load available GitHub tokens when needed
   useEffect(() => {
     if (step === 2 && workspaceType === 'new' && githubUrl) {
       loadGithubTokens();
     }
   }, [step, workspaceType, githubUrl]);
+
+  // Load initial path suggestions to identify home dir
+  useEffect(() => {
+    const fetchHome = async () => {
+      try {
+        const res = await api.browseFilesystem('~');
+        const data = await res.json();
+        if (data.currentPath) {
+          setUserHome(data.currentPath);
+        }
+      } catch (e) {
+        console.error("Failed to fetch home dir", e);
+      }
+    };
+    fetchHome();
+  }, []);
 
   // Load path suggestions
   useEffect(() => {
@@ -40,6 +77,104 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
       setShowPathDropdown(false);
     }
   }, [workspacePath]);
+
+  // Real-time path validation
+  useEffect(() => {
+    if (!debouncedPath || debouncedPath.length < 2) {
+      setPathStatus('idle');
+      setPathMessage('');
+      setPathMetadata(null);
+      return;
+    }
+
+    const validatePath = async () => {
+      setPathStatus('checking');
+      try {
+        const res = await api.validatePath(debouncedPath);
+        const data = await res.json();
+
+        setPathMetadata(data);
+
+        if (workspaceType === 'existing') {
+          // Existing workspace: Must exist and be a directory
+          if (!data.exists) {
+            setPathStatus('error');
+            setPathMessage('Path does not exist');
+          } else if (!data.isDirectory) {
+            setPathStatus('error');
+            setPathMessage('Path is not a directory');
+          } else {
+            setPathStatus('valid');
+            const details = [];
+            if (data.isGit) details.push('Git repository');
+            else details.push('No Git found');
+            if (data.isEmpty) details.push('Empty folder');
+            else details.push(`${details.length ? ', ' : ''}Contains files`);
+            setPathMessage(`Valid workspace found (${details.join(', ')})`);
+          }
+        } else {
+          // New workspace: Should not exist, or be empty
+          if (data.exists) {
+            if (!data.isDirectory) {
+              setPathStatus('error');
+              setPathMessage('A file already exists at this path');
+            } else if (!data.isEmpty) {
+              setPathStatus('warning');
+              setPathMessage('Directory exists and is not empty. Contents might be overwritten.');
+            } else {
+              setPathStatus('valid');
+              setPathMessage('Directory exists and is empty');
+            }
+          } else {
+            if (data.parentExists) {
+              setPathStatus('valid');
+              setPathMessage('Path is available (will be created)');
+            } else {
+              setPathStatus('warning');
+              setPathMessage('Parent directory does not exist (will verify on creation)');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Validation error:', error);
+        setPathStatus('error');
+        setPathMessage('Failed to validate path');
+      }
+    };
+
+    validatePath();
+  }, [debouncedPath, workspaceType]);
+
+  // GitHub URL Smart Logic
+  const handleGithubUrlChange = (e) => {
+    const url = e.target.value;
+    setGithubUrl(url);
+
+    // Auto-fill path if user hasn't typed a custom path or if path matches a previous auto-fill
+    // Extract repo name from URL (e.g. github.com/user/repo -> repo)
+    if (url && workspaceType === 'new') {
+      try {
+        const parts = url.split('/');
+        let repoName = parts[parts.length - 1];
+        if (repoName.endsWith('.git')) repoName = repoName.slice(0, -4);
+
+        if (repoName && /^[a-zA-Z0-9-_.]+$/.test(repoName)) {
+          // Only update if workspacePath is empty or looks like a default path
+          const baseDir = userHome ? `${userHome}${userHome.includes('\\') ? '\\' : '/'}Projects` : '';
+          if (!workspacePath || (userHome && workspacePath.startsWith(userHome))) {
+            // Try to construct a smart path
+            // If we know home dir, use ~/Projects/RepoName
+            if (userHome) {
+              const sep = userHome.includes('\\') ? '\\' : '/';
+              setWorkspacePath(`${userHome}${sep}Projects${sep}${repoName}`);
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+  };
 
   const loadGithubTokens = async () => {
     try {
@@ -65,7 +200,10 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
     try {
       // Extract the directory to browse (parent of input)
       const lastSlash = inputPath.lastIndexOf('/');
-      const dirPath = lastSlash > 0 ? inputPath.substring(0, lastSlash) : '~';
+      const lastBackSlash = inputPath.lastIndexOf('\\');
+      const slashIndex = Math.max(lastSlash, lastBackSlash);
+
+      const dirPath = slashIndex > 0 ? inputPath.substring(0, slashIndex) : '~';
 
       const response = await api.browseFilesystem(dirPath);
       const data = await response.json();
@@ -75,7 +213,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         const filtered = data.suggestions.filter(s =>
           s.path.toLowerCase().startsWith(inputPath.toLowerCase())
         );
-        setPathSuggestions(filtered.slice(0, 5));
+        setPathSuggestions(filtered.slice(0, 10)); // Show more suggestions
         setShowPathDropdown(filtered.length > 0);
       }
     } catch (error) {
@@ -88,7 +226,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
 
     if (step === 1) {
       if (!workspaceType) {
-        setError('Please select whether you have an existing workspace or want to create a new one');
+        setError('Please select a workspace type');
         return;
       }
       setStep(2);
@@ -98,7 +236,11 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         return;
       }
 
-      // No validation for GitHub token - it's optional (only needed for private repos)
+      if (pathStatus === 'error') {
+        setError('Please fix the path errors before proceeding');
+        return;
+      }
+
       setStep(3);
     }
   };
@@ -118,10 +260,8 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         path: workspacePath.trim(),
       };
 
-      // Add GitHub info if creating new workspace with GitHub URL
       if (workspaceType === 'new' && githubUrl) {
         payload.githubUrl = githubUrl.trim();
-
         if (tokenMode === 'stored' && selectedGithubToken) {
           payload.githubTokenId = parseInt(selectedGithubToken);
         } else if (tokenMode === 'new' && newGithubToken) {
@@ -136,7 +276,6 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         throw new Error(data.error || 'Failed to create workspace');
       }
 
-      // Success!
       if (onProjectCreated) {
         onProjectCreated(data.project);
       }
@@ -156,408 +295,359 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-0 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-lg shadow-xl w-full h-full sm:h-auto sm:max-w-2xl border-0 sm:border border-gray-200 dark:border-gray-700 overflow-y-auto">
+    <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-0 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-none sm:rounded-xl shadow-2xl w-full h-full sm:h-auto sm:max-w-2xl border-0 sm:border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center">
-              <FolderPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <div className="w-10 h-10 bg-blue-600 dark:bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
+              <FolderPlus className="w-5 h-5 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Create New Project
-            </h3>
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-none">
+                Create Project
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Setup your development environment
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
             disabled={isCreating}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Progress Indicator */}
-        <div className="px-6 pt-4 pb-2">
-          <div className="flex items-center justify-between">
-            {[1, 2, 3].map((s) => (
-              <React.Fragment key={s}>
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-sm ${
-                      s < step
-                        ? 'bg-green-500 text-white'
-                        : s === step
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-                    }`}
-                  >
-                    {s < step ? <Check className="w-4 h-4" /> : s}
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
-                    {s === 1 ? 'Type' : s === 2 ? 'Configure' : 'Confirm'}
-                  </span>
-                </div>
-                {s < 3 && (
-                  <div
-                    className={`flex-1 h-1 mx-2 rounded ${
-                      s < step ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-                  />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
+        {/* Progress Bar */}
+        <div className="w-full bg-gray-100 dark:bg-gray-800 h-1">
+          <div
+            className="h-full bg-blue-600 transition-all duration-500 ease-out"
+            style={{ width: `${(step / 3) * 100}%` }}
+          />
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 min-h-[300px]">
-          {/* Error Display */}
+        <div className="flex-1 overflow-y-auto p-6 sm:px-8 space-y-6">
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3 animate-in slide-in-from-top-2">
               <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">{error}</p>
               </div>
             </div>
           )}
 
-          {/* Step 1: Choose workspace type */}
           {step === 1 && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Do you already have a workspace, or would you like to create a new one?
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Existing Workspace */}
-                  <button
-                    onClick={() => setWorkspaceType('existing')}
-                    className={`p-4 border-2 rounded-lg text-left transition-all ${
-                      workspaceType === 'existing'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <FolderPlus className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h5 className="font-semibold text-gray-900 dark:text-white mb-1">
-                          Existing Workspace
-                        </h5>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          I already have a workspace on my server and just need to add it to the project list
-                        </p>
-                      </div>
-                    </div>
-                  </button>
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div className="text-center mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Get Started</h2>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">How would you like to set up your project?</p>
+              </div>
 
-                  {/* New Workspace */}
-                  <button
-                    onClick={() => setWorkspaceType('new')}
-                    className={`p-4 border-2 rounded-lg text-left transition-all ${
-                      workspaceType === 'new'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  onClick={() => { setWorkspaceType('existing'); handleNext(); }}
+                  className={`group relative p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg ${workspaceType === 'existing'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/10 ring-1 ring-blue-600'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-gray-800'
                     }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <GitBranch className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h5 className="font-semibold text-gray-900 dark:text-white mb-1">
-                          New Workspace
-                        </h5>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Create a new workspace, optionally clone from a GitHub repository
-                        </p>
-                      </div>
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
+                      <Folder className="w-6 h-6 text-green-600 dark:text-green-400" />
                     </div>
-                  </button>
-                </div>
+                    <div>
+                      <h5 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">
+                        Existing Folder
+                      </h5>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+                        Import a local project folder from your computer.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setWorkspaceType('new'); handleNext(); }}
+                  className={`group relative p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg ${workspaceType === 'new'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/10 ring-1 ring-blue-600'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-gray-800'
+                    }`}
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
+                      <GitBranch className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h5 className="font-semibold text-gray-900 dark:text-white text-lg mb-1">
+                        New Project
+                      </h5>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+                        Create an empty folder or clone a repository from GitHub.
+                      </p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Configure workspace */}
           {step === 2 && (
-            <div className="space-y-4">
-              {/* Workspace Path */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {workspaceType === 'existing' ? 'Workspace Path' : 'Where should the workspace be created?'}
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              {workspaceType === 'new' && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    GitHub Repository (Optional)
+                  </label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <GitBranch className="h-4 w-4 text-gray-400 group-focus-within:text-purple-500 transition-colors" />
+                    </div>
+                    <Input
+                      type="text"
+                      value={githubUrl}
+                      onChange={handleGithubUrlChange}
+                      placeholder="https://github.com/username/repository"
+                      className="pl-10 w-full transition-shadow focus:ring-2 focus:ring-purple-500/20"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Entering a URL will auto-suggest a project path below.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {workspaceType === 'existing' ? 'Project Location' : 'Where to create the project?'}
                 </label>
-                <div className="relative">
+                <div className="relative group z-20">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Folder className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
                   <Input
                     type="text"
                     value={workspacePath}
                     onChange={(e) => setWorkspacePath(e.target.value)}
-                    placeholder={workspaceType === 'existing' ? '/path/to/existing/workspace' : '/path/to/new/workspace'}
-                    className="w-full"
+                    placeholder={userHome ? `${userHome}/MyProject` : "/path/to/project"}
+                    className={`pl-10 w-full transition-all ${pathStatus === 'error' ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
+                        pathStatus === 'valid' ? 'border-green-300 focus:border-green-500 focus:ring-green-200' :
+                          pathStatus === 'warning' ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-200' : ''
+                      }`}
+                    onFocus={() => setShowPathDropdown(true)}
                   />
+
+                  {/* Validation Icon */}
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    {pathStatus === 'checking' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+                    {pathStatus === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                    {pathStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                    {pathStatus === 'warning' && <AlertTriangle className="w-4 h-4 text-yellow-500" />}
+                  </div>
+
+                  {/* Suggestions Dropdown */}
                   {showPathDropdown && pathSuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                       {pathSuggestions.map((suggestion, index) => (
                         <button
                           key={index}
                           onClick={() => selectPathSuggestion(suggestion)}
-                          className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                          className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2 transition-colors"
                         >
-                          <div className="font-medium text-gray-900 dark:text-white">{suggestion.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{suggestion.path}</div>
+                          <Folder className="w-4 h-4 text-gray-400" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{suggestion.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate opacity-70">{suggestion.path}</div>
+                          </div>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {workspaceType === 'existing'
-                    ? 'Full path to your existing workspace directory'
-                    : 'Full path where the new workspace will be created'}
-                </p>
-              </div>
 
-              {/* GitHub URL (only for new workspace) */}
-              {workspaceType === 'new' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      GitHub URL (Optional)
-                    </label>
-                    <Input
-                      type="text"
-                      value={githubUrl}
-                      onChange={(e) => setGithubUrl(e.target.value)}
-                      placeholder="https://github.com/username/repository"
-                      className="w-full"
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Leave empty to create an empty workspace, or provide a GitHub URL to clone
+                {/* Validation Message */}
+                <div className="min-h-[20px]">
+                  {pathMessage && (
+                    <p className={`text-xs flex items-center gap-1.5 transition-all duration-300 ${pathStatus === 'error' ? 'text-red-600 dark:text-red-400' :
+                        pathStatus === 'valid' ? 'text-green-600 dark:text-green-400' :
+                          pathStatus === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
+                            'text-gray-500'
+                      }`}>
+                      {pathMessage}
                     </p>
-                  </div>
-
-                  {/* GitHub Token (only if GitHub URL is provided) */}
-                  {githubUrl && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                      <div className="flex items-start gap-3 mb-4">
-                        <Key className="w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <h5 className="font-medium text-gray-900 dark:text-white mb-1">
-                            GitHub Authentication (Optional)
-                          </h5>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Only required for private repositories. Public repos can be cloned without authentication.
-                          </p>
-                        </div>
-                      </div>
-
-                      {loadingTokens ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Loading stored tokens...
-                        </div>
-                      ) : availableTokens.length > 0 ? (
-                        <>
-                          {/* Token Selection Tabs */}
-                          <div className="grid grid-cols-3 gap-2 mb-4">
-                            <button
-                              onClick={() => setTokenMode('stored')}
-                              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                tokenMode === 'stored'
-                                  ? 'bg-blue-500 text-white'
-                                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                              }`}
-                            >
-                              Stored Token
-                            </button>
-                            <button
-                              onClick={() => setTokenMode('new')}
-                              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                tokenMode === 'new'
-                                  ? 'bg-blue-500 text-white'
-                                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                              }`}
-                            >
-                              New Token
-                            </button>
-                            <button
-                              onClick={() => {
-                                setTokenMode('none');
-                                setSelectedGithubToken('');
-                                setNewGithubToken('');
-                              }}
-                              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                tokenMode === 'none'
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                              }`}
-                            >
-                              None (Public)
-                            </button>
-                          </div>
-
-                          {tokenMode === 'stored' ? (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Select Token
-                              </label>
-                              <select
-                                value={selectedGithubToken}
-                                onChange={(e) => setSelectedGithubToken(e.target.value)}
-                                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-                              >
-                                <option value="">-- Select a token --</option>
-                                {availableTokens.map((token) => (
-                                  <option key={token.id} value={token.id}>
-                                    {token.credential_name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : tokenMode === 'new' ? (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                GitHub Token
-                              </label>
-                              <Input
-                                type="password"
-                                value={newGithubToken}
-                                onChange={(e) => setNewGithubToken(e.target.value)}
-                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                                className="w-full"
-                              />
-                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                This token will be used only for this operation
-                              </p>
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                            <p className="text-sm text-blue-800 dark:text-blue-200">
-                              💡 <strong>Public repositories</strong> don't require authentication. You can skip providing a token if cloning a public repo.
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              GitHub Token (Optional for Public Repos)
-                            </label>
-                            <Input
-                              type="password"
-                              value={newGithubToken}
-                              onChange={(e) => setNewGithubToken(e.target.value)}
-                              placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)"
-                              className="w-full"
-                            />
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              No stored tokens available. You can add tokens in Settings → API Keys for easier reuse.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Confirm */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                  Review Your Configuration
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Workspace Type:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {workspaceType === 'existing' ? 'Existing Workspace' : 'New Workspace'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Path:</span>
-                    <span className="font-mono text-xs text-gray-900 dark:text-white break-all">
-                      {workspacePath}
-                    </span>
-                  </div>
-                  {workspaceType === 'new' && githubUrl && (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Clone From:</span>
-                        <span className="font-mono text-xs text-gray-900 dark:text-white break-all">
-                          {githubUrl}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Authentication:</span>
-                        <span className="text-xs text-gray-900 dark:text-white">
-                          {tokenMode === 'stored' && selectedGithubToken
-                            ? `Using stored token: ${availableTokens.find(t => t.id.toString() === selectedGithubToken)?.credential_name || 'Unknown'}`
-                            : tokenMode === 'new' && newGithubToken
-                            ? 'Using provided token'
-                            : 'No authentication'}
-                        </span>
-                      </div>
-                    </>
                   )}
                 </div>
               </div>
 
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  {workspaceType === 'existing'
-                    ? 'The workspace will be added to your project list and will be available for Claude/Cursor sessions.'
-                    : githubUrl
-                    ? 'A new workspace will be created and the repository will be cloned from GitHub.'
-                    : 'An empty workspace directory will be created at the specified path.'}
-                </p>
+              {workspaceType === 'new' && githubUrl && (
+                <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="bg-gray-50 dark:bg-gray-900/30 rounded-xl p-5 border border-gray-200 dark:border-gray-700/50 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <Key className="w-4 h-4 text-gray-500" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Private Repository Access</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <button
+                        onClick={() => setTokenMode('none')}
+                        className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${tokenMode === 'none'
+                            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-200 dark:ring-gray-600'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          }`}
+                      >
+                        Public Repo
+                      </button>
+                      <button
+                        onClick={() => setTokenMode('stored')}
+                        className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${tokenMode === 'stored'
+                            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-200 dark:ring-gray-600'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          }`}
+                      >
+                        Stored Token
+                      </button>
+                      <button
+                        onClick={() => setTokenMode('new')}
+                        className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${tokenMode === 'new'
+                            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-200 dark:ring-gray-600'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          }`}
+                      >
+                        New Token
+                      </button>
+                    </div>
+
+                    {tokenMode === 'stored' && (
+                      <div className="pt-1 animate-in fade-in">
+                        <select
+                          value={selectedGithubToken}
+                          onChange={(e) => setSelectedGithubToken(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        >
+                          <option value="">-- Select a stored token --</option>
+                          {availableTokens.map((token) => (
+                            <option key={token.id} value={token.id}>
+                              {token.credential_name}
+                            </option>
+                          ))}
+                        </select>
+                        {availableTokens.length === 0 && !loadingTokens && (
+                          <p className="mt-2 text-xs text-orange-500">No tokens found. Please use 'New Token' or add one in Settings.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {tokenMode === 'new' && (
+                      <div className="pt-1 animate-in fade-in">
+                        <Input
+                          type="password"
+                          value={newGithubToken}
+                          onChange={(e) => setNewGithubToken(e.target.value)}
+                          placeholder="ghp_..."
+                          className="w-full"
+                        />
+                        <p className="mt-1.5 text-xs text-gray-500">Token is used once for cloning and not saved.</p>
+                      </div>
+                    )}
+
+                    {tokenMode === 'none' && (
+                      <div className="pt-1">
+                        <p className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 p-2 rounded-lg">
+                          No authentication will be used. This works for all public repositories.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-4">
+                  Configuration Summary
+                </h4>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-gray-200 dark:border-gray-700/50">
+                    <div className="flex items-center gap-3">
+                      {workspaceType === 'existing' ? (
+                        <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                          <Folder className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </div>
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                          <GitBranch className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {workspaceType === 'existing' ? 'Import Local Project' : 'Create New Project'}
+                        </p>
+                        {githubUrl && <p className="text-xs text-gray-500">{githubUrl}</p>}
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                      Ready to Create
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">LOCAL PATH</p>
+                    <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700 font-mono text-xs text-gray-800 dark:text-gray-200 break-all">
+                      {workspacePath}
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                {workspaceType === 'new' && githubUrl
+                  ? "We'll clone the repository and set up the environment."
+                  : "The project will be added to your workspace list instantly."}
+              </p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={step === 1 ? onClose : handleBack}
             disabled={isCreating}
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
           >
-            {step === 1 ? (
-              'Cancel'
-            ) : (
-              <>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
-              </>
-            )}
+            {step === 1 ? 'Cancel' : 'Back'}
           </Button>
 
           <Button
             onClick={step === 3 ? handleCreate : handleNext}
-            disabled={isCreating || (step === 1 && !workspaceType)}
+            disabled={isCreating || (step === 1 && !workspaceType) || (step === 2 && !debouncedPath)}
+            className={`min-w-[120px] transition-all duration-300 ${isCreating ? 'opacity-80' : ''
+              }`}
           >
             {isCreating ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
+                {workspaceType === 'new' && githubUrl ? 'Cloning...' : 'Creating...'}
               </>
             ) : step === 3 ? (
               <>
-                <Check className="w-4 h-4 mr-1" />
-                Create Project
+                {workspaceType === 'existing' ? 'Open Project' : 'Create Project'}
+                <ChevronRight className="w-4 h-4 ml-1 opacity-50" />
               </>
             ) : (
               <>
-                Next
-                <ChevronRight className="w-4 h-4 ml-1" />
+                Continue
+                <ChevronRight className="w-4 h-4 ml-1 opacity-50" />
               </>
             )}
           </Button>
