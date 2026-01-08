@@ -63,6 +63,11 @@ class ProjectManager:
         sessions.sort(key=lambda x: x["updated_at"], reverse=True)
         return sessions
 
+    def get_sessions(self, project_name: str, limit: int = 5, offset: int = 0) -> List[Dict[str, Any]]:
+        """获取项目的会话列表（分页）"""
+        all_sessions = self._list_sessions(project_name)
+        return all_sessions[offset:offset + limit]
+
     def add_project(self, path: str) -> Dict[str, Any]:
         full_path = os.path.abspath(path)
         name = os.path.basename(full_path)

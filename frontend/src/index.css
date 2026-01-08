@@ -851,3 +851,197 @@
     transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
+
+/* ============================================
+   🚀 KILLER FEATURES: Premium UI Enhancements
+   ============================================ */
+
+/* 🌟 Glassmorphism Effects */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(17, 24, 39, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.dark .glass-sidebar {
+  background: rgba(17, 24, 39, 0.9);
+}
+
+.glass-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(200%);
+  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.dark .glass-modal {
+  background: rgba(17, 24, 39, 0.95);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* 🧘 Focus Mode (Zen Mode) */
+.focus-mode .sidebar-container,
+.focus-mode .mobile-nav,
+.focus-mode .header-bar,
+.focus-mode .quick-settings {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+}
+
+.focus-mode .main-content {
+  margin-left: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.focus-mode-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  padding: 12px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 10px 40px -10px rgba(102, 126, 234, 0.5);
+  transition: all 200ms ease-out;
+}
+
+.focus-mode-toggle:hover {
+  transform: scale(1.1);
+  box-shadow: 0 15px 50px -10px rgba(102, 126, 234, 0.7);
+}
+
+.dark .focus-mode-toggle {
+  box-shadow: 0 10px 40px -10px rgba(118, 75, 162, 0.5);
+}
+
+/* 💫 AI Thinking Animation (Breathing Logo) */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: hue-rotate(30deg) brightness(1.1);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(99, 102, 241, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.8), 0 0 40px rgba(139, 92, 246, 0.4);
+  }
+}
+
+.ai-thinking {
+  animation: breathe 2s ease-in-out infinite, pulse-glow 2s ease-in-out infinite;
+}
+
+.ai-thinking-container {
+  position: relative;
+}
+
+.ai-thinking-container::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
+  opacity: 0.3;
+  filter: blur(8px);
+  animation: pulse-glow 2s ease-in-out infinite;
+  z-index: -1;
+}
+
+/* ✨ Micro-interactions: Copy Button */
+@keyframes copy-success-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.2); }
+  50% { transform: scale(0.95); }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.copy-success {
+  animation: copy-success-bounce 400ms ease-out;
+  color: #10b981 !important; /* Emerald green */
+}
+
+/* Button hover glow effect */
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+.btn-glow:hover::before {
+  opacity: 1;
+}
+
+/* 🎮 Gamification: Streak Badge Glow */
+@keyframes streak-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(251, 146, 60, 1));
+  }
+}
+
+.streak-badge {
+  animation: streak-glow 2s ease-in-out infinite;
+}
+
+/* 🌈 Gradient Text Utility */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 📱 Focus Mode Exit Hint */
+.focus-mode .focus-exit-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 12px;
+  border-radius: 9999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+  z-index: 9999;
+}
+
+.focus-mode:hover .focus-exit-hint {
+  opacity: 1;
+}

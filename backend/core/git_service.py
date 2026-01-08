@@ -1,31 +1,32 @@
-import subprocess
+import asyncio
 import os
 from typing import List, Dict, Any
 
 class GitService:
-    def _run_git(self, cwd: str, args: List[str]) -> str:
-        """Run a git command in the specified directory."""
+    async def _run_git(self, cwd: str, args: List[str]) -> str:
+        """Run a git command in the specified directory asynchronously."""
         try:
-            result = subprocess.run(
-                ["git"] + args,
+            process = await asyncio.create_subprocess_exec(
+                "git", *args,
                 cwd=cwd,
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding='utf-8' 
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                encoding='utf-8'
             )
-            return result.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            # print(f"Git error in {cwd}: {e.stderr}")
-            raise Exception(e.stderr)
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                raise Exception(stderr.strip())
+
+            return stdout.strip()
         except Exception as e:
             print(f"Error running git: {e}")
             raise e
 
-    def get_status(self, cwd: str) -> Dict[str, Any]:
+    async def get_status(self, cwd: str) -> Dict[str, Any]:
         try:
-            output = self._run_git(cwd, ["status", "--porcelain"])
-            branch = self._run_git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])
+            output = await self._run_git(cwd, ["status", "--porcelain"])
+            branch = await self._run_git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])
         except:
             return {"error": "Not a git repository or git not found"}
 

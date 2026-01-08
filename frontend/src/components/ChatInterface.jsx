@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import { Wrench, Network } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -27,6 +28,7 @@ import IFlowLogo from './IFlowLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 import IFlowStatus from './IFlowStatus';
 import TokenUsagePie from './TokenUsagePie';
@@ -34,6 +36,12 @@ import { MicButton } from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
+import { TypingIndicator, CompactTypingIndicator } from './TypingIndicator';
+import { ConnectionStatus, ConnectionIndicator } from './ConnectionStatus';
+import ErrorFixPrompt from './ErrorFixPrompt';
+import Shell from './Shell';
+import AutoFixPanel from './AutoFixPanel';
+import ContextVisualizer from './ContextVisualizer';
 
 
 // Helper function to decode HTML entities in text
@@ -293,16 +301,16 @@ const markdownComponents = {
         <button
           type="button"
           onClick={handleCopy}
-          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600"
-          title={copied ? 'Copied' : 'Copy code'}
-          aria-label={copied ? 'Copied' : 'Copy code'}
+          className={`absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-all text-xs px-2 py-1 rounded-md bg-gray-700/80 hover:bg-gray-700 text-white border border-gray-600 btn-glow ${copied ? 'copy-success' : ''}`}
+          title={copied ? 'Copied!' : 'Copy code'}
+          aria-label={copied ? 'Copied!' : 'Copy code'}
         >
           {copied ? (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 text-emerald-400">
               <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
-              Copied
+              Copied!
             </span>
           ) : (
             <span className="flex items-center gap-1">
@@ -314,7 +322,7 @@ const markdownComponents = {
             </span>
           )}
         </button>
-        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto">
+        <pre className="bg-gray-900 dark:bg-gray-900 border border-gray-700/40 rounded-lg p-3 overflow-x-auto scrollbar-thin">
           <code className={`text-gray-100 dark:text-gray-100 text-sm font-mono ${className || ''}`} {...props}>
             {children}
           </code>
@@ -333,6 +341,9 @@ const markdownComponents = {
     </a>
   ),
   p: ({ children }) => <div className="mb-2 last:mb-0">{children}</div>,
+  div: ({ children, className, ...props }) => (
+    <div className={`my-1 ${className || ''}`} {...props}>{children}</div>
+  ),
   // GFM tables
   table: ({ children }) => (
     <div className="overflow-x-auto my-2">
@@ -358,6 +369,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
       (prevMessage.type === 'tool') ||
+      (prevMessage.type === 'plan') ||
       (prevMessage.type === 'error'));
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
@@ -437,6 +449,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 <div className="w-8 h-8 bg-gray-600 dark:bg-gray-700 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
                   🔧
                 </div>
+              ) : message.type === 'plan' ? (
+                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                  📋
+                </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
                   {(localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? (
@@ -447,14 +463,97 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : ((localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? 'Cursor' : 'IFlow')}
+                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : message.type === 'plan' ? 'Plan' : ((localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? 'Cursor' : 'IFlow')}
               </div>
             </div>
           )}
 
           <div className="w-full">
 
-            {message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
+            {/* 新的工具卡片渲染 - 基于 toolType */}
+            {message.isToolUse && message.toolType ? (
+              <div className={`group relative border-l-2 pl-3 py-2 my-2 ${message.toolStatus === 'running'
+                  ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-400'
+                  : message.toolStatus === 'failed'
+                    ? 'bg-red-50/50 dark:bg-red-900/20 border-red-400'
+                    : 'bg-green-50/50 dark:bg-green-900/20 border-green-400'
+                }`}>
+                <div className="flex items-center gap-2 text-sm">
+                  {/* 图标 */}
+                  {message.toolType === 'read_file' && (
+                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  )}
+                  {message.toolType === 'write_file' && (
+                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  )}
+                  {message.toolType === 'command' && (
+                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  {message.toolType === 'search' && (
+                    <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  )}
+                  {!['read_file', 'write_file', 'command', 'search'].includes(message.toolType) && (
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+
+                  {/* 工具名称 */}
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    {message.toolType === 'read_file' ? 'Read file' :
+                      message.toolType === 'write_file' ? 'Write file' :
+                        message.toolType === 'command' ? 'Command' :
+                          message.toolType === 'search' ? 'Search' :
+                            message.toolName || 'Tool'}
+                  </span>
+
+                  {/* AgentInfo 显示 */}
+                  {message.agentInfo && (
+                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-800">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {message.agentInfo.name || message.agentInfo.role || 'Agent'}
+                    </span>
+                  )}
+
+                  {/* 文件名/命令 */}
+                  {message.toolLabel && (
+                    <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono text-gray-600 dark:text-gray-300 max-w-xs truncate">
+                      {message.toolLabel}
+                    </code>
+                  )}
+
+                  {/* 状态指示器 */}
+                  <span className="ml-auto">
+                    {message.toolStatus === 'running' && (
+                      <span className="flex items-center gap-1 text-xs text-blue-500">
+                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        运行中
+                      </span>
+                    )}
+                    {message.toolStatus === 'success' && (
+                      <span className="text-xs text-green-500">✓ 完成</span>
+                    )}
+                    {message.toolStatus === 'failed' && (
+                      <span className="text-xs text-red-500">✗ 失败</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            ) : message.isToolUse && !['Read', 'TodoWrite', 'TodoRead'].includes(message.toolName) ? (
               (() => {
                 // Minimize Grep and Glob tools since they happen frequently
                 const isSearchTool = ['Grep', 'Glob'].includes(message.toolName);
@@ -469,6 +568,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                             <span className="font-medium flex-shrink-0">{message.toolName}</span>
+                            {message.agentInfo && (
+                              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-800">
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {message.agentInfo.name || message.agentInfo.role || 'Agent'}
+                              </span>
+                            )}
                             <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">•</span>
                             {message.toolInput && (() => {
                               try {
@@ -518,9 +625,19 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                           <div className="absolute inset-0 rounded-lg bg-blue-500 dark:bg-blue-400 animate-pulse opacity-20"></div>
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                            {message.toolName}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                              {message.toolName}
+                            </span>
+                            {message.agentInfo && (
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-800">
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {message.agentInfo.name || message.agentInfo.role || 'Agent'}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
                             {message.toolId}
                           </span>
@@ -921,7 +1038,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                   </svg>
                                   📋 View implementation plan
                                 </summary>
-                                <Markdown className="mt-3 prose prose-sm max-w-none dark:prose-invert">
+                                <Markdown className="mt-3 prose prose-sm max-w-none dark:prose-invert prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
                                   {planContent}
                                 </Markdown>
                               </details>
@@ -1048,7 +1165,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                         <div className="flex items-center gap-2 mb-3">
                                           <span className="font-medium">Implementation Plan</span>
                                         </div>
-                                        <Markdown className="prose prose-sm max-w-none dark:prose-invert">
+                                        <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
                                           {planContent}
                                         </Markdown>
                                       </div>
@@ -1328,7 +1445,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                       </svg>
                                       View full output ({content.length} chars)
                                     </summary>
-                                    <Markdown className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert">
+                                    <Markdown className="mt-2 prose prose-sm max-w-none prose-green dark:prose-invert prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
                                       {content}
                                     </Markdown>
                                   </details>
@@ -1336,7 +1453,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                               }
 
                               return (
-                                <Markdown className="prose prose-sm max-w-none prose-green dark:prose-invert">
+                                <Markdown className="prose prose-sm max-w-none prose-green dark:prose-invert prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
                                   {content}
                                 </Markdown>
                               );
@@ -1507,6 +1624,37 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   <span className="font-medium">Read todo list</span>
                 </div>
               </div>
+            ) : message.type === 'plan' ? (
+              <div className="bg-purple-50/50 dark:bg-purple-900/20 border-l-2 border-purple-400 dark:border-purple-500 pl-3 py-2 my-2 rounded-r-lg">
+                <div className="flex items-center gap-2 text-xs text-purple-600 dark:text-purple-400 mb-2">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span className="font-medium">Execution Plan</span>
+                </div>
+                {message.entries && Array.isArray(message.entries) && message.entries.length > 0 ? (
+                  <ol className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
+                    {message.entries.map((entry, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full text-xs font-medium">
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1">{entry.content || ''}</span>
+                        {entry.status && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${entry.status === 'completed' ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' :
+                              entry.status === 'in_progress' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' :
+                                'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                            }`}>
+                            {entry.status}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 italic">No plan entries available</div>
+                )}
+              </div>
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {/* Thinking accordion for reasoning */}
@@ -1558,7 +1706,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray">
+                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
                       {content}
                     </Markdown>
                   ) : (
@@ -1625,7 +1773,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onSessionProcessing, onSessionNotProcessing, processingSessions, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, showThinking, autoScrollToBottom, sendByCtrlEnter, externalMessageUpdate, onTaskClick, onShowAllTasks, aiPersona }) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
@@ -1677,13 +1825,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
+  const [showAutoFixPanel, setShowAutoFixPanel] = useState(false);
+  const [showContextVisualizer, setShowContextVisualizer] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [errorDetected, setErrorDetected] = useState(null);
   const [tokenBudget, setTokenBudget] = useState(null);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [iflowStatus, setIflowStatus] = useState(null);
+  const [connectionState, setConnectionState] = useState('disconnected');
+  const [lastHeartbeat, setLastHeartbeat] = useState(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('selected-provider') || 'iflow';
   });
@@ -1691,8 +1846,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return localStorage.getItem('cursor-model') || 'gpt-5';
   });
   const [iflowModel, setIflowModel] = useState(() => {
-    return localStorage.getItem('iflow-model') || 'GLM-4.6';
+    return localStorage.getItem('iflow-model') || 'GLM-4.7';
   });
+
+  // Current agent info for typing indicator
+  const currentAgentInfo = useMemo(() => {
+    if (provider === 'cursor') {
+      return cursorModel;
+    } else {
+      return iflowModel;
+    }
+  }, [provider, cursorModel, iflowModel]);
   // Load permission mode for the current session
   useEffect(() => {
     if (selectedSession?.id) {
@@ -1737,6 +1901,28 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         .catch(err => console.error('Error loading Cursor config:', err));
     }
   }, [provider]);
+
+  // Handle keyboard events for Focus Mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && focusMode) {
+        setFocusMode(false);
+      }
+    };
+
+    if (focusMode) {
+      document.addEventListener('keydown', handleKeyDown);
+      // Add focus mode class to body
+      document.body.classList.add('focus-mode');
+    } else {
+      document.body.classList.remove('focus-mode');
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.classList.remove('focus-mode');
+    };
+  }, [focusMode]);
 
   // Fetch slash commands on mount and when project changes
   useEffect(() => {
@@ -2871,6 +3057,67 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [currentSessionId, processingSessions]);
 
+  // Sync WebSocket connection state with local state for UI display
+  const { ws: wsFromContext, isConnected, messages: wsMessages } = useWebSocketContext();
+  useEffect(() => {
+    if (wsFromContext) {
+      const updateConnectionState = () => {
+        if (wsFromContext.readyState === WebSocket.OPEN) {
+          setConnectionState('connected');
+        } else if (wsFromContext.readyState === WebSocket.CONNECTING) {
+          setConnectionState('connecting');
+        } else if (wsFromContext.readyState === WebSocket.CLOSED) {
+          setConnectionState('closed');
+        }
+      };
+
+      // Initial state
+      updateConnectionState();
+
+      // Listen for state changes
+      wsFromContext.addEventListener('open', () => setConnectionState('connected'));
+      wsFromContext.addEventListener('close', () => {
+        setConnectionState('disconnected');
+        setLastHeartbeat(null);
+      });
+      wsFromContext.addEventListener('error', () => setConnectionState('error'));
+
+      // Listen for heartbeat messages
+      const handleHeartbeat = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'heartbeat') {
+            setLastHeartbeat(Date.now());
+            if (connectionState !== 'connected') {
+              setConnectionState('connected');
+            }
+          }
+        } catch (e) {
+          // Not a JSON message, ignore
+        }
+      };
+      wsFromContext.addEventListener('message', handleHeartbeat);
+
+      return () => {
+        wsFromContext.removeEventListener('open', updateConnectionState);
+        wsFromContext.removeEventListener('close', updateConnectionState);
+        wsFromContext.removeEventListener('error', updateConnectionState);
+        wsFromContext.removeEventListener('message', handleHeartbeat);
+      };
+    }
+  }, [wsFromContext]);
+
+  // Handle reconnect
+  const handleReconnect = useCallback(() => {
+    if (ws && ws.readyState !== WebSocket.OPEN) {
+      setConnectionState('connecting');
+      setReconnectAttempts(prev => prev + 1);
+      // The actual reconnection will be handled by the useWebSocket hook
+      // We just trigger a reconnection attempt by closing and letting the hook reconnect
+      ws.close();
+    }
+  }, [ws]);
+
   useEffect(() => {
     // Handle WebSocket messages
     if (messages.length > 0) {
@@ -3827,7 +4074,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const projectName = selectedProject?.name || 'default';
 
       // Use relative path - Vite proxy handles the rest
-      const streamUrl = `/stream?message=${encodeURIComponent(input)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}`;
+      const streamUrl = `/stream?message=${encodeURIComponent(input)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}&persona=${encodeURIComponent(aiPersona || 'partner')}`;
 
       const response = await fetch(streamUrl);
       const reader = response.body.getReader();
@@ -3861,7 +4108,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     lastMsg.type === 'assistant' ||
                     lastMsg.role === 'iflow' ||
                     lastMsg.type === 'iflow'
-                  );
+                  ) && !lastMsg.isToolUse;
 
                   if (isAssistant) {
                     const newHistory = [...prev];
@@ -3876,10 +4123,52 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     }];
                   }
                 });
+              } else if (data.type === 'tool_start') {
+                // 工具开始执行 - 添加工具卡片
+                setChatMessages(prev => [...prev, {
+                  type: 'assistant',
+                  isToolUse: true,
+                  toolName: data.tool_name,
+                  toolType: data.tool_type,
+                  toolLabel: data.label,
+                  toolStatus: 'running',
+                  agentInfo: data.agent_info,
+                  timestamp: new Date()
+                }]);
+              } else if (data.type === 'tool_end') {
+                // 工具执行完成 - 更新工具卡片状态
+                setChatMessages(prev => {
+                  const newHistory = [...prev];
+                  // 找到最后一个匹配的工具卡片
+                  for (let i = newHistory.length - 1; i >= 0; i--) {
+                    if (newHistory[i].isToolUse && newHistory[i].toolName === data.tool_name && newHistory[i].toolStatus === 'running') {
+                      newHistory[i] = { ...newHistory[i], toolStatus: data.status, agentInfo: data.agent_info };
+                      break;
+                    }
+                  }
+                  return newHistory;
+                });
+              } else if (data.type === 'plan') {
+                // 任务计划 - 添加计划消息
+                setChatMessages(prev => [...prev, {
+                  type: 'plan',
+                  entries: data.entries || [],
+                  timestamp: new Date()
+                }]);
               } else if (data.type === 'status') {
                 setIflowStatus({ text: data.content, tokens: 0, can_interrupt: true });
+              } else if (data.type === 'error') {
+                setChatMessages(prev => [...prev, {
+                  type: 'error',
+                  content: data.content,
+                  timestamp: new Date()
+                }]);
               } else if (data.type === 'done') {
                 setIflowStatus(null);
+                // 处理任务完成原因
+                if (data.stop_reason) {
+                  console.log(`Task finished with reason: ${data.stop_reason}`);
+                }
               }
             } catch (e) {
               console.error("Error parsing SSE chunk:", e, line);
@@ -4240,6 +4529,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   };
 
+  const handleErrorDetected = (errorOutput, project) => {
+    console.log('Error detected:', errorOutput);
+    setErrorDetected({
+      error: errorOutput,
+      projectPath: project?.path || selectedProject?.path
+    });
+
+    // 5秒后自动隐藏
+    setTimeout(() => {
+      setErrorDetected(null);
+    }, 10000);
+  };
+
+  const handleApplyFix = (fixPlan) => {
+    console.log('Applying fix:', fixPlan);
+    // 这里可以执行修复命令或让 AI 应用修复
+    setErrorDetected(null);
+  };
+
   // Don't render if no project is selected
   if (!selectedProject) {
     return (
@@ -4260,6 +4568,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         `}
       </style>
+
+      {/* Focus Mode Exit Hint */}
+      {focusMode && (
+        <div className="focus-exit-hint">
+          按 ESC 退出专注模式
+        </div>
+      )}
+
+      {/* Error Fix Prompt */}
+      {errorDetected && (
+        <ErrorFixPrompt
+          error={errorDetected.error}
+          projectPath={errorDetected.projectPath}
+          onApplyFix={handleApplyFix}
+          onDismiss={() => setErrorDetected(null)}
+        />
+      )}
+
       <div className="h-full flex flex-col">
         {/* Messages Area - Scrollable Middle Section */}
         <div
@@ -4380,28 +4706,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           )}
 
           {isLoading && (
-            <div className="chat-message assistant">
-              <div className="w-full">
-                <div className="flex items-center space-x-3 mb-2">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1 bg-transparent">
-                    {(localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? (
-                      <CursorLogo className="w-full h-full" />
-                    ) : (
-                      <IFlowLogo className="w-full h-full" />
-                    )}
-                  </div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">{(localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? 'Cursor' : 'IFlow'}</div>
-                  {/* Abort button removed - functionality not yet implemented at backend */}
-                </div>
-                <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
-                  <div className="flex items-center space-x-1">
-                    <div className="animate-pulse">●</div>
-                    <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>●</div>
-                    <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>●</div>
-                    <span className="ml-2">Thinking...</span>
-                  </div>
-                </div>
-              </div>
+            <div className="ai-thinking-container">
+              <TypingIndicator
+                agent={provider === 'cursor' ? 'Cursor' : 'IFlow'}
+                agentInfo={currentAgentInfo}
+              />
             </div>
           )}
 
@@ -4413,7 +4722,98 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         <div className={`p-2 sm:p-4 md:p-4 flex-shrink-0 ${isInputFocused ? 'pb-2 sm:pb-4 md:pb-6' : 'pb-2 sm:pb-4 md:pb-6'
           }`}>
 
+          {/* Focus Mode Toggle Button */}
+          <button
+            onClick={() => setFocusMode(!focusMode)}
+            className={`focus-mode-toggle ${focusMode ? 'active' : ''}`}
+            style={{ right: '80px' }}
+            title={focusMode ? '退出专注模式 (按 ESC)' : '进入专注模式'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {focusMode ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              )}
+            </svg>
+          </button>
+
+          {/* Generate Report Button */}
+          <button
+            onClick={async () => {
+              if (!selectedProject) return;
+              
+              try {
+                const response = await authenticatedFetch('/api/generate-report', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    projectPath: selectedProject.path,
+                    type: 'daily'
+                  })
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  const report = data.report;
+                  
+                  // 将报告作为消息添加到聊天中
+                  const reportMessage = `
+## 📊 今日工作报告
+
+**日期**: ${report.date}
+
+### 📝 工作摘要
+${report.summary}
+
+### 📈 详细指标
+- **提交次数**: ${report.metrics.commit_count}
+- **代码变更**: ${report.metrics.lines_changed} 行
+- **修改文件**: ${report.metrics.files_changed} 个
+- **Bug 修复**: ${report.metrics.bug_fixes} 个
+- **新功能**: ${report.metrics.new_features} 个
+- **生产力分数**: ${report.metrics.productivity_score.toFixed(1)}/100
+
+### 🔧 代码变更详情
+- **新增行数**: ${report.details.code_changes.lines_added}
+- **删除行数**: ${report.details.code_changes.lines_deleted}
+- **文件类型分布**: ${Object.entries(report.details.code_changes.file_types).map(([ext, count]) => `${ext}: ${count}`).join(', ')}
+
+### 💡 新功能
+${report.details.features.length > 0 ? report.details.features.map(f => `- ${f}`).join('\n') : '暂无新功能'}
+
+### 🐛 Bug 修复
+${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug` : '无 Bug 修复'}
+`;
+                  
+                  setChatMessages(prev => [...prev, {
+                    type: 'assistant',
+                    content: reportMessage,
+                    timestamp: new Date()
+                  }]);
+                }
+              } catch (err) {
+                console.error('生成报告失败:', err);
+              }
+            }}
+            className="focus-mode-toggle"
+            style={{ right: '24px', bottom: '80px' }}
+            title="生成今日工作报告"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </button>
+
           <div className="flex-1">
+            <ConnectionStatus
+              connectionState={connectionState}
+              lastHeartbeat={lastHeartbeat}
+              reconnectAttempts={reconnectAttempts}
+              onReconnect={handleReconnect}
+            />
             <IFlowStatus
               status={iflowStatus}
               isLoading={isLoading}
@@ -4681,6 +5081,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 </svg>
               </button>
 
+              {/* Auto Fix button */}
+              <button
+                type="button"
+                onClick={() => setShowAutoFixPanel(true)}
+                className="absolute left-10 top-1/2 transform -translate-y-1/2 p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+                title="Auto Fix Errors"
+              >
+                <Wrench className="w-5 h-5 text-purple-500" />
+              </button>
+
+              {/* Context Visualizer button */}
+              <button
+                type="button"
+                onClick={() => setShowContextVisualizer(true)}
+                className="absolute left-18 top-1/2 transform -translate-y-1/2 p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                title="Context Visualizer"
+              >
+                <Network className="w-5 h-5 text-blue-500" />
+              </button>
+
               {/* Mic button - HIDDEN */}
               <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
                 <MicButton
@@ -4729,6 +5149,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </form>
         </div>
       </div>
+
+      {/* Auto Fix Panel */}
+      {showAutoFixPanel && (
+        <AutoFixPanel
+          projectPath={selectedProject?.fullPath}
+          visible={showAutoFixPanel}
+          onClose={() => setShowAutoFixPanel(false)}
+        />
+      )}
+
+      {/* Context Visualizer */}
+      {showContextVisualizer && (
+        <ContextVisualizer
+          projectPath={selectedProject?.fullPath}
+          visible={showContextVisualizer}
+          onClose={() => setShowContextVisualizer(false)}
+          onNodeClick={(nodeData) => {
+            // 点击节点时打开文件
+            if (nodeData.file_path) {
+              onFileOpen(nodeData.file_path);
+            }
+          }}
+        />
+      )}
     </>
   );
 }

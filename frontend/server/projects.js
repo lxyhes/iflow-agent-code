@@ -992,7 +992,9 @@ async function addProjectManually(projectPath, displayName = null) {
   }
   
   // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/\//g, '-');
+  // Handle both forward and backslashes for cross-platform compatibility
+  // Also remove colons (for Windows drive letters)
+  const projectName = absolutePath.replace(/[\/\\]/g, '-').replace(/:/g, '');
   
   // Check if project already exists in config
   const config = await loadProjectConfig();

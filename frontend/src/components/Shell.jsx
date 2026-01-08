@@ -15,6 +15,21 @@ const xtermStyles = `
   .xterm-screen:focus {
     outline: none !important;
   }
+  .xterm-link-layer {
+    pointer-events: none !important;
+  }
+  .xterm-viewport {
+    overflow: hidden !important;
+  }
+  .xterm-cursor-layer {
+    pointer-events: none !important;
+  }
+  .terminal-container {
+    outline: none !important;
+  }
+  .terminal-container:focus {
+    outline: none !important;
+  }
 `;
 
 if (typeof document !== 'undefined') {
@@ -24,7 +39,7 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false }) {
+function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell = false, onProcessComplete, minimal = false, autoConnect = false, onErrorDetected }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -60,19 +75,16 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell`;
       } else {
-        const token = localStorage.getItem('auth-token');
-        if (!token) {
-          console.error('No authentication token found for Shell WebSocket connection');
-          return;
-        }
-
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
+        // 本地开发模式：直接连接后端 8000 端口
+        const token = localStorage.getItem('auth-token') || 'mock-token';
+        wsUrl = `ws://localhost:8000/shell?token=${encodeURIComponent(token)}`;
       }
 
+      console.log('[Shell] Connecting to:', wsUrl);
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
+        console.log('[Shell] WebSocket connected');
         setIsConnected(true);
         setIsConnecting(false);
 
@@ -101,6 +113,34 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
           if (data.type === 'output') {
             let output = data.data;
+
+            // 检测错误模式
+            const errorPatterns = [
+              /Error:/i,
+              /Exception:/i,
+              /Traceback/i,
+              /TypeError:/i,
+              /ReferenceError:/i,
+              /SyntaxError:/i,
+              /ModuleNotFoundError/i,
+              /ImportError/i,
+              /NameError/i,
+              /AttributeError/i,
+              /KeyError/i,
+              /IndexError/i,
+              /ValueError/i,
+              /PermissionError/i,
+              /FileNotFoundError/i,
+              /ConnectionRefusedError/i,
+              /TimeoutError/i
+            ];
+
+            const hasError = errorPatterns.some(pattern => pattern.test(output));
+
+            if (hasError && onErrorDetected) {
+              // 触发错误检测回调
+              onErrorDetected(output, selectedProject);
+            }
 
             if (isPlainShellRef.current && onProcessCompleteRef.current) {
               const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, '');
@@ -267,20 +307,19 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     });
 
     fitAddon.current = new FitAddon();
-    const webglAddon = new WebglAddon();
     const webLinksAddon = new WebLinksAddon();
 
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(webLinksAddon);
-    // Note: ClipboardAddon removed - we handle clipboard operations manually in attachCustomKeyEventHandler
-
-    try {
-      terminal.current.loadAddon(webglAddon);
-    } catch (error) {
-      console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
-    }
 
     terminal.current.open(terminalRef.current);
+
+    setTimeout(() => {
+      if (fitAddon.current) {
+        fitAddon.current.fit();
+        terminal.current?.focus();
+      }
+    }, 100);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
@@ -290,6 +329,9 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
         navigator.clipboard.readText().then(text => {
+          if (terminal.current) {
+            terminal.current.write(text);
+          }
           if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
               type: 'input',
@@ -300,7 +342,42 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         return false;
       }
 
-      return true;
+      let inputData = event.key;
+      let displayData = inputData;
+      if (event.key === 'Enter') {
+        inputData = '\r';
+        displayData = '\r';
+      } else if (event.key === 'Backspace') {
+        inputData = '\b';
+        displayData = '\b \b';
+      } else if (event.key === 'Tab') {
+        inputData = '\t';
+        displayData = '\t';
+      } else if (event.key.startsWith('Arrow')) {
+        const arrowKeys = { ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowRight: '\x1b[C', ArrowLeft: '\x1b[D' };
+        inputData = arrowKeys[event.key] || '';
+        displayData = inputData;
+      } else if (event.key === 'Escape') {
+        inputData = '\x1b';
+        displayData = '\x1b';
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        inputData = event.key;
+        displayData = event.key;
+      } else {
+        return true;
+      }
+
+      if (terminal.current) {
+        terminal.current.write(displayData);
+      }
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          type: 'input',
+          data: inputData
+        }));
+      }
+
+      return false;
     });
 
     setTimeout(() => {
@@ -359,7 +436,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         terminal.current = null;
       }
     };
-  }, [selectedProject?.path || selectedProject?.fullPath, isRestarting]);
+  }, [selectedProject?.name, isRestarting]); // 使用 name 作为稳定的依赖
 
   useEffect(() => {
     if (!autoConnect || !isInitialized || isConnecting || isConnected) return;
@@ -384,14 +461,24 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
   if (minimal) {
     return (
-      <div className="h-full w-full bg-gray-900">
+      <div 
+        className="h-full w-full bg-gray-900 cursor-text terminal-container"
+        tabIndex="0"
+        onClick={() => terminal.current?.focus()}
+        onFocus={() => terminal.current?.focus()}
+      >
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 w-full">
+    <div 
+      className="h-full flex flex-col bg-gray-900 w-full terminal-container"
+      tabIndex="0"
+      onClick={() => terminal.current?.focus()}
+      onFocus={() => terminal.current?.focus()}
+    >
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">

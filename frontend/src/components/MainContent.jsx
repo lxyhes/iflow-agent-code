@@ -58,7 +58,9 @@ function MainContent({
   showThinking,           // Show thinking/reasoning sections
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
   sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
-  externalMessageUpdate   // Trigger for external CLI updates to current session
+  externalMessageUpdate,  // Trigger for external CLI updates to current session
+  onShowAllTasks,
+  aiPersona,
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -496,6 +498,7 @@ function MainContent({
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
+                aiPersona={aiPersona}
               />
             </ErrorBoundary>
           </div>
@@ -510,6 +513,11 @@ function MainContent({
                 project={selectedProject}
                 session={selectedSession}
                 showHeader={false}
+                onErrorDetected={(error) => {
+                  // 传递错误到 ChatInterface
+                  // 这里可以通过事件总线或状态管理来实现
+                  console.log('Shell error detected:', error);
+                }}
               />
             </div>
           )}
@@ -649,9 +657,6 @@ function MainContent({
             content: selectedPRD?.content || ''
           }}
           onSave={async () => {
-            setShowPRDEditor(false);
-            setSelectedPRD(null);
-
             // Reload existing PRDs with notification
             try {
               const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
@@ -660,6 +665,11 @@ function MainContent({
                 setExistingPRDs(data.prdFiles || []);
                 setPRDNotification('PRD saved successfully!');
                 setTimeout(() => setPRDNotification(null), 3000);
+
+                // Open the saved PRD file in editor
+                const fileName = selectedPRD?.name || 'prd.txt';
+                const filePath = `${currentProject.path}/${fileName}`;
+                handleFileOpen(filePath);
               }
             } catch (error) {
               console.error('Failed to refresh PRDs:', error);

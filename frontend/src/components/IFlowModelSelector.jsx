@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 
 const models = [
-  { id: 'GLM-4.6', label: 'GLM-4.6 (推荐)', icon: '✨' },
+  { id: 'GLM-4.7', label: 'GLM-4.7 (推荐)', icon: '✨' },
+  { id: 'iFlow-ROME-30BA3B', label: 'iFlow-ROME-30BA3B (预览版)', icon: '🔬' },
   { id: 'DeepSeek-V3.2', label: 'DeepSeek-V3.2', icon: '🐋' },
   { id: 'Qwen3-Coder-Plus', label: 'Qwen3-Coder-Plus', icon: '🤖' },
   { id: 'Kimi-K2-Thinking', label: 'Kimi-K2-Thinking', icon: '🧠' },
-  { id: 'MiniMax-M2', label: 'MiniMax-M2', icon: '⚡' },
+  { id: 'MiniMax-M2.1', label: 'MiniMax-M2.1', icon: '⚡' },
   { id: 'Kimi-K2-0905', label: 'Kimi-K2-0905', icon: '📝' }
 ];
 
 const IFlowModelSelector = () => {
-  const [currentModel, setCurrentModel] = useState('GLM-4.6');
+  const [currentModel, setCurrentModel] = useState('GLM-4.7');
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {

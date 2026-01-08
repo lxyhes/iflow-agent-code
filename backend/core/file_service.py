@@ -63,11 +63,23 @@ class FileService:
         return stat.filemode(mode)
 
     def read_file(self, root_path: str, rel_path: str):
-        full_path = os.path.join(root_path, rel_path)
-        if not os.path.commonpath([root_path, full_path]) == root_path:
-             raise ValueError("Access denied")
+        """安全地读取文件内容"""
+        # 防止路径遍历攻击
+        if '..' in rel_path.replace('\\', '/').split('/'):
+            raise ValueError("Access denied: path traversal detected")
+        
+        # 确保路径安全
+        full_path = os.path.normpath(os.path.join(root_path, rel_path))
+        real_root = os.path.realpath(root_path)
+        real_full = os.path.realpath(full_path) if os.path.exists(full_path) else full_path
+        
+        # 严格的路径验证
+        if not real_full.startswith(real_root + os.sep) and real_full != real_root:
+            raise ValueError("Access denied: path outside project directory")
+        
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File {rel_path} not found")
+        
         try:
             with open(full_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -75,9 +87,23 @@ class FileService:
             return "[Binary Content - Cannot display]"
 
     def write_file(self, root_path: str, rel_path: str, content: str):
-        full_path = os.path.join(root_path, rel_path)
-        if not os.path.commonpath([root_path, full_path]) == root_path:
-             raise ValueError("Access denied")
+        """安全地写入文件内容"""
+        # 防止路径遍历攻击
+        if '..' in rel_path.replace('\\', '/').split('/'):
+            raise ValueError("Access denied: path traversal detected")
+        
+        # 确保路径安全
+        full_path = os.path.normpath(os.path.join(root_path, rel_path))
+        real_root = os.path.realpath(root_path)
+        
+        # 对于新文件，检查规范化后的路径
+        normalized_full = os.path.normpath(full_path)
+        if not normalized_full.startswith(real_root + os.sep) and normalized_full != real_root:
+            raise ValueError("Access denied: path outside project directory")
+        
+        # 确保目录存在
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
         return True

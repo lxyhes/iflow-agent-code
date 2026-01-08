@@ -3,9 +3,10 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
-import { X, Save, Download, Maximize2, Minimize2, Eye, FileText, Sparkles, AlertTriangle } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2, Eye, FileText, Sparkles, AlertTriangle, Network } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api, authenticatedFetch } from '../utils/api';
+import MindMapViewer from './MindMapViewer';
 
 const PRDEditor = ({
   file,
@@ -28,6 +29,7 @@ const PRDEditor = ({
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [existingPRDs, setExistingPRDs] = useState([]);
+  const [viewMode, setViewMode] = useState('editor'); // 'editor' or 'mindmap'
 
   const editorRef = useRef(null);
 
@@ -599,6 +601,20 @@ This document outlines the requirements for building an AI-powered task manageme
             </button>
 
             <button
+              onClick={() => setViewMode(viewMode === 'editor' ? 'mindmap' : 'editor')}
+              className={cn(
+                'p-2 md:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800',
+                'min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center',
+                viewMode === 'mindmap'
+                  ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              )}
+              title={viewMode === 'editor' ? 'View as mind map' : 'View as editor'}
+            >
+              <Network className="w-5 h-5 md:w-4 md:h-4" />
+            </button>
+
+            <button
               onClick={() => setWordWrap(!wordWrap)}
               className={cn(
                 'p-2 md:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800',
@@ -688,7 +704,9 @@ This document outlines the requirements for building an AI-powered task manageme
 
         {/* Editor/Preview Content */}
         <div className="flex-1 overflow-hidden">
-          {previewMode ? (
+          {viewMode === 'mindmap' ? (
+            <MindMapViewer markdown={content} onMarkdownChange={setContent} />
+          ) : previewMode ? (
             <div className="h-full overflow-y-auto p-6 prose prose-gray dark:prose-invert max-w-none">
               <div
                 className="markdown-preview"

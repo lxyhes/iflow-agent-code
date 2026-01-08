@@ -42,7 +42,7 @@ export const api = {
   // Protected endpoints
   // config endpoint removed - no longer needed (frontend uses window.location)
   projects: () => authenticatedFetch('/api/projects'),
-  sessions: (projectName, limit = 5, offset = 0) => 
+  sessions: (projectName, limit = 5, offset = 0) =>
     authenticatedFetch(`/api/projects/${projectName}/sessions?limit=${limit}&offset=${offset}`),
   sessionMessages: (projectName, sessionId, limit = null, offset = 0) => {
     const params = new URLSearchParams();
@@ -96,18 +96,18 @@ export const api = {
   // TaskMaster endpoints
   taskmaster: {
     // Initialize TaskMaster in a project
-    init: (projectName) => 
+    init: (projectName) =>
       authenticatedFetch(`/api/taskmaster/init/${projectName}`, {
         method: 'POST',
       }),
-    
+
     // Add a new task
     addTask: (projectName, { prompt, title, description, priority, dependencies }) =>
       authenticatedFetch(`/api/taskmaster/add-task/${projectName}`, {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies }),
       }),
-    
+
     // Parse PRD to generate tasks
     parsePRD: (projectName, { fileName, numTasks, append }) =>
       authenticatedFetch(`/api/taskmaster/parse-prd/${projectName}`, {
@@ -133,7 +133,7 @@ export const api = {
         body: JSON.stringify(updates),
       }),
   },
-  
+
   // Browse filesystem for project suggestions
   browseFilesystem: (dirPath = null) => {
     const params = new URLSearchParams();
@@ -141,6 +141,10 @@ export const api = {
 
     return authenticatedFetch(`/api/browse-filesystem?${params}`);
   },
+
+  // Validate path for real-time feedback
+  validatePath: (path) =>
+    authenticatedFetch(`/api/validate-path?path=${encodeURIComponent(path)}`),
 
   // User endpoints
   user: {
@@ -159,4 +163,17 @@ export const api = {
 
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
+
+  // Simple query endpoint for quick AI responses
+  query: (prompt, options = {}) =>
+    authenticatedFetch('/api/query', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, ...options }),
+    }),
+
+  // Sync MCP servers from iFlow config
+  syncIFlowMcpServers: () =>
+    authenticatedFetch('/api/iflow/sync-mcp-servers', {
+      method: 'POST',
+    }),
 };

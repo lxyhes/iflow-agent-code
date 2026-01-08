@@ -8,6 +8,7 @@
  *   (no args)     - Start the server (default)
  *   start         - Start the server
  *   status        - Show configuration and data locations
+ *   update        - Check for and install the latest version
  *   help          - Show help information
  *   version       - Show version information
  */
@@ -150,12 +151,14 @@ Usage:
 Commands:
   start          Start the Claude Code UI server (default)
   status         Show configuration and data locations
+  update         Check for and install the latest version
   help           Show this help information
   version        Show version information
 
 Examples:
   $ claude-code-ui              # Start the server
   $ cloudcli status             # Show configuration
+  $ cloudcli update             # Check for updates
   $ cloudcli help               # Show help
 
 Environment Variables:
@@ -182,6 +185,78 @@ function showVersion() {
     console.log(`${packageJson.version}`);
 }
 
+// Check for updates
+async function checkForUpdates() {
+    console.log(`\n${c.info('[INFO]')} Checking for updates...`);
+
+    try {
+        // Fetch latest version from npm registry
+        const response = await fetch('https://registry.npmjs.org/@siteboon/claude-code-ui/latest');
+        if (!response.ok) {
+            throw new Error('Failed to fetch version information');
+        }
+
+        const data = await response.json();
+        const latestVersion = data.version;
+        const currentVersion = packageJson.version;
+
+        console.log(`\n${c.dim('─'.repeat(60))}`);
+        console.log(`\n${c.info('[INFO]')} Current Version: ${c.bright(currentVersion)}`);
+        console.log(`${c.info('[INFO]')} Latest Version:  ${c.bright(latestVersion)}`);
+
+        if (currentVersion === latestVersion) {
+            console.log(`\n${c.ok('[OK]')} You are already using the latest version!`);
+        } else {
+            console.log(`\n${c.warn('[UPDATE AVAILABLE]')} A new version is available!`);
+
+            // Ask user if they want to update
+            const readline = await import('readline');
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            const answer = await new Promise(resolve => {
+                rl.question(`\n${c.tip('[QUESTION]')} Do you want to update to version ${c.bright(latestVersion)}? (y/N): `, resolve);
+            });
+
+            rl.close();
+
+            if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+                console.log(`\n${c.info('[INFO]')} Installing update...`);
+
+                const { spawn } = await import('child_process');
+                const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+                const npmProcess = spawn(npmCmd, ['install', '-g', '@siteboon/claude-code-ui@latest'], {
+                    stdio: 'inherit',
+                    shell: true
+                });
+
+                npmProcess.on('close', (code) => {
+                    if (code === 0) {
+                        console.log(`\n${c.ok('[SUCCESS]')} Update installed successfully!`);
+                        console.log(`${c.info('[INFO]')} Please restart the application to use the new version.\n`);
+                    } else {
+                        console.log(`\n${c.error('[ERROR]')} Update failed. Please try manually:`);
+                        console.log(`       ${c.dim('npm install -g @siteboon/claude-code-ui@latest')}\n`);
+                    }
+                    process.exit(code);
+                });
+            } else {
+                console.log(`\n${c.info('[INFO]')} Update cancelled.\n`);
+            }
+        }
+
+        console.log(`\n${c.dim('─'.repeat(60))}\n`);
+
+    } catch (error) {
+        console.log(`\n${c.error('[ERROR]')} Failed to check for updates: ${error.message}`);
+        console.log(`\n${c.tip('[TIP]')} You can manually check for updates at:`);
+        console.log(`       ${c.dim('https://github.com/siteboon/claudecodeui/releases')}\n`);
+    }
+}
+
 // Start the server
 async function startServer() {
     // Import and run the server
@@ -200,6 +275,9 @@ async function main() {
         case 'status':
         case 'info':
             showStatus();
+            break;
+        case 'update':
+            await checkForUpdates();
             break;
         case 'help':
         case '-h':

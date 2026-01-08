@@ -48,6 +48,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
   const [activeTab, setActiveTab] = useState(initialTab);
   const [jsonValidationError, setJsonValidationError] = useState('');
+  const [codeStyleProfile, setCodeStyleProfile] = useState(null);
+  const [analyzingStyle, setAnalyzingStyle] = useState(false);
   const [toolsProvider, setToolsProvider] = useState('claude'); // 'claude' or 'cursor'
 
   // Code Editor settings
@@ -225,6 +227,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         const result = await response.json();
         if (result.success) {
           await fetchMcpServers(); // Refresh the list
+
+          // 同步到后端 global_config
+          await syncMcpServersToBackend();
+
           return true;
         } else {
           throw new Error(result.error || 'Failed to save server via Claude CLI');
@@ -248,11 +254,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
       if (response.ok) {
         const result = await response.json();
-        if (result.success) {
-          await fetchMcpServers(); // Refresh the list
-          return true;
-        } else {
-          throw new Error(result.error || 'Failed to delete server via Claude CLI');
+              if (result.success) {
+                await fetchMcpServers(); // Refresh the list
+        
+                // 同步到后端 global_config
+                await syncMcpServersToBackend();
+                return true;
+              } else {          throw new Error(result.error || 'Failed to delete server via Claude CLI');
         }
       } else {
         const error = await response.json();
@@ -261,6 +269,37 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     } catch (error) {
       console.error('Error deleting MCP server:', error);
       throw error;
+    }
+  };
+
+  // 同步 MCP 服务器配置到后端 global_config
+  const syncMcpServersToBackend = async () => {
+    try {
+      // 转换 MCP 服务器格式为后端需要的格式
+      const mcpServersConfig = mcpServers.map(server => ({
+        name: server.name,
+        type: server.type,
+        command: server.config?.command,
+        args: server.config?.args || [],
+        env: server.config?.env || {},
+        url: server.config?.url,
+        headers: server.config?.headers || {}
+      }));
+
+      // 更新后端 global_config
+      const response = await authenticatedFetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mcp_servers: mcpServersConfig })
+      });
+
+      if (response.ok) {
+        console.log('MCP servers synced to backend:', mcpServersConfig);
+      } else {
+        console.error('Failed to sync MCP servers to backend');
+      }
+    } catch (error) {
+      console.error('Error syncing MCP servers:', error);
     }
   };
 
@@ -299,6 +338,28 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       }
     } catch (error) {
       console.error('Error discovering MCP tools:', error);
+      throw error;
+    }
+  };
+
+  // 从 iFlow 配置同步 MCP 服务器
+  const syncFromIFlow = async () => {
+    try {
+      const response = await authenticatedFetch('/api/iflow/sync-mcp-servers', {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`从 iFlow 同步了 ${data.servers_count} 个 MCP 服务器`);
+        await fetchMcpServers(); // 刷新列表
+        return { success: true, count: data.servers_count };
+      } else {
+        throw new Error(data.error || '同步失败');
+      }
+    } catch (error) {
+      console.error('Error syncing from iFlow:', error);
       throw error;
     }
   };
@@ -375,6 +436,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
       // Load MCP servers from API
       await fetchMcpServers();
+
+      // 同步 MCP 服务器配置到后端 global_config
+      await syncMcpServersToBackend();
 
       // Load Cursor MCP servers
       await fetchCursorMcpServers();
@@ -744,6 +808,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 Git
               </button>
               <button
+                onClick={() => setActiveTab('code-style')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'code-style'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Zap className="w-4 h-4 inline mr-2" />
+                Code Style
+              </button>
+              <button
                 onClick={() => setActiveTab('api')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'api'
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
@@ -986,6 +1060,190 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
 
             {/* Git Tab */}
             {activeTab === 'git' && <GitSettings />}
+
+            {/* Code Style Tab */}
+            {activeTab === 'code-style' && (
+              <div className="space-y-6 md:space-y-8">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">代码风格分析</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    AI 会学习你的编码风格，自动生成符合你习惯的代码
+                  </p>
+                </div>
+
+                {projects.length > 0 ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">选择项目</label>
+                      <select
+                        value={selectedProject?.path || ''}
+                        onChange={(e) => {
+                          const project = projects.find(p => p.path === e.target.value);
+                          setSelectedProject(project);
+                        }}
+                        className="w-full md:w-1/2 px-3 py-2 bg-background border border-border rounded-md text-sm"
+                      >
+                        <option value="">选择一个项目...</option>
+                        {projects.map(project => (
+                          <option key={project.name} value={project.path}>
+                            {project.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedProject && (
+                      <div className="space-y-4">
+                        <Button
+                          onClick={async () => {
+                            setAnalyzingStyle(true);
+                            try {
+                              const response = await authenticatedFetch('/api/code-style-analyze', {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  projectPath: selectedProject.path
+                                })
+                              });
+
+                              if (response.ok) {
+                                const data = await response.json();
+                                setCodeStyleProfile(data);
+                              }
+                            } catch (err) {
+                              console.error('代码风格分析失败:', err);
+                            } finally {
+                              setAnalyzingStyle(false);
+                            }
+                          }}
+                          disabled={analyzingStyle}
+                          className="w-full md:w-auto"
+                        >
+                          {analyzingStyle ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              分析中...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4 mr-2" />
+                              分析代码风格
+                            </>
+                          )}
+                        </Button>
+
+                        {codeStyleProfile && (
+                          <div className="mt-6 space-y-4">
+                            <div className="p-4 bg-muted/50 rounded-lg">
+                              <h4 className="font-medium mb-3">风格摘要</h4>
+                              <pre className="text-sm whitespace-pre-wrap font-mono">
+                                {codeStyleProfile.summary}
+                              </pre>
+                            </div>
+
+                            {codeStyleProfile.styleProfile?.typescript && (
+                              <div className="p-4 bg-muted/50 rounded-lg">
+                                <h4 className="font-medium mb-3">TypeScript 风格</h4>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">Interface vs Type</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.typescript.interface_vs_type.interface} / {codeStyleProfile.styleProfile.typescript.interface_vs_type.type}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">引号风格</div>
+                                    <div className="font-mono">
+                                      单引号: {codeStyleProfile.styleProfile.typescript.quote_style.single} | 双引号: {codeStyleProfile.styleProfile.typescript.quote_style.double}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">Const vs Let</div>
+                                    <div className="font-mono">
+                                      const: {codeStyleProfile.styleProfile.typescript.const_vs_let.const} | let: {codeStyleProfile.styleProfile.typescript.const_vs_let.let}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">箭头函数</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.typescript.arrow_functions}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {codeStyleProfile.styleProfile?.python && (
+                              <div className="p-4 bg-muted/50 rounded-lg">
+                                <h4 className="font-medium mb-3">Python 风格</h4>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">类型提示</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.python.type_hints}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">F-strings</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.python.f_strings}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">列表推导式</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.python.list_comprehensions}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {codeStyleProfile.styleProfile?.general && (
+                              <div className="p-4 bg-muted/50 rounded-lg">
+                                <h4 className="font-medium mb-3">通用风格</h4>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">缩进</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.general.indentation}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">平均行长度</div>
+                                    <div className="font-mono">
+                                      {codeStyleProfile.styleProfile.general.line_length.avg} 字符
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">注释比例</div>
+                                    <div className="font-mono">
+                                      {(codeStyleProfile.styleProfile.general.comment_ratio * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-1">空行比例</div>
+                                    <div className="font-mono">
+                                      {(codeStyleProfile.styleProfile.general.blank_lines_ratio * 100).toFixed(1)}%
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>没有可用的项目</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Tools Tab */}
             {activeTab === 'tools' && (
@@ -1278,7 +1536,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         </p>
                       </div>
 
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center gap-2">
                         <Button
                           onClick={() => openMcpForm()}
                           className="bg-purple-600 hover:bg-purple-700 text-white"
@@ -1286,6 +1544,21 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         >
                           <Plus className="w-4 h-4 mr-2" />
                           Add MCP Server
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const result = await syncFromIFlow();
+                              alert(`成功从 iFlow 同步了 ${result.count} 个 MCP 服务器`);
+                            } catch (error) {
+                              alert(`同步失败: ${error.message}`);
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Server className="w-4 h-4 mr-2" />
+                          Sync from iFlow
                         </Button>
                       </div>
 

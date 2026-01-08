@@ -23,6 +23,13 @@ export default defineConfig(({ command, mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: false
+        },
+        // Proxy WebSocket for shell
+        '/shell': {
+          target: 'http://localhost:8000',
+          ws: true,
+          changeOrigin: true,
+          rewrite: (path) => path
         }
       }
     },
@@ -33,7 +40,7 @@ export default defineConfig(({ command, mode }) => {
         output: {
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-ui': ['lucide-react', 'framer-motion', 'clsx', 'tailwind-merge']
+            'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge']
           }
         }
       }
