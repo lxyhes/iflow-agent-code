@@ -40,6 +40,7 @@ from backend.core.report_generator import ReportGenerator, get_report_generator
 from backend.core.dependency_analyzer import DependencyAnalyzer, get_dependency_analyzer
 from backend.core.auto_fixer import AutoFixer, get_auto_fixer
 from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_dependency_analyzer as get_code_dependency_analyzer
+from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -380,9 +381,10 @@ async def get_projects():
     return safe_projects
 
 @app.get("/stream")
-async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, project: str = None, persona: str = "partner", auth_method_id: str = None, auth_method_info: str = None):
+async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, project: str = None, model: str = None, persona: str = "partner", auth_method_id: str = None, auth_method_info: str = None):
     logger.info(f"=== /stream request ===")
     logger.info(f"  message: {message[:100]}...")
+    logger.info(f"  model: {model}")
     logger.info(f"  persona: {persona}")
     logger.info(f"  auth_method_id: {auth_method_id}")
 
@@ -398,10 +400,13 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse auth_method_info: {auth_method_info}")
 
+    # Use provided model or fallback to global config
+    target_model = model or global_config.get("model")
+
     agent = get_agent(
         target_cwd,
         global_config["mode"],
-        global_config.get("model"),
+        target_model,
         global_config.get("mcp_servers"),
         persona=persona,
         auth_method_id=auth_method_id,
@@ -413,34 +418,42 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
         full_reply = ""
         try:
             async for msg in agent.chat_stream(message):
-                msg_type = msg.get("type", "text")
-                logger.debug(f">>> Stream msg: type={msg_type}, keys={list(msg.keys())}")
-                
-                if msg_type == "text":
-                    content = msg.get("content", "")
+                # 检查 msg 是字符串还是字典
+                if isinstance(msg, str):
+                    # 如果是字符串，直接作为内容返回
+                    content = msg
                     full_reply += content
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                else:
+                    # 如果是字典，按照原来的逻辑处理
+                    msg_type = msg.get("type", "text")
+                    logger.debug(f">>> Stream msg: type={msg_type}, keys={list(msg.keys())}")
                     
-                elif msg_type == "tool_start":
-                    # 工具开始执行
-                    event_data = {'type': 'tool_start', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'label': msg.get('label', ''), 'agent_info': msg.get('agent_info')}
-                    logger.info(f">>> TOOL_START: {event_data}")
-                    yield f"data: {json.dumps(event_data)}\n\n"
-                    
-                elif msg_type == "tool_end":
-                    # 工具执行完成
-                    event_data = {'type': 'tool_end', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'status': msg.get('status', 'success'), 'agent_info': msg.get('agent_info')}
-                    logger.info(f">>> TOOL_END: {event_data}")
-                    yield f"data: {json.dumps(event_data)}\n\n"
-                    
-                elif msg_type == "plan":
-                    # 任务计划
-                    event_data = {'type': 'plan', 'entries': msg.get('entries', [])}
-                    logger.info(f">>> PLAN: {event_data}")
-                    yield f"data: {json.dumps(event_data)}\n\n"
-                    
-                elif msg_type == "done":
-                    break
+                    if msg_type == "text":
+                        content = msg.get("content", "")
+                        full_reply += content
+                        yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                        
+                    elif msg_type == "tool_start":
+                        # 工具开始执行
+                        event_data = {'type': 'tool_start', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'label': msg.get('label', ''), 'agent_info': msg.get('agent_info')}
+                        logger.info(f">>> TOOL_START: {event_data}")
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                        
+                    elif msg_type == "tool_end":
+                        # 工具执行完成
+                        event_data = {'type': 'tool_end', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'status': msg.get('status', 'success'), 'agent_info': msg.get('agent_info')}
+                        logger.info(f">>> TOOL_END: {event_data}")
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                        
+                    elif msg_type == "plan":
+                        # 任务计划
+                        event_data = {'type': 'plan', 'entries': msg.get('entries', [])}
+                        logger.info(f">>> PLAN: {event_data}")
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                        
+                    elif msg_type == "done":
+                        break
                     
             logger.info(f"Stream completed, reply length: {len(full_reply)}")
         except Exception as e:
@@ -1125,6 +1138,123 @@ async def analyze_code_style(request: Request):
         )
 
 
+@app.post("/api/prompt-optimize")
+async def optimize_prompt(request: Request):
+    """根据项目特征智能优化用户输入的消息（使用大模型）"""
+    try:
+        data = await request.json()
+        project_path = data.get('projectPath', '')
+        user_input = data.get('userInput', '')
+        base_persona = data.get('persona', 'partner')
+
+        if not project_path:
+            return JSONResponse(
+                content={"error": "项目路径不能为空"},
+                status_code=400
+            )
+
+        if not user_input:
+            return JSONResponse(
+                content={"error": "用户输入不能为空"},
+                status_code=400
+            )
+
+        logger.info(f"开始智能优化消息: project={project_path}, persona={base_persona}, input={user_input[:100]}...")
+
+        # 获取提示词优化器
+        optimizer = get_prompt_optimizer(project_path)
+
+        # 先分析项目（这会扫描项目代码）
+        analysis = optimizer.analyze_project()
+
+        # 分析用户意图
+        intent = optimizer.analyze_user_intent(user_input)
+
+        # 查找相关代码
+        relevant_code = optimizer.find_relevant_code(user_input, intent)
+
+        # 构建项目上下文
+        project_context = optimizer._build_project_context()
+        style_guide = optimizer._build_style_guide()
+
+        # 构建优化提示词
+        optimization_prompt = f"""你是一个专业的提示词优化专家。请根据以下信息，优化用户的输入消息，使其更具体、更符合项目的实际情况。
+
+## 项目信息
+{project_context}
+
+## 代码风格指南
+{style_guide}
+
+## 用户意图
+- 意图类型: {intent.get('type', 'unknown')}
+- 关键词: {', '.join(intent.get('keywords', []))}
+- 实体: {', '.join(intent.get('entities', []))}
+
+## 相关代码
+"""
+        if relevant_code:
+            for code in relevant_code:
+                if code['type'] == 'function':
+                    optimization_prompt += f"- 函数: {code['name']} (在 {code['file']})"
+                else:
+                    optimization_prompt += f"- 类: {code['name']} (在 {code['file']})"
+        else:
+            optimization_prompt += "- 无相关代码"
+
+        optimization_prompt += f"""
+
+## 用户原始输入
+{user_input}
+
+## 任务
+请优化用户的输入消息，使其：
+1. 包含项目背景信息
+2. 引用相关的代码（如果有）
+3. 明确代码风格要求
+4. 根据意图类型添加具体要求
+5. 让 AI 能够更好地理解项目上下文并提供准确的解决方案
+
+请直接输出优化后的消息，不要包含任何解释或额外文字。"""
+
+        logger.info("调用大模型优化消息...")
+
+        # 创建 iFlow 客户端
+        from backend.core.iflow_client import create_iflow_client
+        iflow_client = create_iflow_client(
+            cwd=project_path,
+            mode=global_config.get("mode", "yolo"),
+            model=global_config.get("model", "GLM-4.7")
+        )
+
+        # 调用大模型
+        optimized_message = ""
+        async for chunk in iflow_client.chat_stream(optimization_prompt):
+            optimized_message += chunk
+
+        optimized_message = optimized_message.strip()
+
+        logger.info(f"大模型优化完成，消息长度: {len(optimized_message)}")
+
+        return {
+            "success": True,
+            "analysis": analysis,
+            "intent": intent,
+            "relevantCode": relevant_code,
+            "originalInput": user_input,
+            "optimizedMessage": optimized_message,
+            "projectContext": project_context,
+            "codeStyleGuide": style_guide
+        }
+
+    except Exception as e:
+        logger.exception(f"智能消息优化失败: {e}")
+        return JSONResponse(
+            content={"error": f"智能消息优化失败: {str(e)}"},
+            status_code=500
+        )
+
+
 @app.post("/api/generate-report")
 async def generate_report(req: dict):
     """生成工作报告"""
@@ -1493,4 +1623,4 @@ if __name__ == "__main__":
     import uvicorn
     if platform.system() == 'Windows':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

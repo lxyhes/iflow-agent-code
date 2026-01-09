@@ -63,6 +63,11 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
       method: 'DELETE',
     }),
+  updateSessionSummary: (projectName, sessionId, summary) =>
+    authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ summary }),
+    }),
   deleteProject: (projectName) =>
     authenticatedFetch(`/api/projects/${projectName}`, {
       method: 'DELETE',

@@ -459,6 +459,27 @@ function AppContent() {
       const response = await api.projects();
       const freshProjects = await response.json();
 
+      // Fetch Cursor sessions for each project to keep views consistent
+      for (let project of freshProjects) {
+        try {
+          const url = `/api/cursor/sessions?projectPath=${encodeURIComponent(project.fullPath || project.path)}`;
+          const cursorResponse = await authenticatedFetch(url);
+          if (cursorResponse.ok) {
+            const cursorData = await cursorResponse.json();
+            if (cursorData.success && cursorData.sessions) {
+              project.cursorSessions = cursorData.sessions;
+            } else {
+              project.cursorSessions = [];
+            }
+          } else {
+            project.cursorSessions = [];
+          }
+        } catch (error) {
+          console.error(`Error fetching Cursor sessions for project ${project.name}:`, error);
+          project.cursorSessions = [];
+        }
+      }
+
       // Optimize to preserve object references and minimize re-renders
       setProjects(prevProjects => {
         // Check if projects data has actually changed
@@ -471,7 +492,8 @@ function AppContent() {
             newProject.displayName !== prevProject.displayName ||
             newProject.fullPath !== prevProject.fullPath ||
             JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
-            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
+            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions) ||
+            JSON.stringify(newProject.cursorSessions) !== JSON.stringify(prevProject.cursorSessions)
           );
         }) || freshProjects.length !== prevProjects.length;
 

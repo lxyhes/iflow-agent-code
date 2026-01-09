@@ -132,10 +132,30 @@ function Sidebar({
     return () => clearInterval(timer);
   }, []);
 
-  // Clear additional sessions when projects list changes (e.g., after refresh)
+  // Clear additional sessions when projects list truly changes (e.g., after refresh)
+  // Use a deep comparison to avoid clearing on every re-render
   useEffect(() => {
-    setAdditionalSessions({});
-    setInitialSessionsLoaded(new Set());
+    // Only clear if the project names have changed (not just session updates)
+    const prevProjectNames = new Set(prevProjectsRef.current.map(p => p.name));
+    const currentProjectNames = new Set(projects.map(p => p.name));
+
+    const projectNamesChanged = 
+      prevProjectNames.size !== currentProjectNames.size ||
+      ![...prevProjectNames].every(name => currentProjectNames.has(name));
+
+    if (projectNamesChanged) {
+      console.log('[Sidebar] Project list changed, clearing additional sessions');
+      setAdditionalSessions({});
+      setInitialSessionsLoaded(new Set());
+    } else {
+      console.log('[Sidebar] Projects updated but names unchanged, preserving sessions');
+    }
+  }, [projects]);
+
+  // Keep track of previous projects for comparison
+  const prevProjectsRef = useRef([]);
+  useEffect(() => {
+    prevProjectsRef.current = projects;
   }, [projects]);
 
   // Auto-expand project folder when a session is selected
@@ -339,6 +359,38 @@ function Sidebar({
     } catch (error) {
       console.error('[Sidebar] Error deleting session:', error);
       alert('Error deleting session. Please try again.');
+    }
+  };
+
+  const updateSessionSummary = async (projectName, sessionId, summary) => {
+    if (!summary || !summary.trim()) {
+      alert('Please enter a valid session name');
+      return;
+    }
+
+    try {
+      console.log('[Sidebar] Updating session summary:', { projectName, sessionId, summary });
+      const response = await api.updateSessionSummary(projectName, sessionId, summary.trim());
+      console.log('[Sidebar] Update response:', { ok: response.ok, status: response.status });
+
+      if (response.ok) {
+        console.log('[Sidebar] Session summary updated successfully');
+        // Trigger a refresh to show the updated summary
+        if (onRefresh) {
+          await onRefresh();
+        } else if (window.refreshProjects) {
+          await window.refreshProjects();
+        }
+        setEditingSession(null);
+        setEditingSessionName('');
+      } else {
+        const errorText = await response.text();
+        console.error('[Sidebar] Failed to update session summary:', { status: response.status, error: errorText });
+        alert('Failed to update session name. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Sidebar] Error updating session summary:', error);
+      alert('Error updating session name. Please try again.');
     }
   };
 

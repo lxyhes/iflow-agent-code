@@ -94,6 +94,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     error: null
   });
 
+  // Prompt Optimizer states
+  const [promptOptimizerProject, setPromptOptimizerProject] = useState('');
+  const [promptOptimizerPersona, setPromptOptimizerPersona] = useState('partner');
+  const [promptOptimizerResult, setPromptOptimizerResult] = useState(null);
+  const [promptOptimizerLoading, setPromptOptimizerLoading] = useState(false);
+  const [promptOptimizerError, setPromptOptimizerError] = useState(null);
+
   // Common tool patterns for Claude
   const commonTools = [
     'Bash(git log:*)',
@@ -597,6 +604,51 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     setDisallowedTools(disallowedTools.filter(t => t !== tool));
   };
 
+  // Prompt Optimizer functions
+  const handleOptimizePrompt = async () => {
+    if (!promptOptimizerProject) {
+      setPromptOptimizerError('请选择一个项目');
+      return;
+    }
+
+    setPromptOptimizerLoading(true);
+    setPromptOptimizerError(null);
+    setPromptOptimizerResult(null);
+
+    try {
+      const response = await authenticatedFetch('/api/prompt-optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectPath: promptOptimizerProject,
+          persona: promptOptimizerPersona,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '优化失败');
+      }
+
+      const data = await response.json();
+      setPromptOptimizerResult(data);
+    } catch (error) {
+      console.error('提示词优化失败:', error);
+      setPromptOptimizerError(error.message);
+    } finally {
+      setPromptOptimizerLoading(false);
+    }
+  };
+
+  const copyOptimizedPrompt = () => {
+    if (promptOptimizerResult?.optimizedPrompt?.optimized_prompt) {
+      navigator.clipboard.writeText(promptOptimizerResult.optimizedPrompt.optimized_prompt);
+      alert('提示词已复制到剪贴板');
+    }
+  };
+
   // MCP form handling functions
   const resetMcpForm = () => {
     setMcpFormData({
@@ -835,6 +887,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   }`}
               >
                 Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('prompt-optimizer')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'prompt-optimizer'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Edit3 className="w-4 h-4 inline mr-2" />
+                Prompt Optimizer
               </button>
             </div>
           </div>
@@ -2345,6 +2407,204 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {activeTab === 'tasks' && (
               <div className="space-y-6 md:space-y-8">
                 <TasksSettings />
+              </div>
+            )}
+
+            {/* Prompt Optimizer Tab */}
+            {activeTab === 'prompt-optimizer' && (
+              <div className="space-y-6 md:space-y-8">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">提示词优化器</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    根据项目特征自动生成优化的系统提示词，让 AI 更好地理解你的项目
+                  </p>
+                </div>
+
+                {/* 项目选择 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">选择项目</label>
+                  <select
+                    value={promptOptimizerProject}
+                    onChange={(e) => setPromptOptimizerProject(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                  >
+                    <option value="">请选择项目</option>
+                    {projects.map((project) => (
+                      <option key={project.name} value={project.fullPath}>
+                        {project.displayName || project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 人格选择 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">AI 人格</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPromptOptimizerPersona('senior')}
+                      className={`p-4 border rounded-lg text-left transition-colors ${
+                        promptOptimizerPersona === 'senior'
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="font-medium mb-1">🧠 严师模式</div>
+                      <div className="text-xs text-muted-foreground">
+                        严格审查代码质量，强调最佳实践
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromptOptimizerPersona('hacker')}
+                      className={`p-4 border rounded-lg text-left transition-colors ${
+                        promptOptimizerPersona === 'hacker'
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="font-medium mb-1">⚡ 黑客模式</div>
+                      <div className="text-xs text-muted-foreground">
+                        优先快速实现功能，减少样板代码
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromptOptimizerPersona('partner')}
+                      className={`p-4 border rounded-lg text-left transition-colors ${
+                        promptOptimizerPersona === 'partner'
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="font-medium mb-1">💗 共情模式</div>
+                      <div className="text-xs text-muted-foreground">
+                        温柔鼓励，提供情绪支持
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 优化按钮 */}
+                <Button
+                  onClick={handleOptimizePrompt}
+                  disabled={promptOptimizerLoading || !promptOptimizerProject}
+                  className="w-full sm:w-auto"
+                >
+                  {promptOptimizerLoading ? (
+                    <>
+                      <div className="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+                      分析中...
+                    </>
+                  ) : (
+                    <>
+                      <Edit3 className="w-4 h-4 mr-2" />
+                      生成优化提示词
+                    </>
+                  )}
+                </Button>
+
+                {/* 错误提示 */}
+                {promptOptimizerError && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <div className="text-sm text-red-800 dark:text-red-200">
+                      {promptOptimizerError}
+                    </div>
+                  </div>
+                )}
+
+                {/* 优化结果 */}
+                {promptOptimizerResult && (
+                  <div className="space-y-4">
+                    {/* 项目分析结果 */}
+                    <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <h4 className="font-medium mb-3">项目分析结果</h4>
+
+                      {/* 技术栈 */}
+                      {promptOptimizerResult.analysis?.tech_stack?.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-sm font-medium mb-2">技术栈</div>
+                          <div className="flex flex-wrap gap-2">
+                            {promptOptimizerResult.analysis.tech_stack.map((tech, index) => (
+                              <Badge key={index} variant="secondary">
+                                {tech}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 架构模式 */}
+                      {promptOptimizerResult.analysis?.architecture_patterns?.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-sm font-medium mb-2">架构模式</div>
+                          <div className="flex flex-wrap gap-2">
+                            {promptOptimizerResult.analysis.architecture_patterns.map((pattern, index) => (
+                              <Badge key={index} variant="outline">
+                                {pattern}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 代码风格 */}
+                      {promptOptimizerResult.analysis?.code_style && (
+                        <div>
+                          <div className="text-sm font-medium mb-2">代码风格</div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {promptOptimizerResult.analysis.code_style.languages?.length > 0 && (
+                              <div>主要语言: {promptOptimizerResult.analysis.code_style.languages.join(', ')}</div>
+                            )}
+                            {promptOptimizerResult.analysis.code_style.general?.indentation !== 'unknown' && (
+                              <div>缩进: {promptOptimizerResult.analysis.code_style.general.indentation}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 优化的提示词 */}
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium">优化的系统提示词</h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={copyOptimizedPrompt}
+                          className="text-blue-600 dark:text-blue-400"
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          复制
+                        </Button>
+                      </div>
+                      <pre className="text-sm whitespace-pre-wrap overflow-x-auto bg-white dark:bg-gray-900 p-4 rounded border border-gray-200 dark:border-gray-700">
+                        {promptOptimizerResult.optimizedPrompt?.optimized_prompt || '暂无提示词'}
+                      </pre>
+                    </div>
+
+                    {/* 项目上下文 */}
+                    {promptOptimizerResult.optimizedPrompt?.project_context && (
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                        <h4 className="font-medium mb-3">项目上下文</h4>
+                        <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
+                          {promptOptimizerResult.optimizedPrompt.project_context}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* 代码风格指南 */}
+                    {promptOptimizerResult.optimizedPrompt?.style_guide && (
+                      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                        <h4 className="font-medium mb-3">代码风格指南</h4>
+                        <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
+                          {promptOptimizerResult.optimizedPrompt.style_guide}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

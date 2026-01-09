@@ -7,7 +7,8 @@ class Agent:
         self.name = name
         self.persona = persona
         self.system_prompt = system_prompt
-        self.client = create_iflow_client(cwd=cwd, mode=mode, model=model, mcp_servers=mcp_servers, system_prompt=system_prompt, auth_method_id=auth_method_id, auth_method_info=auth_method_info)
+        # 只传递 create_iflow_client 支持的参数
+        self.client = create_iflow_client(cwd=cwd, mode=mode, model=model, mcp_servers=mcp_servers)
 
     async def chat(self, user_input: str) -> str:
         full_response = ""

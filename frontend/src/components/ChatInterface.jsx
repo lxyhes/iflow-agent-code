@@ -365,6 +365,79 @@ const markdownComponents = {
   )
 };
 
+// Modern Thinking/Reasoning Component
+const ThinkingBlock = ({ content, isStreaming, isFinished }) => {
+  // Auto-expand if streaming reasoning, collapse when finished
+  const [isOpen, setIsOpen] = useState(isStreaming && !isFinished);
+  const [showContent, setShowContent] = useState(false);
+
+  // Smooth animation for content rendering
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => setShowContent(true), 50);
+      return () => clearTimeout(timer);
+    } else {
+      setShowContent(false);
+    }
+  }, [isOpen]);
+
+  // Effect to auto-close when thinking is done (optional, can stay open if preferred)
+  // Currently set to auto-close 1s after thinking finishes to show user the final result clearly
+  useEffect(() => {
+    if (isFinished && isOpen) {
+      const timer = setTimeout(() => setIsOpen(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isFinished]);
+
+  return (
+    <div className="my-3 rounded-xl border border-gray-200/60 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/30 overflow-hidden transition-all duration-300 ease-in-out hover:border-gray-300 dark:hover:border-gray-600">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-2.5 cursor-pointer group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className={`p-1 rounded-md ${isStreaming && !isFinished ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+            <svg 
+              className={`w-3.5 h-3.5 ${isStreaming && !isFinished ? 'animate-pulse' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+          </div>
+          <span className={`text-xs font-medium ${isStreaming && !isFinished ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+            {isStreaming && !isFinished ? '深度思考中...' : '思考过程'}
+          </span>
+        </div>
+        <div className={`transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+          <svg className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+      
+      <div 
+        className={`transition-all duration-300 ease-in-out ${
+          isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+        } overflow-y-auto scrollbar-thin`}
+      >
+        <div className="px-4 pb-4 pt-1">
+          <div className="relative pl-3 border-l-2 border-gray-200 dark:border-gray-700">
+            <div className={`text-xs font-mono leading-relaxed text-gray-600 dark:text-gray-400 whitespace-pre-wrap transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
+              {content}
+              {isStreaming && !isFinished && (
+                <span className="inline-block w-1.5 h-3 ml-1 bg-blue-500 animate-pulse align-middle rounded-full"></span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
@@ -410,67 +483,86 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
-        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[75%] md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
-            <div className="text-sm whitespace-pre-wrap break-words">
-              {message.content}
-            </div>
-            {message.images && message.images.length > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {message.images.map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img.data}
-                    alt={img.name}
-                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => window.open(img.data, '_blank')}
-                  />
-                ))}
+        <div className="flex w-full justify-end gap-3 pl-12 pr-4 mb-6 group">
+          <div className="flex flex-col items-end flex-1 min-w-0">
+            {!isGrouped && (
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="text-sm font-bold text-gray-700 dark:text-gray-200">You</span>
               </div>
             )}
-            <div className="text-xs text-blue-100 mt-1 text-right">
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
-          </div>
-          {!isGrouped && (
-            <div className="hidden sm:flex w-8 h-8 bg-blue-600 rounded-full items-center justify-center text-white text-sm flex-shrink-0">
-              U
-            </div>
-          )}
-        </div>
-      ) : (
-        /* IFlow/Error/Tool messages on the left */
-        <div className="w-full">
-          {!isGrouped && (
-            <div className="flex items-center space-x-3 mb-2">
-              {message.type === 'error' ? (
-                <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
-                  !
-                </div>
-              ) : message.type === 'tool' ? (
-                <div className="w-8 h-8 bg-gray-600 dark:bg-gray-700 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
-                  🔧
-                </div>
-              ) : message.type === 'plan' ? (
-                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
-                  📋
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
-                  {(localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? (
-                    <CursorLogo className="w-full h-full" />
-                  ) : (
-                    <IFlowLogo className="w-full h-full" />
-                  )}
+            <div className="bg-blue-600 dark:bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4.5 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200">
+              <div className="text-[15px] whitespace-pre-wrap break-words leading-relaxed font-normal">
+                {message.content}
+              </div>
+              {message.images && message.images.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {message.images.map((img, idx) => (
+                    <img
+                      key={idx}
+                      src={img.data}
+                      alt={img.name}
+                      className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity border border-white/10"
+                      onClick={() => window.open(img.data, '_blank')}
+                    />
+                  ))}
                 </div>
               )}
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool' : message.type === 'plan' ? 'Plan' : ((localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? 'Cursor' : 'IFlow')}
-              </div>
             </div>
-          )}
+          </div>
+          
+          {/* User Avatar - Fixed on the right */}
+          <div className="flex-shrink-0 mt-0.5">
+            {!isGrouped ? (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm ring-1 ring-blue-400/30">
+                U
+              </div>
+            ) : (
+              <div className="w-8" /> /* Spacer for grouped messages */
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Assistant/System messages - 2 Column Layout */
+        <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2">
+          {/* Left Column: Avatar */}
+          <div className="flex-shrink-0 flex flex-col items-center">
+            {!isGrouped && (
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shadow-sm ring-1 ring-inset ${
+                message.type === 'error' ? 'bg-red-50 text-red-600 ring-red-200 dark:bg-red-900/20 dark:text-red-400 dark:ring-red-800' :
+                message.type === 'tool' ? 'bg-gray-50 text-gray-600 ring-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700' :
+                message.type === 'plan' ? 'bg-purple-50 text-purple-600 ring-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:ring-purple-800' :
+                'bg-white text-gray-600 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700'
+              }`}>
+                {message.type === 'error' ? (
+                  <span className="font-bold">!</span>
+                ) : message.type === 'tool' ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                ) : message.type === 'plan' ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                ) : (
+                  (localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? <CursorLogo className="w-5 h-5" /> : <IFlowLogo className="w-5 h-5" />
+                )}
+              </div>
+            )}
+          </div>
 
-          <div className="w-full">
+          {/* Right Column: Content */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+            {!isGrouped && (
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool Usage' : message.type === 'plan' ? 'Plan' : ((localStorage.getItem('selected-provider') || 'iflow') === 'cursor' ? 'Cursor' : 'IFlow')}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            )}
+            
+            <div className="text-[15px] leading-7 text-gray-800 dark:text-gray-200 font-normal">
 
             {/* 新的工具卡片渲染 - 基于 toolType */}
             {message.isToolUse && message.toolType ? (
@@ -1658,19 +1750,14 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 )}
               </div>
             ) : (
-              <div className="text-sm text-gray-700 dark:text-gray-300">
+              <div className="text-gray-700 dark:text-gray-300">
                 {/* Thinking accordion for reasoning */}
-                {showThinking && message.reasoning && (
-                  <details className="mb-3">
-                    <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">
-                      💭 Thinking...
-                    </summary>
-                    <div className="mt-2 pl-4 border-l-2 border-gray-300 dark:border-gray-600 italic text-gray-600 dark:text-gray-400 text-sm">
-                      <div className="whitespace-pre-wrap">
-                        {message.reasoning}
-                      </div>
-                    </div>
-                  </details>
+                {message.reasoning && (
+                  <ThinkingBlock 
+                    content={message.reasoning} 
+                    isStreaming={message.isStreaming && !message.content}
+                    isFinished={!message.isStreaming}
+                  />
                 )}
 
                 {(() => {
@@ -1720,11 +1807,12 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             )}
 
-            <div className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100' : ''}`}>
-              {new Date(message.timestamp).toLocaleTimeString()}
+            <div className={`text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'hidden'}`}>
+              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
         </div>
+      </div>
       )}
     </div>
   );
@@ -1868,6 +1956,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const streamBufferRef = useRef('');
   const streamTimerRef = useRef(null);
   const commandQueryTimerRef = useRef(null);
+  const abortControllerRef = useRef(null); // Ref to hold the current request's AbortController
   const [debouncedInput, setDebouncedInput] = useState('');
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
@@ -1883,6 +1972,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [filteredCommands, setFilteredCommands] = useState([]);
   const [showAutoFixPanel, setShowAutoFixPanel] = useState(false);
   const [showContextVisualizer, setShowContextVisualizer] = useState(false);
+  const [showPromptOptimizer, setShowPromptOptimizer] = useState(false);
+  const [promptOptimizerResult, setPromptOptimizerResult] = useState(null);
+  const [promptOptimizerLoading, setPromptOptimizerLoading] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -1905,6 +1997,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return localStorage.getItem('iflow-model') || 'GLM-4.7';
   });
 
+  // Listen for model changes from the selector
+  useEffect(() => {
+    const handleModelChange = (e) => {
+      if (e.detail && e.detail.model) {
+        setIflowModel(e.detail.model);
+      }
+    };
+
+    window.addEventListener('iflow-model-changed', handleModelChange);
+    return () => window.removeEventListener('iflow-model-changed', handleModelChange);
+  }, []);
+
   // Current agent info for typing indicator
   const currentAgentInfo = useMemo(() => {
     if (provider === 'cursor') {
@@ -1924,6 +2028,38 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
   }, [selectedSession?.id]);
+
+  const handleAbortSession = useCallback(() => {
+    if (currentSessionId && canAbortSession) {
+      sendMessage({
+        type: 'abort-session',
+        sessionId: currentSessionId,
+        provider: provider
+      });
+    }
+  }, [currentSessionId, canAbortSession, sendMessage, provider]);
+
+  // Handle global ESC key to abort generation
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'Escape' && isLoading) {
+        e.preventDefault();
+        console.log('ESC pressed, aborting session...');
+
+        // 1. Abort local fetch
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+
+        // 2. Notify backend to kill process
+        handleAbortSession();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isLoading, handleAbortSession]);
 
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
@@ -4157,10 +4293,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const sessionId = selectedSession?.id || `session-${Date.now()}`;
       const projectName = selectedProject?.name || 'default';
 
-      // Use relative path - Vite proxy handles the rest
-      const streamUrl = `/stream?message=${encodeURIComponent(input)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}&persona=${encodeURIComponent(aiPersona || 'partner')}`;
+      // Determine model based on provider
+      // Always read from localStorage to get the latest selection
+      const currentCursorModel = localStorage.getItem('cursor-model') || 'gpt-5';
+      const currentIFlowModel = localStorage.getItem('iflow-model') || 'GLM-4.7';
+      const targetModel = provider === 'cursor' ? currentCursorModel : currentIFlowModel;
 
-      const response = await fetch(streamUrl);
+      // Use relative path - Vite proxy handles the rest
+      const streamUrl = `/stream?message=${encodeURIComponent(input)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}&persona=${encodeURIComponent(aiPersona || 'partner')}&model=${encodeURIComponent(targetModel)}`;
+
+      // Create new AbortController
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      const response = await fetch(streamUrl, {
+        signal: abortController.signal
+      });
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let partialData = '';
@@ -4261,15 +4412,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     } catch (e) {
-      console.error("Agent Error:", e);
-      setChatMessages(prev => [...prev, { type: 'error', content: "Failed to connect to Agent: " + e.toString(), timestamp: new Date() }]);
+      if (e.name === 'AbortError') {
+        console.log('Stream request aborted by user');
+        setChatMessages(prev => [...prev, { type: 'assistant', content: '\n\n*(已停止生成)*', timestamp: new Date() }]);
+      } else {
+        console.error("Agent Error:", e);
+        setChatMessages(prev => [...prev, { type: 'error', content: "Failed to connect to Agent: " + e.toString(), timestamp: new Date() }]);
+      }
     } finally {
       setIsLoading(false);
       setCanAbortSession(false);
+      abortControllerRef.current = null;
       if (onSessionInactive) onSessionInactive(currentSessionId);
     }
 
-    /* ORIGINAL LOGIC DISABLED
+    /*
     // Send command based on provider
     if (provider === 'cursor') {
       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)
@@ -4590,16 +4747,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setCanAbortSession(false);
   };
 
-  const handleAbortSession = () => {
-    if (currentSessionId && canAbortSession) {
-      sendMessage({
-        type: 'abort-session',
-        sessionId: currentSessionId,
-        provider: provider
-      });
-    }
-  };
-
   const handleModeSwitch = () => {
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
@@ -4630,6 +4777,72 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     console.log('Applying fix:', fixPlan);
     // 这里可以执行修复命令或让 AI 应用修复
     setErrorDetected(null);
+  };
+
+  const handleOptimizePrompt = async () => {
+    if (!selectedProject?.path) {
+      alert('请先选择一个项目');
+      return;
+    }
+
+    if (!input.trim()) {
+      alert('请先在输入框中输入内容');
+      return;
+    }
+
+    setShowPromptOptimizer(true);
+    setPromptOptimizerLoading(true);
+    setPromptOptimizerResult(null);
+
+    try {
+      const response = await authenticatedFetch('/api/prompt-optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectPath: selectedProject.path,
+          userInput: input,
+          persona: 'partner', // 默认使用共情模式
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '优化失败');
+      }
+
+      const data = await response.json();
+      setPromptOptimizerResult(data);
+    } catch (error) {
+      console.error('消息优化失败:', error);
+      alert('消息优化失败: ' + error.message);
+    } finally {
+      setPromptOptimizerLoading(false);
+    }
+  };
+
+  const copyOptimizedPrompt = () => {
+    if (promptOptimizerResult?.optimizedMessage) {
+      navigator.clipboard.writeText(promptOptimizerResult.optimizedMessage);
+      alert('优化后的消息已复制到剪贴板');
+    }
+  };
+
+  const applyOptimizedPrompt = () => {
+    if (promptOptimizerResult?.optimizedMessage) {
+      const optimizedMessage = promptOptimizerResult.optimizedMessage;
+      // 将优化后的消息替换到输入框
+      setInput(optimizedMessage);
+      setShowPromptOptimizer(false);
+      // 聚焦到输入框
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        // 调整输入框高度
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+      }
+    }
   };
 
   // Don't render if no project is selected
@@ -4684,27 +4897,41 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         ) : chatMessages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             {!selectedSession && !currentSessionId && (
-              <div className="text-center px-6 sm:px-4 py-8 max-w-lg">
-                <div className="mx-auto h-24 w-24 flex items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30 mb-6 shadow-xl shadow-blue-500/10">
-                  <IFlowLogo className="h-14 w-14 text-blue-600 dark:text-blue-400" />
+              <div className="text-center px-6 sm:px-4 py-8 max-w-2xl">
+                <div className="mx-auto h-24 w-24 flex items-center justify-center rounded-3xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 mb-8 shadow-xl shadow-blue-500/10 transform hover:scale-105 transition-transform duration-300">
+                  <IFlowLogo className="h-14 w-14 text-blue-600 dark:text-blue-400 drop-shadow-sm" />
                 </div>
-                <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-4">IFlow Agent</h2>
-                <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
-                  Your autonomous AI development partner. Ask anything about your code or start a new task.
+                <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 mb-6 tracking-tight">IFlow Agent</h2>
+                <p className="text-lg text-gray-600 dark:text-gray-400 mb-10 leading-relaxed font-light">
+                  Your autonomous AI development partner. <br />Ready to build something amazing?
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
-                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1">Code Review</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Analyze architecture and find bugs</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+                  <div className="p-5 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white/60 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 text-left transition-all duration-200 hover:shadow-lg hover:border-blue-200 dark:hover:border-blue-800/50 cursor-pointer group backdrop-blur-sm" onClick={() => setInput("Review code architecture")}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800/40 transition-colors">
+                        <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">Code Review</p>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-1">Analyze architecture and find potential bugs</p>
                   </div>
-                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
-                    <p className="text-sm font-bold text-green-600 dark:text-green-400">Auto Dev</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Implement features and fix issues</p>
+                  <div className="p-5 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white/60 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 text-left transition-all duration-200 hover:shadow-lg hover:border-green-200 dark:hover:border-green-800/50 cursor-pointer group backdrop-blur-sm" onClick={() => setInput("Implement a new feature")}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg group-hover:bg-green-200 dark:group-hover:bg-green-800/40 transition-colors">
+                        <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400">Auto Dev</p>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed pl-1">Implement features and fix issues automatically</p>
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-500 dark:text-gray-400 animate-pulse">
+                <p className="text-sm text-gray-500 dark:text-gray-400 animate-pulse font-medium">
                   Start typing below to begin...
                 </p>
               </div>
@@ -4732,7 +4959,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           <div className="flex-1 overflow-hidden relative">
             <Virtuoso
               ref={scrollContainerRef}
-              style={{ height: '100%', padding: '0 16px' }}
+              style={{ height: '100%', paddingLeft: '16px', paddingRight: '20px' }}
               scrollerRef={(ref) => {
                 if (ref) {
                   ref.style.overflowX = 'hidden';
@@ -5143,8 +5370,54 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
               frequentCommands={commandQuery ? [] : frequentCommands}
             />
 
-            <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
+            <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] border border-gray-100 dark:border-gray-700/50 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-blue-500/20 transition-all duration-300 overflow-hidden ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
               <input {...getInputProps()} />
+              <div className="absolute left-2 bottom-2 sm:bottom-3 flex items-center gap-0.5 sm:gap-1 z-10">
+                {/* Image upload button */}
+                <button
+                  type="button"
+                  onClick={open}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all hover:scale-110 active:scale-95 group"
+                  title="Attach images"
+                >
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </button>
+
+                {/* Auto Fix button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAutoFixPanel(true)}
+                  className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-xl transition-all hover:scale-110 active:scale-95 group"
+                  title="Auto Fix Errors"
+                >
+                  <Wrench className="w-5 h-5 text-gray-400 group-hover:text-purple-500 transition-colors" />
+                </button>
+
+                {/* Context Visualizer button */}
+                <button
+                  type="button"
+                  onClick={() => setShowContextVisualizer(true)}
+                  className="p-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-xl transition-all hover:scale-110 active:scale-95 group"
+                  title="Context Visualizer"
+                >
+                  <Network className="w-5 h-5 text-gray-400 group-hover:text-indigo-500 transition-colors" />
+                </button>
+
+                {/* Prompt Optimizer button */}
+                <button
+                  type="button"
+                  onClick={handleOptimizePrompt}
+                  className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-xl transition-all hover:scale-110 active:scale-95 group"
+                  title="优化提示词"
+                >
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </button>
+              </div>
+
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -5167,77 +5440,45 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                 }}
                 placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'IFlow'} anything...`}
                 disabled={isLoading}
-                className="chat-input-placeholder block w-full pl-36 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+                className="chat-input-placeholder block w-full pl-44 pr-16 sm:pr-20 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[60px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
                 style={{ height: '50px' }}
               />
-              {/* Image upload button */}
-              <button
-                type="button"
-                onClick={open}
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors hover-scale active-press"
-                title="Attach images"
-              >
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </button>
 
-              {/* Auto Fix button */}
-              <button
-                type="button"
-                onClick={() => setShowAutoFixPanel(true)}
-                className="absolute left-14 top-1/2 transform -translate-y-1/2 p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors hover-scale active-press"
-                title="Auto Fix Errors"
-              >
-                <Wrench className="w-5 h-5 text-purple-500" />
-              </button>
-
-              {/* Context Visualizer button */}
-              <button
-                type="button"
-                onClick={() => setShowContextVisualizer(true)}
-                className="absolute left-24 top-1/2 transform -translate-y-1/2 p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors hover-scale active-press"
-                title="Context Visualizer"
-              >
-                <Network className="w-5 h-5 text-blue-500" />
-              </button>
-
-              {/* Mic button - HIDDEN */}
-              <div className="absolute right-16 sm:right-16 top-1/2 transform -translate-y-1/2" style={{ display: 'none' }}>
-                <MicButton
-                  onTranscript={handleTranscript}
-                  className="w-10 h-10 sm:w-10 sm:h-10"
-                />
-              </div>
-
-              {/* Send button */}
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 hover-scale active-press"
-              >
-                <svg
-                  className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+              {/* Send button container */}
+              <div className="absolute right-2 bottom-2 sm:bottom-3 flex items-center gap-2">
+                {/* Mic button - HIDDEN */}
+                <div style={{ display: 'none' }}>
+                  <MicButton
+                    onTranscript={handleTranscript}
+                    className="w-10 h-10"
                   />
-                </svg>
-              </button>
+                </div>
+
+                {/* Send button */}
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }}
+                  className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 rounded-xl flex items-center justify-center transition-all duration-200 shadow-md shadow-blue-500/20 hover:shadow-blue-500/40 active:scale-95"
+                >
+                  <svg
+                    className="w-5 h-5 text-white transform rotate-90"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                    />
+                  </svg>
+                </button>
+              </div>
 
               {/* Hint text inside input box at bottom - Desktop only */}
               <div className={`absolute bottom-1 left-12 right-14 sm:right-40 text-xs text-gray-400 dark:text-gray-500 pointer-events-none hidden sm:block transition-opacity duration-200 ${input.trim() ? 'opacity-0' : 'opacity-100'
@@ -5273,6 +5514,130 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
             }
           }}
         />
+      )}
+
+      {/* Prompt Optimizer Modal */}
+      {showPromptOptimizer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                ⚡ 提示词优化器
+              </h2>
+              <button
+                onClick={() => setShowPromptOptimizer(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {promptOptimizerLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-400">正在分析项目并优化消息...</p>
+                </div>
+              ) : promptOptimizerResult ? (
+                <div className="space-y-4">
+                  {/* 项目分析结果 */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <h3 className="font-medium mb-3 text-gray-900 dark:text-gray-100">📊 项目分析结果</h3>
+
+                    {/* 技术栈 */}
+                    {promptOptimizerResult.analysis?.tech_stack?.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">技术栈</div>
+                        <div className="flex flex-wrap gap-2">
+                          {promptOptimizerResult.analysis.tech_stack.map((tech, index) => (
+                            <span key={index} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded text-xs">
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 架构模式 */}
+                    {promptOptimizerResult.analysis?.architecture_patterns?.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">架构模式</div>
+                        <div className="flex flex-wrap gap-2">
+                          {promptOptimizerResult.analysis.architecture_patterns.map((pattern, index) => (
+                            <span key={index} className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 rounded text-xs">
+                              {pattern}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 代码风格 */}
+                    {promptOptimizerResult.analysis?.code_style && (
+                      <div>
+                        <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">代码风格</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                          {promptOptimizerResult.analysis.code_style.languages?.length > 0 && (
+                            <div>主要语言: {promptOptimizerResult.analysis.code_style.languages.join(', ')}</div>
+                          )}
+                          {promptOptimizerResult.analysis.code_style.general?.indentation !== 'unknown' && (
+                            <div>缩进: {promptOptimizerResult.analysis.code_style.general.indentation}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 原始消息 */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">📝 原始消息</h3>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                      {promptOptimizerResult.originalInput}
+                    </p>
+                  </div>
+
+                  {/* 优化后的消息 */}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-gray-900 dark:text-gray-100">✨ 优化后的消息</h3>
+                      <button
+                        onClick={copyOptimizedPrompt}
+                        className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                      >
+                        📋 复制
+                      </button>
+                    </div>
+                    <pre className="text-sm whitespace-pre-wrap overflow-x-auto bg-white dark:bg-gray-900 p-4 rounded border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                      {promptOptimizerResult.optimizedMessage}
+                    </pre>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowPromptOptimizer(false)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                关闭
+              </button>
+              {promptOptimizerResult && (
+                <button
+                  onClick={applyOptimizedPrompt}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  ✨ 应用到输入框
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

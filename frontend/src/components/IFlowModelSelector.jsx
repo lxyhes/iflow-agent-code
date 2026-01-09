@@ -11,7 +11,9 @@ const models = [
 ];
 
 const IFlowModelSelector = () => {
-  const [currentModel, setCurrentModel] = useState('GLM-4.7');
+  const [currentModel, setCurrentModel] = useState(() => {
+    return localStorage.getItem('iflow-model') || 'GLM-4.7';
+  });
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -19,13 +21,19 @@ const IFlowModelSelector = () => {
     fetch('/api/config')
       .then(res => res.json())
       .then(data => {
-          if (data.model) setCurrentModel(data.model);
+          if (data.model) {
+            setCurrentModel(data.model);
+            localStorage.setItem('iflow-model', data.model);
+          }
       })
       .catch(console.error);
   }, []);
 
   const handleModelChange = (modelId) => {
     setCurrentModel(modelId);
+    localStorage.setItem('iflow-model', modelId);
+    // Dispatch custom event so ChatInterface can update immediately
+    window.dispatchEvent(new CustomEvent('iflow-model-changed', { detail: { model: modelId } }));
     setShowDropdown(false);
     
     // Notify backend to switch model

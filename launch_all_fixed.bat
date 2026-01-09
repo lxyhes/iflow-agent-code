@@ -20,6 +20,17 @@ if errorlevel 1 (
 )
 echo [OK] Python found
 
+:: Kill any existing backend process on port 8000
+echo.
+echo [INFO] Checking for existing backend process on port 8000...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000" ^| findstr "LISTENING"') do (
+    echo [INFO] Killing process %%a on port 8000...
+    taskkill /F /PID %%a >nul 2>&1
+)
+
+echo Waiting 2 seconds...
+ping 127.0.0.1 -n 3 >nul
+
 :: Start Backend
 echo.
 echo [1/2] Starting Backend (with hot reload)...
