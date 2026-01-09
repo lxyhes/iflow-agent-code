@@ -103,4 +103,56 @@ class ProjectManager:
                     messages.append(msg)
         return messages
 
+    def update_session_summary(self, project_name: str, session_id: str, summary: str):
+        """更新 session 的自定义名称/摘要"""
+        # 创建一个元数据文件来存储自定义 summary
+        session_dir = self._get_session_dir(project_name)
+        metadata_file = os.path.join(session_dir, f"{session_id}.meta.json")
+
+        metadata = {
+            "summary": summary,
+            "updated_at": time.time()
+        }
+
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+    def _get_session_metadata(self, project_name: str, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取 session 的元数据（如果有）"""
+        session_dir = self._get_session_dir(project_name)
+        metadata_file = os.path.join(session_dir, f"{session_id}.meta.json")
+
+        if not os.path.exists(metadata_file):
+            return None
+
+        try:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return None
+
+    def _list_sessions(self, project_name: str) -> List[Dict[str, Any]]:
+        session_dir = self._get_session_dir(project_name)
+        sessions = []
+        for f in os.listdir(session_dir):
+            if f.endswith(".jsonl"):
+                session_id = f.replace(".jsonl", "")
+
+                # 尝试获取自定义 summary
+                metadata = self._get_session_metadata(project_name, session_id)
+                if metadata and "summary" in metadata:
+                    summary = metadata["summary"]
+                else:
+                    summary = f"Session {session_id[:8]}"
+
+                sessions.append({
+                    "id": session_id,
+                    "summary": summary,
+                    "updated_at": time.ctime(os.path.getmtime(os.path.join(session_dir, f))),
+                    "__provider": "claude"
+                })
+        # 按时间排序
+        sessions.sort(key=lambda x: x["updated_at"], reverse=True)
+        return sessions
+
 project_manager = ProjectManager()

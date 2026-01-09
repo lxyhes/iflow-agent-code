@@ -563,6 +563,60 @@ async def get_sessions(project_name: str, limit: int = 5, offset: int = 0):
         "total": len(sessions)
     }
 
+@app.put("/api/projects/{project_name}/sessions/{session_id}")
+async def update_session_summary(project_name: str, session_id: str, request: Request):
+    """更新 session 的自定义名称/摘要"""
+    try:
+        data = await request.json()
+        summary = data.get("summary")
+
+        if not summary:
+            return JSONResponse(content={"error": "Summary is required"}, status_code=400)
+
+        project_manager.update_session_summary(project_name, session_id, summary)
+
+        return {"success": True, "summary": summary}
+    except Exception as e:
+        logger.error(f"Error updating session summary: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/api/projects/{project_name}/sessions/{session_id}/messages")
+async def get_session_messages(project_name: str, session_id: str, limit: int = None, offset: int = 0):
+    """获取 session 的消息列表"""
+    messages = project_manager.get_messages(project_name, session_id)
+
+    # 如果指定了 limit，则分页
+    if limit is not None:
+        messages = messages[offset:offset + limit]
+    elif offset > 0:
+        messages = messages[offset:]
+
+    return {
+        "messages": messages,
+        "total": len(messages),
+        "hasMore": limit is not None and len(messages) >= limit
+    }
+
+@app.get("/api/projects/{project_name}/sessions/{session_id}/token-usage")
+async def get_token_usage(project_name: str, session_id: str):
+    """获取 session 的 token 使用情况（简化版本）"""
+    try:
+        messages = project_manager.get_messages(project_name, session_id)
+
+        # 简单估算：假设每条消息大约使用一定数量的 token
+        # 实际应用中应该从 AI 响应中获取准确的 token 计数
+        total_messages = len(messages)
+        estimated_tokens = total_messages * 100  # 粗略估算
+
+        return {
+            "totalMessages": total_messages,
+            "estimatedTokens": estimated_tokens,
+            "session_id": session_id
+        }
+    except Exception as e:
+        logger.error(f"Error getting token usage: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 # --- 项目创建工作流 API ---
 
 @app.get("/api/validate-path")
@@ -610,13 +664,26 @@ async def create_workspace(req: CreateWorkspaceRequest):
         # 规范化路径
         workspace_path = os.path.expanduser(req.path.strip())
         workspace_path = os.path.abspath(workspace_path)
-        
+
         # 验证路径安全性
         is_valid, error, normalized_path = PathValidator.validate_project_path(
-            workspace_path, 
+            workspace_path,
             must_exist=(req.workspaceType == 'existing')
         )
-        
+
+        # 如果验证失败是因为不在允许的根目录范围内，动态添加该路径
+        if not is_valid and "不在允许的根目录范围内" in error:
+            logger.info(f"路径不在允许列表中，动态添加: {workspace_path}")
+            # 添加该路径及其父目录到允许列表
+            PathValidator.add_allowed_root(workspace_path)
+            PathValidator.add_allowed_root(os.path.dirname(workspace_path))
+
+            # 重新验证
+            is_valid, error, normalized_path = PathValidator.validate_project_path(
+                workspace_path,
+                must_exist=(req.workspaceType == 'existing')
+            )
+
         if req.workspaceType == 'existing':
             # 已有工作空间 - 需要路径存在
             if not is_valid:
@@ -625,7 +692,7 @@ async def create_workspace(req: CreateWorkspaceRequest):
                     content={"error": f"无效的工作空间路径: {error}"},
                     status_code=400
                 )
-            
+
             if not os.path.isdir(normalized_path):
                 return JSONResponse(
                     content={"error": "指定的路径不是一个目录"},
@@ -844,18 +911,37 @@ async def create_project(req: CreateProjectRequest):
     try:
         workspace_path = os.path.expanduser(req.path.strip())
         workspace_path = os.path.abspath(workspace_path)
-        
+
         if not os.path.isdir(workspace_path):
             return JSONResponse(
                 content={"error": "指定的路径不存在或不是目录"},
                 status_code=400
             )
-        
+
+        # 尝试注册项目，如果失败则动态添加路径
         project = project_manager.add_project(workspace_path)
-        project_registry.register_project(project["name"], workspace_path)
-        
+
+        # 注册到项目注册表
+        is_registered, error = project_registry.register_project(project["name"], workspace_path)
+        if not is_registered:
+            # 如果注册失败是因为路径不在允许列表中，动态添加
+            if "不在允许的根目录范围内" in error:
+                logger.info(f"路径不在允许列表中，动态添加: {workspace_path}")
+                PathValidator.add_allowed_root(workspace_path)
+                PathValidator.add_allowed_root(os.path.dirname(workspace_path))
+
+                # 重新注册
+                is_registered, error = project_registry.register_project(project["name"], workspace_path)
+
+            if not is_registered:
+                logger.error(f"注册项目失败: {error}")
+                return JSONResponse(
+                    content={"error": f"注册项目失败: {error}"},
+                    status_code=400
+                )
+
         return {"success": True, "project": project}
-        
+
     except Exception as e:
         logger.exception(f"创建项目失败: {e}")
         return JSONResponse(
@@ -1585,29 +1671,73 @@ async def analyze_module_dependencies(request: Request):
         )
 
 
+# --- TaskMaster API 端点 ---
+
+@app.get("/api/taskmaster/installation-status")
+async def get_taskmaster_installation_status():
+    """获取 TaskMaster 安装状态"""
+    return {
+        "installation": {"isInstalled": False},
+        "isReady": False
+    }
+
+@app.get("/api/taskmaster/tasks/{project_name}")
+async def get_taskmaster_tasks(project_name: str):
+    """获取项目的任务列表"""
+    # TODO: 实现从存储中读取任务列表
+    return {
+        "tasks": [],
+        "total": 0,
+        "completed": 0
+    }
+
+@app.get("/api/taskmaster/prd/{project_name}")
+async def get_taskmaster_prd(project_name: str):
+    """获取项目的 PRD 文档"""
+    # TODO: 实现从存储中读取 PRD 文档
+    return {
+        "prd": None,
+        "exists": False
+    }
+
+# --- Cursor Sessions API 端点 ---
+
+@app.get("/api/cursor/sessions")
+async def get_cursor_sessions(projectPath: str = Query(...)):
+    """获取 Cursor sessions 列表"""
+    # TODO: 实现 Cursor sessions 读取逻辑
+    # Cursor sessions 通常存储在 ~/.cursor/sessions/ 目录下
+    return {
+        "success": True,
+        "sessions": []
+    }
+
+# --- Commands API 端点 ---
+
+@app.post("/api/commands/list")
+async def list_commands(request: Request):
+    """获取可用的命令列表"""
+    # TODO: 实现命令列表读取逻辑
+    return {
+        "commands": []
+    }
+
+# --- MCP Utils API 端点 ---
+
+@app.get("/api/mcp-utils/taskmaster-server")
+async def get_taskmaster_server_status():
+    """获取 TaskMaster MCP 服务器状态"""
+    return {
+        "status": "not-implemented",
+        "message": "TaskMaster MCP server is not implemented"
+    }
+
+# --- Catch-all 路由 ---
+
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(path_name: str, request: Request):
     """Catch-all 路由 - 处理未实现的 API 端点"""
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
-
-    # TaskMaster 相关的 API 返回特定格式
-    if path_name.startswith("taskmaster/"):
-        if path_name == "taskmaster/installation-status":
-            return JSONResponse(content={
-                "installation": {"isInstalled": False},
-                "isReady": False
-            }, status_code=200)
-        elif path_name.startswith("taskmaster/tasks/"):
-            return JSONResponse(content={
-                "tasks": [],
-                "total": 0,
-                "completed": 0
-            }, status_code=200)
-        else:
-            return JSONResponse(content={
-                "status": "not-implemented",
-                "message": f"TaskMaster endpoint '{path_name}' is not implemented"
-            }, status_code=200)
 
     # MCP 相关的 API
     if path_name.startswith("mcp-utils/"):
