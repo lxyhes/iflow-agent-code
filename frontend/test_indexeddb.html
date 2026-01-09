@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndexedDB Storage Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            color: #555;
+            margin-top: 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .error {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        .success {
+            border-left-color: #4CAF50;
+            background: #e8f5e9;
+        }
+        .info {
+            border-left-color: #2196F3;
+            background: #e3f2fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>IndexedDB Storage Test</h1>
+        
+        <div class="test-section">
+            <h2>1. Test Basic Operations</h2>
+            <button onclick="testBasicOperations()">Run Basic Tests</button>
+            <div id="basic-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Test Message Storage</h2>
+            <button onclick="testMessageStorage()">Run Message Tests</button>
+            <div id="message-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. Test Draft Storage</h2>
+            <button onclick="testDraftStorage()">Run Draft Tests</button>
+            <div id="draft-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. Test Large Dataset</h2>
+            <button onclick="testLargeDataset()">Run Large Dataset Test</button>
+            <div id="large-result" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. Storage Info</h2>
+            <button onclick="getStorageInfo()">Get Storage Info</button>
+            <div id="storage-info" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>6. Clear All Data</h2>
+            <button onclick="clearAllData()" style="background: #f44336;">Clear All Data</button>
+            <div id="clear-result" class="result"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { chatStorage, draftStorage, settingsStorage, clearAllData, migrateFromLocalStorage } from './src/utils/indexedDBStorage.js';
+
+        window.chatStorage = chatStorage;
+        window.draftStorage = draftStorage;
+        window.settingsStorage = settingsStorage;
+        window.clearAllData = clearAllData;
+        window.migrateFromLocalStorage = migrateFromLocalStorage;
+
+        function displayResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}`;
+        }
+
+        window.testBasicOperations = async function() {
+            displayResult('basic-result', 'Running basic operations test...', 'info');
+            
+            try {
+                // Test settings storage
+                await settingsStorage.setSetting('test_key', 'test_value');
+                const retrieved = await settingsStorage.getSetting('test_key');
+                
+                if (retrieved === 'test_value') {
+                    displayResult('basic-result', '✓ Basic operations test passed!\n- Set and retrieved setting successfully', 'success');
+                } else {
+                    displayResult('basic-result', '✗ Basic operations test failed!\n- Expected: test_value, Got: ' + retrieved, 'error');
+                }
+            } catch (error) {
+                displayResult('basic-result', '✗ Basic operations test failed!\n- Error: ' + error.message, 'error');
+            }
+        };
+
+        window.testMessageStorage = async function() {
+            displayResult('message-result', 'Running message storage test...', 'info');
+            
+            try {
+                const sessionId = 'test_session_' + Date.now();
+                const testMessages = [
+                    { id: '1', sessionId, type: 'user', content: 'Hello', timestamp: Date.now() },
+                    { id: '2', sessionId, type: 'assistant', content: 'Hi there!', timestamp: Date.now() + 1000 },
+                    { id: '3', sessionId, type: 'user', content: 'How are you?', timestamp: Date.now() + 2000 }
+                ];
+
+                // Save messages
+                await chatStorage.saveMessages(sessionId, testMessages);
+                
+                // Retrieve messages
+                const retrieved = await chatStorage.getMessages(sessionId);
+                
+                if (retrieved.length === 3 && retrieved[0].content === 'Hello') {
+                    displayResult('message-result', '✓ Message storage test passed!\n- Saved and retrieved 3 messages successfully', 'success');
+                } else {
+                    displayResult('message-result', '✗ Message storage test failed!\n- Expected 3 messages, Got: ' + retrieved.length, 'error');
+                }
+            } catch (error) {
+                displayResult('message-result', '✗ Message storage test failed!\n- Error: ' + error.message, 'error');
+            }
+        };
+
+        window.testDraftStorage = async function() {
+            displayResult('draft-result', 'Running draft storage test...', 'info');
+            
+            try {
+                const sessionId = 'test_session_' + Date.now();
+                const testDraft = 'This is a test draft message';
+                
+                // Save draft
+                await draftStorage.saveDraft(sessionId, testDraft);
+                
+                // Retrieve draft
+                const retrieved = await draftStorage.getDraft(sessionId);
+                
+                if (retrieved === testDraft) {
+                    displayResult('draft-result', '✓ Draft storage test passed!\n- Saved and retrieved draft successfully', 'success');
+                } else {
+                    displayResult('draft-result', '✗ Draft storage test failed!\n- Expected: ' + testDraft + ', Got: ' + retrieved, 'error');
+                }
+            } catch (error) {
+                displayResult('draft-result', '✗ Draft storage test failed!\n- Error: ' + error.message, 'error');
+            }
+        };
+
+        window.testLargeDataset = async function() {
+            displayResult('large-result', 'Running large dataset test...', 'info');
+            
+            try {
+                const sessionId = 'test_large_' + Date.now();
+                const largeMessages = [];
+                
+                // Create 1000 messages
+                for (let i = 0; i < 1000; i++) {
+                    largeMessages.push({
+                        id: `msg_${i}`,
+                        sessionId,
+                        type: i % 2 === 0 ? 'user' : 'assistant',
+                        content: `Message ${i}: This is a test message with some content to simulate real chat data.`,
+                        timestamp: Date.now() + (i * 1000)
+                    });
+                }
+                
+                const startTime = performance.now();
+                await chatStorage.saveMessages(sessionId, largeMessages);
+                const saveTime = performance.now() - startTime;
+                
+                const retrieveStart = performance.now();
+                const retrieved = await chatStorage.getMessages(sessionId);
+                const retrieveTime = performance.now() - retrieveStart;
+                
+                if (retrieved.length === 1000) {
+                    displayResult('large-result', 
+                        `✓ Large dataset test passed!\n` +
+                        `- Saved 1000 messages in ${saveTime.toFixed(2)}ms\n` +
+                        `- Retrieved 1000 messages in ${retrieveTime.toFixed(2)}ms\n` +
+                        `- Average per message: ${(retrieveTime / 1000).toFixed(3)}ms`, 
+                        'success'
+                    );
+                } else {
+                    displayResult('large-result', '✗ Large dataset test failed!\n- Expected 1000 messages, Got: ' + retrieved.length, 'error');
+                }
+            } catch (error) {
+                displayResult('large-result', '✗ Large dataset test failed!\n- Error: ' + error.message, 'error');
+            }
+        };
+
+        window.getStorageInfo = async function() {
+            displayResult('storage-info', 'Getting storage info...', 'info');
+            
+            try {
+                const info = await chatStorage.getStorageInfo();
+                
+                if (info) {
+                    displayResult('storage-info', 
+                        `Storage Information:\n` +
+                        `- Total Messages: ${info.totalMessages}\n` +
+                        `- Total Sessions: ${info.totalSessions}\n` +
+                        `- Estimated Size: ${info.estimatedSizeMB} MB`, 
+                        'info'
+                    );
+                } else {
+                    displayResult('storage-info', '✗ Failed to get storage info', 'error');
+                }
+            } catch (error) {
+                displayResult('storage-info', '✗ Failed to get storage info!\n- Error: ' + error.message, 'error');
+            }
+        };
+
+        window.clearAllData = async function() {
+            if (!confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                return;
+            }
+            
+            displayResult('clear-result', 'Clearing all data...', 'info');
+            
+            try {
+                await clearAllData();
+                displayResult('clear-result', '✓ All data cleared successfully', 'success');
+            } catch (error) {
+                displayResult('clear-result', '✗ Failed to clear data!\n- Error: ' + error.message, 'error');
+            }
+        };
+    </script>
+</body>
+</html>

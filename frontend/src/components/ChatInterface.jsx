@@ -23,12 +23,14 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useDropzone } from 'react-dropzone';
+import { Virtuoso } from 'react-virtuoso';
 import TodoList from './TodoList';
 import IFlowLogo from './IFlowLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
+import { chatStorage, draftStorage, migrateFromLocalStorage } from '../utils/indexedDBStorage';
 
 import IFlowStatus from './IFlowStatus';
 import TokenUsagePie from './TokenUsagePie';
@@ -404,11 +406,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} animate-fade-in-up`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end' : ''} animate-fade-in-up`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
-        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[85%] md:max-w-md lg:max-w-lg xl:max-w-xl">
+        <div className="flex items-end space-x-0 sm:space-x-3 w-full sm:w-auto sm:max-w-[75%] md:max-w-md lg:max-w-lg xl:max-w-xl">
           <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-3 sm:px-4 py-2 shadow-sm flex-1 sm:flex-initial">
             <div className="text-sm whitespace-pre-wrap break-words">
               {message.content}
@@ -1788,7 +1790,61 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     return [];
   });
+
+  // Load messages from IndexedDB on mount
+  useEffect(() => {
+    if (selectedProject) {
+      const sessionId = selectedProject.name;
+      
+      chatStorage.getMessages(sessionId).then(messages => {
+        if (messages.length > 0) {
+          setChatMessages(messages);
+        }
+      }).catch(error => {
+        console.error('Error loading messages from IndexedDB:', error);
+        // Fallback to localStorage
+        const fallbackMessages = safeLocalStorage.getItem(`chat_messages_${sessionId}`);
+        if (fallbackMessages) {
+          try {
+            setChatMessages(JSON.parse(fallbackMessages));
+          } catch (e) {
+            console.error('Error parsing fallback messages:', e);
+          }
+        }
+      });
+    }
+  }, [selectedProject?.name]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Initialize IndexedDB and migrate data from localStorage
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeIndexedDB = async () => {
+      try {
+        // Check if migration has already been done
+        const migrationComplete = localStorage.getItem('indexeddb_migration_complete');
+        
+        if (!migrationComplete) {
+          console.log('Starting IndexedDB migration...');
+          const success = await migrateFromLocalStorage();
+          
+          if (success && mounted) {
+            localStorage.setItem('indexeddb_migration_complete', 'true');
+            console.log('IndexedDB migration completed successfully');
+          }
+        }
+      } catch (error) {
+        console.error('Error during IndexedDB initialization:', error);
+      }
+    };
+
+    initializeIndexedDB();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [sessionMessages, setSessionMessages] = useState([]);
@@ -2806,7 +2862,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      // Virtuoso provides scrollToIndex method
+      scrollContainerRef.current.scrollToIndex({
+        index: 'LAST',
+        behavior: 'smooth'
+      });
       // Don't reset isUserScrolledUp here - let the scroll handler manage it
       // This prevents fighting with user's scroll position during streaming
     }
@@ -2815,15 +2875,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Check if user is near the bottom of the scroll container
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // Virtuoso provides state.range to get current scroll state
+    const state = scrollContainerRef.current.getState();
+    if (!state) return false;
+    
+    const { scrollTop, scrollHeight, clientHeight } = state;
     // Consider "near bottom" if within 50px of the bottom
     return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
   // Handle scroll events to detect when user manually scrolls up and load more messages
-  const handleScroll = useCallback(async () => {
+  const handleScroll = useCallback(async (event) => {
     if (scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
+      const container = event.target;
       const nearBottom = isNearBottom();
       setIsUserScrolledUp(!nearBottom);
 
@@ -2845,10 +2909,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
           // Restore scroll position after DOM update
           setTimeout(() => {
-            if (scrollContainerRef.current) {
-              const newScrollHeight = scrollContainerRef.current.scrollHeight;
+            if (scrollContainerRef.current && scrollContainerRef.current.scrollerRef?.current) {
+              const scroller = scrollContainerRef.current.scrollerRef.current;
+              const newScrollHeight = scroller.scrollHeight;
               const scrollDiff = newScrollHeight - previousScrollHeight;
-              scrollContainerRef.current.scrollTop = previousScrollTop + scrollDiff;
+              scroller.scrollTop = previousScrollTop + scrollDiff;
             }
           }, 0);
         }
@@ -3011,30 +3076,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [isInputFocused, onInputFocusChange]);
 
-  // Persist input draft to localStorage
+  // Persist input draft to IndexedDB
   useEffect(() => {
-    if (selectedProject && input !== '') {
-      safeLocalStorage.setItem(`draft_input_${selectedProject.name}`, input);
-    } else if (selectedProject && input === '') {
-      safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+    if (selectedProject) {
+      const sessionId = selectedProject.name;
+      if (input !== '') {
+        draftStorage.saveDraft(sessionId, input);
+      } else {
+        draftStorage.deleteDraft(sessionId);
+      }
     }
   }, [input, selectedProject]);
 
-  // Persist chat messages to localStorage
+  // Persist chat messages to IndexedDB
   useEffect(() => {
     if (selectedProject && chatMessages.length > 0) {
-      safeLocalStorage.setItem(`chat_messages_${selectedProject.name}`, JSON.stringify(chatMessages));
+      const sessionId = selectedProject.name;
+      chatStorage.saveMessages(sessionId, chatMessages);
     }
   }, [chatMessages, selectedProject]);
 
   // Load saved state when project changes (but don't interfere with session loading)
   useEffect(() => {
     if (selectedProject) {
-      // Always load saved input draft for the project
-      const savedInput = safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
-      if (savedInput !== input) {
-        setInput(savedInput);
-      }
+      const sessionId = selectedProject.name;
+      
+      // Load from IndexedDB
+      draftStorage.getDraft(sessionId).then(savedInput => {
+        if (savedInput && savedInput !== input) {
+          setInput(savedInput);
+        }
+      }).catch(error => {
+        console.error('Error loading draft from IndexedDB:', error);
+        // Fallback to localStorage
+        const fallbackInput = safeLocalStorage.getItem(`draft_input_${sessionId}`) || '';
+        if (fallbackInput !== input) {
+          setInput(fallbackInput);
+        }
+      });
     }
   }, [selectedProject?.name]);
 
@@ -3813,10 +3892,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   // Add scroll event listener to detect user scrolling
   useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    const virtuoso = scrollContainerRef.current;
+    if (virtuoso) {
+      // Virtuoso provides a different API for scroll events
+      // We'll use the scrollerRef to access the underlying scroll container
+      const scrollerRef = virtuoso.scrollerRef?.current;
+      if (scrollerRef) {
+        scrollerRef.addEventListener('scroll', handleScroll);
+        return () => scrollerRef.removeEventListener('scroll', handleScroll);
+      }
     }
   }, [handleScroll]);
 
@@ -4587,135 +4671,152 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       )}
 
       <div className="h-full flex flex-col">
-        {/* Messages Area - Scrollable Middle Section */}
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-3 sm:space-y-4 relative"
-        >
-          {isLoadingSessionMessages && chatMessages.length === 0 ? (
+        {/* Messages Area - Scrollable Middle Section with Virtual Scrolling */}
+        {isLoadingSessionMessages && chatMessages.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
                 <p>Loading session messages...</p>
               </div>
             </div>
-          ) : chatMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              {!selectedSession && !currentSessionId && (
-                <div className="text-center px-6 sm:px-4 py-8 max-w-lg">
-                  <div className="mx-auto h-24 w-24 flex items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30 mb-6 shadow-xl shadow-blue-500/10">
-                    <IFlowLogo className="h-14 w-14 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-4">IFlow Agent</h2>
-                  <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
-                    Your autonomous AI development partner. Ask anything about your code or start a new task.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-                    <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
-                      <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1">Code Review</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Analyze architecture and find bugs</p>
-                    </div>
-                    <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
-                      <p className="text-sm font-bold text-green-600 dark:text-green-400">Auto Dev</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Implement features and fix issues</p>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-500 dark:text-gray-400 animate-pulse">
-                    Start typing below to begin...
-                  </p>
+          </div>
+        ) : chatMessages.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            {!selectedSession && !currentSessionId && (
+              <div className="text-center px-6 sm:px-4 py-8 max-w-lg">
+                <div className="mx-auto h-24 w-24 flex items-center justify-center rounded-2xl bg-blue-100 dark:bg-blue-900/30 mb-6 shadow-xl shadow-blue-500/10">
+                  <IFlowLogo className="h-14 w-14 text-blue-600 dark:text-blue-400" />
                 </div>
-              )}
-              {selectedSession && (
-                <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4">
-                  <p className="font-bold text-lg sm:text-xl mb-3">Continue your conversation</p>
-                  <p className="text-sm sm:text-base leading-relaxed">
-                    Ask questions about your code, request changes, or get help with development tasks
-                  </p>
+                <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-4">IFlow Agent</h2>
+                <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
+                  Your autonomous AI development partner. Ask anything about your code or start a new task.
+                </p>
 
-                  {/* Show NextTaskBanner for existing sessions too, only if TaskMaster is installed */}
-                  {tasksEnabled && isTaskMasterInstalled && (
-                    <div className="mt-4 px-4 sm:px-0">
-                      <NextTaskBanner
-                        onStartTask={() => setInput('Start the next task')}
-                        onShowAllTasks={onShowAllTasks}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Loading indicator for older messages */}
-              {isLoadingMoreMessages && (
-                <div className="text-center text-gray-500 dark:text-gray-400 py-3">
-                  <div className="flex items-center justify-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
-                    <p className="text-sm">Loading older messages...</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
+                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mb-1">Code Review</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Analyze architecture and find bugs</p>
+                  </div>
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-left">
+                    <p className="text-sm font-bold text-green-600 dark:text-green-400">Auto Dev</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Implement features and fix issues</p>
                   </div>
                 </div>
-              )}
 
-              {/* Indicator showing there are more messages to load */}
-              {hasMoreMessages && !isLoadingMoreMessages && (
-                <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                  {totalMessages > 0 && (
-                    <span>
-                      Showing {sessionMessages.length} of {totalMessages} messages •
-                      <span className="text-xs">Scroll up to load more</span>
-                    </span>
-                  )}
-                </div>
-              )}
+                <p className="text-sm text-gray-500 dark:text-gray-400 animate-pulse">
+                  Start typing below to begin...
+                </p>
+              </div>
+            )}
+            {selectedSession && (
+              <div className="text-center text-gray-500 dark:text-gray-400 px-6 sm:px-4">
+                <p className="font-bold text-lg sm:text-xl mb-3">Continue your conversation</p>
+                <p className="text-sm sm:text-base leading-relaxed">
+                  Ask questions about your code, request changes, or get help with development tasks
+                </p>
 
-              {/* Legacy message count indicator (for non-paginated view) */}
-              {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
-                <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                  Showing last {visibleMessageCount} messages ({chatMessages.length} total) •
-                  <button
-                    className="ml-1 text-blue-600 hover:text-blue-700 underline"
-                    onClick={loadEarlierMessages}
-                  >
-                    Load earlier messages
-                  </button>
-                </div>
-              )}
+                {/* Show NextTaskBanner for existing sessions too, only if TaskMaster is installed */}
+                {tasksEnabled && isTaskMasterInstalled && (
+                  <div className="mt-4 px-4 sm:px-0">
+                    <NextTaskBanner
+                      onStartTask={() => setInput('Start the next task')}
+                      onShowAllTasks={onShowAllTasks}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-hidden relative">
+            <Virtuoso
+              ref={scrollContainerRef}
+              style={{ height: '100%', padding: '0 16px' }}
+              scrollerRef={(ref) => {
+                if (ref) {
+                  ref.style.overflowX = 'hidden';
+                }
+              }}
+              data={visibleMessages}
+              initialTopMostItemIndex={visibleMessages.length - 1}
+              components={{
+                Header: () => (
+                  <>
+                    {/* Loading indicator for older messages */}
+                    {isLoadingMoreMessages && (
+                      <div className="text-center text-gray-500 dark:text-gray-400 py-3">
+                        <div className="flex items-center justify-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                          <p className="text-sm">Loading older messages...</p>
+                        </div>
+                      </div>
+                    )}
 
-              {visibleMessages.map((message, index) => {
+                    {/* Indicator showing there are more messages to load */}
+                    {hasMoreMessages && !isLoadingMoreMessages && (
+                      <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
+                        {totalMessages > 0 && (
+                          <span>
+                            Showing {sessionMessages.length} of {totalMessages} messages •
+                            <span className="text-xs">Scroll up to load more</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Legacy message count indicator (for non-paginated view) */}
+                    {!hasMoreMessages && chatMessages.length > visibleMessageCount && (
+                      <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
+                        Showing last {visibleMessageCount} messages ({chatMessages.length} total) •
+                        <button
+                          className="ml-1 text-blue-600 hover:text-blue-700 underline"
+                          onClick={loadEarlierMessages}
+                        >
+                          Load earlier messages
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ),
+                Footer: () => (
+                  <>
+                    {isLoading && (
+                      <div className="ai-thinking-container py-2">
+                        <TypingIndicator
+                          agent={provider === 'cursor' ? 'Cursor' : 'IFlow'}
+                          agentInfo={currentAgentInfo}
+                        />
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )
+              }}
+              itemContent={(index, message) => {
                 const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
 
                 return (
-                  <MessageComponent
-                    key={index}
-                    message={message}
-                    index={index}
-                    prevMessage={prevMessage}
-                    createDiff={createDiff}
-                    onFileOpen={onFileOpen}
-                    onShowSettings={onShowSettings}
-                    autoExpandTools={autoExpandTools}
-                    showRawParameters={showRawParameters}
-                    showThinking={showThinking}
-                    selectedProject={selectedProject}
-                  />
+                  <div className="space-y-3 sm:space-y-4">
+                    <MessageComponent
+                      key={index}
+                      message={message}
+                      index={index}
+                      prevMessage={prevMessage}
+                      createDiff={createDiff}
+                      onFileOpen={onFileOpen}
+                      onShowSettings={onShowSettings}
+                      autoExpandTools={autoExpandTools}
+                      showRawParameters={showRawParameters}
+                      showThinking={showThinking}
+                      selectedProject={selectedProject}
+                    />
+                  </div>
                 );
-              })}
-            </>
-          )}
-
-          {isLoading && (
-            <div className="ai-thinking-container">
-              <TypingIndicator
-                agent={provider === 'cursor' ? 'Cursor' : 'IFlow'}
-                agentInfo={currentAgentInfo}
-              />
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
+              }}
+            />
+          </div>
+        )}
 
 
         {/* Input Area - Fixed Bottom */}

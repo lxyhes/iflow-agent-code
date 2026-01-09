@@ -39,6 +39,7 @@ from backend.core.code_style_analyzer import CodeStyleAnalyzer, get_code_style_a
 from backend.core.report_generator import ReportGenerator, get_report_generator
 from backend.core.dependency_analyzer import DependencyAnalyzer, get_dependency_analyzer
 from backend.core.auto_fixer import AutoFixer, get_auto_fixer
+from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_dependency_analyzer as get_code_dependency_analyzer
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -1365,6 +1366,93 @@ async def get_mcp_servers(scope: str = "user"):
     except Exception as e:
         logger.exception(f"获取 MCP 服务器失败: {e}")
         return {"success": False, "error": str(e)}
+
+
+@app.post("/api/context/analyze-dependencies")
+async def analyze_code_dependencies(request: Request):
+    """分析代码依赖关系并生成可视化数据"""
+    try:
+        data = await request.json()
+        project_path = data.get('projectPath', '')
+
+        if not project_path:
+            return JSONResponse(
+                content={"error": "项目路径不能为空"},
+                status_code=400
+            )
+
+        # 验证路径
+        is_valid, error, normalized = PathValidator.validate_project_path(project_path)
+        if not is_valid:
+            return JSONResponse(
+                content={"error": error},
+                status_code=400
+            )
+
+        # 获取依赖分析器
+        analyzer = get_code_dependency_analyzer(normalized)
+
+        # 分析依赖关系
+        result = analyzer.analyze_project_dependencies()
+
+        return {
+            "success": True,
+            "data": result
+        }
+
+    except Exception as e:
+        logger.exception(f"代码依赖分析失败: {e}")
+        return JSONResponse(
+            content={"error": f"代码依赖分析失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/context/analyze-module")
+async def analyze_module_dependencies(request: Request):
+    """分析特定模块的依赖关系"""
+    try:
+        data = await request.json()
+        project_path = data.get('projectPath', '')
+        module_name = data.get('moduleName', '')
+
+        if not project_path:
+            return JSONResponse(
+                content={"error": "项目路径不能为空"},
+                status_code=400
+            )
+
+        if not module_name:
+            return JSONResponse(
+                content={"error": "模块名称不能为空"},
+                status_code=400
+            )
+
+        # 验证路径
+        is_valid, error, normalized = PathValidator.validate_project_path(project_path)
+        if not is_valid:
+            return JSONResponse(
+                content={"error": error},
+                status_code=400
+            )
+
+        # 获取依赖分析器
+        analyzer = get_code_dependency_analyzer(normalized)
+
+        # 分析模块依赖
+        result = analyzer.analyze_module_dependencies(module_name)
+
+        return {
+            "success": True,
+            "data": result
+        }
+
+    except Exception as e:
+        logger.exception(f"模块依赖分析失败: {e}")
+        return JSONResponse(
+            content={"error": f"模块依赖分析失败: {str(e)}"},
+            status_code=500
+        )
 
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
