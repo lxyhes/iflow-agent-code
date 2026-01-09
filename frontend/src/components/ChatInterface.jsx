@@ -610,13 +610,21 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                             message.toolName || 'Tool'}
                   </span>
 
-                  {/* AgentInfo 显示 */}
+                  {/* AgentInfo 显示 - 支持多种格式 */}
                   {message.agentInfo && (
                     <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-800">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      {message.agentInfo.name || message.agentInfo.role || 'Agent'}
+                      {message.agentInfo.name || message.agentInfo.role || 
+                       (message.agentInfo.agent_index !== undefined && message.agentInfo.agent_index !== null 
+                        ? `Agent ${message.agentInfo.agent_index}` 
+                        : 'Agent')}
+                      {message.agentInfo.task_id && (
+                        <span className="ml-1 text-[10px] opacity-75">
+                          #{message.agentInfo.task_id.slice(0, 8)}
+                        </span>
+                      )}
                     </span>
                   )}
 
@@ -1720,17 +1728,26 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             ) : message.type === 'plan' ? (
               <div className="bg-purple-50/50 dark:bg-purple-900/20 border-l-2 border-purple-400 dark:border-purple-500 pl-3 py-2 my-2 rounded-r-lg">
-                <div className="flex items-center gap-2 text-xs text-purple-600 dark:text-purple-400 mb-2">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  <span className="font-medium">Execution Plan</span>
+                <div className="flex items-center justify-between gap-2 text-xs text-purple-600 dark:text-purple-400 mb-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    <span className="font-medium">Execution Plan</span>
+                    <span className="text-[10px] opacity-75">
+                      ({message.entries?.length || 0} items)
+                    </span>
+                  </div>
                 </div>
                 {message.entries && Array.isArray(message.entries) && message.entries.length > 0 ? (
                   <ol className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
                     {message.entries.map((entry, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full text-xs font-medium">
+                        <span className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-xs font-medium ${
+                          entry.priority === 'high' ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400' :
+                          entry.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-600 dark:text-yellow-400' :
+                          'bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400'
+                        }`}>
                           {idx + 1}
                         </span>
                         <span className="flex-1">{entry.content || ''}</span>
@@ -1740,6 +1757,11 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                                 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                             }`}>
                             {entry.status}
+                          </span>
+                        )}
+                        {entry.priority && entry.priority !== 'low' && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${entry.priority === 'high' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'}`}>
+                            {entry.priority}
                           </span>
                         )}
                       </li>

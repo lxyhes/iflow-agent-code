@@ -420,39 +420,79 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
             async for msg in agent.chat_stream(message):
                 # 检查 msg 是字符串还是字典
                 if isinstance(msg, str):
-                    # 如果是字符串，直接作为内容返回
+                    # 如果是字符串，直接作为内容返回（旧客户端兼容）
                     content = msg
                     full_reply += content
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
                 else:
-                    # 如果是字典，按照原来的逻辑处理
+                    # 如果是字典，处理 SDK 客户端返回的消息类型
                     msg_type = msg.get("type", "text")
                     logger.debug(f">>> Stream msg: type={msg_type}, keys={list(msg.keys())}")
                     
-                    if msg_type == "text":
+                    if msg_type == "assistant":
+                        # AI 回复（SDK 客户端）
+                        content = msg.get("content", "")
+                        full_reply += content
+                        agent_info = msg.get("metadata", {}).get("agent_info")
+                        yield f"data: {json.dumps({'type': 'content', 'content': content, 'agent_info': agent_info})}\n\n"
+                        
+                    elif msg_type == "tool_call":
+                        # 工具调用（SDK 客户端）
+                        metadata = msg.get("metadata", {})
+                        tool_name = metadata.get("tool_name", "unknown")
+                        status = metadata.get("status", "running")
+                        agent_info = metadata.get("agent_info")
+                        
+                        if status == "running":
+                            # 工具开始执行
+                            event_data = {'type': 'tool_start', 'tool_type': 'generic', 'tool_name': tool_name, 'label': metadata.get('label', ''), 'agent_info': agent_info}
+                            logger.info(f">>> TOOL_START: {event_data}")
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                        else:
+                            # 工具执行完成
+                            event_data = {'type': 'tool_end', 'tool_type': 'generic', 'tool_name': tool_name, 'status': status, 'agent_info': agent_info}
+                            logger.info(f">>> TOOL_END: {event_data}")
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                            
+                    elif msg_type == "plan":
+                        # 执行计划（SDK 客户端）
+                        entries = msg.get("metadata", {}).get("entries", [])
+                        event_data = {'type': 'plan', 'entries': entries}
+                        logger.info(f">>> PLAN: {len(entries)} entries")
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                        
+                    elif msg_type == "finish":
+                        # 任务完成（SDK 客户端）
+                        metadata = msg.get("metadata", {})
+                        logger.info(f">>> FINISH: {metadata}")
+                        break
+                        
+                    elif msg_type == "error":
+                        # 错误（SDK 客户端）
+                        error_content = msg.get("content", "Unknown error")
+                        logger.error(f">>> ERROR: {error_content}")
+                        yield f"data: {json.dumps({'type': 'error', 'content': error_content})}\n\n"
+                        
+                    elif msg_type == "text":
+                        # 文本消息（旧客户端兼容）
                         content = msg.get("content", "")
                         full_reply += content
                         yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
                         
                     elif msg_type == "tool_start":
-                        # 工具开始执行
+                        # 工具开始执行（旧客户端兼容）
                         event_data = {'type': 'tool_start', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'label': msg.get('label', ''), 'agent_info': msg.get('agent_info')}
                         logger.info(f">>> TOOL_START: {event_data}")
                         yield f"data: {json.dumps(event_data)}\n\n"
                         
                     elif msg_type == "tool_end":
-                        # 工具执行完成
+                        # 工具执行完成（旧客户端兼容）
                         event_data = {'type': 'tool_end', 'tool_type': msg.get('tool_type'), 'tool_name': msg.get('tool_name'), 'status': msg.get('status', 'success'), 'agent_info': msg.get('agent_info')}
                         logger.info(f">>> TOOL_END: {event_data}")
                         yield f"data: {json.dumps(event_data)}\n\n"
                         
-                    elif msg_type == "plan":
-                        # 任务计划
-                        event_data = {'type': 'plan', 'entries': msg.get('entries', [])}
-                        logger.info(f">>> PLAN: {event_data}")
-                        yield f"data: {json.dumps(event_data)}\n\n"
-                        
                     elif msg_type == "done":
+                        # 完成（旧客户端兼容）
                         break
                     
             logger.info(f"Stream completed, reply length: {len(full_reply)}")
