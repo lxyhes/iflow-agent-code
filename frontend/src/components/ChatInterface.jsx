@@ -404,7 +404,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} animate-fade-in-up`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -5066,14 +5066,14 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                 }}
                 placeholder={`Type / for commands, @ for files, or ask ${provider === 'cursor' ? 'Cursor' : 'IFlow'} anything...`}
                 disabled={isLoading}
-                className="chat-input-placeholder block w-full pl-12 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
+                className="chat-input-placeholder block w-full pl-36 pr-20 sm:pr-40 py-1.5 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[50px] sm:min-h-[80px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base leading-[21px] sm:leading-6 transition-all duration-200"
                 style={{ height: '50px' }}
               />
               {/* Image upload button */}
               <button
                 type="button"
                 onClick={open}
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors hover-scale active-press"
                 title="Attach images"
               >
                 <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5085,7 +5085,7 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
               <button
                 type="button"
                 onClick={() => setShowAutoFixPanel(true)}
-                className="absolute left-10 top-1/2 transform -translate-y-1/2 p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+                className="absolute left-14 top-1/2 transform -translate-y-1/2 p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors hover-scale active-press"
                 title="Auto Fix Errors"
               >
                 <Wrench className="w-5 h-5 text-purple-500" />
@@ -5095,7 +5095,7 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
               <button
                 type="button"
                 onClick={() => setShowContextVisualizer(true)}
-                className="absolute left-18 top-1/2 transform -translate-y-1/2 p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                className="absolute left-24 top-1/2 transform -translate-y-1/2 p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors hover-scale active-press"
                 title="Context Visualizer"
               >
                 <Network className="w-5 h-5 text-blue-500" />
@@ -5121,7 +5121,7 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                   e.preventDefault();
                   handleSubmit(e);
                 }}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-12 h-12 sm:w-12 sm:h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800 hover-scale active-press"
               >
                 <svg
                   className="w-4 h-4 sm:w-5 sm:h-5 text-white transform rotate-90"

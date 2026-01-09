@@ -86,7 +86,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       
       
       if (data.error) {
-        console.error('Git status error:', data.error);
+        console.log('Git status info:', data.error);
         setGitStatus({ error: data.error, details: data.details });
       } else {
         setGitStatus(data);
@@ -424,6 +424,10 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   const handleFileOpen = async (filePath) => {
     if (!onFileOpen) return;
 
+    console.log('[GitPanel] handleFileOpen called with filePath:', filePath);
+    console.log('[GitPanel] filePath length:', filePath.length);
+    console.log('[GitPanel] filePath char codes:', Array.from(filePath).map(c => c.charCodeAt(0)));
+
     try {
       // Fetch file content with diff information
       const response = await authenticatedFetch(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.name)}&file=${encodeURIComponent(filePath)}`);
@@ -452,15 +456,22 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
   };
 
   const fetchRecentCommits = async () => {
+    console.log('[GitPanel] fetchRecentCommits called for project:', selectedProject?.name);
     try {
-      const response = await authenticatedFetch(`/api/git/commits?project=${encodeURIComponent(selectedProject.name)}&limit=10`);
+      const url = `/api/git/commits?project=${encodeURIComponent(selectedProject.name)}&limit=10`;
+      console.log('[GitPanel] Fetching from:', url);
+      const response = await authenticatedFetch(url);
       const data = await response.json();
-      
+      console.log('[GitPanel] Commits response:', data);
+
       if (!data.error && data.commits) {
+        console.log('[GitPanel] Setting', data.commits.length, 'commits');
         setRecentCommits(data.commits);
+      } else {
+        console.log('[GitPanel] No commits in response or error:', data.error);
       }
     } catch (error) {
-      console.error('Error fetching commits:', error);
+      console.error('[GitPanel] Error fetching commits:', error);
     }
   };
 

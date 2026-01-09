@@ -1,7 +1,3 @@
-from fastapi import FastAPI, HTTPException, Request, Query, Body, WebSocket
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
 import sys
 import os
 import asyncio
@@ -10,6 +6,15 @@ import platform
 import subprocess
 import logging
 from datetime import datetime
+
+# Windows 事件循环策略设置 - 必须在任何异步操作之前设置
+if platform.system() == 'Windows':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from fastapi import FastAPI, HTTPException, Request, Query, Body, WebSocket
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
 
 # 配置日志
 logging.basicConfig(
@@ -86,25 +91,55 @@ def get_agent(cwd: str, mode: str = "yolo", model: str = None, mcp_servers: list
 
 def get_project_path(project_name: str) -> str:
     """安全地获取项目路径，防止路径遍历攻击"""
+    logger.info(f"[get_project_path] Looking for project: '{project_name}'")
+    
+    if not project_name:
+        logger.warning(f"[get_project_path] No project name provided, returning cwd: {os.getcwd()}")
+        return os.getcwd()
+
     # 首先尝试从注册表获取
     registered_path = project_registry.get_project_path(project_name)
     if registered_path:
+        logger.info(f"[get_project_path] Found in registry: {registered_path}")
         return registered_path
+    
+    logger.info(f"[get_project_path] Not in registry, checking project_manager...")
     
     # 然后从 project_manager 获取
     projects = project_manager.get_projects()
+    logger.info(f"[get_project_path] Found {len(projects)} projects in manager")
     for p in projects:
+        logger.info(f"[get_project_path]   - {p.get('name')}: {p.get('fullPath')}")
         if p["name"] == project_name:
             # 验证路径安全性
             is_valid, error, normalized = PathValidator.validate_project_path(p["fullPath"])
             if is_valid:
                 project_registry.register_project(p["name"], normalized)
+                logger.info(f"[get_project_path] Found in project_manager: {normalized}")
                 return normalized
-            else:
-                logger.warning(f"不安全的项目路径: {p['fullPath']} - {error}")
+
+    # 如果还是找不到，尝试在父目录下寻找匹配的项目文件夹名
+    # 获取 backend 的父目录即 agent_project
+    current_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logger.info(f"[get_project_path] Checking if project_name matches current_base: {project_name} == {os.path.basename(current_base)}")
+    # 检查是否匹配当前项目文件夹名
+    if project_name == os.path.basename(current_base):
+        logger.info(f"[get_project_path] Matched current_base: {current_base}")
+        return current_base
+        
+    # 检查当前工作目录的父目录
+    parent_dir = os.path.dirname(os.getcwd())
+    potential_path = os.path.join(parent_dir, project_name)
+    logger.info(f"[get_project_path] Checking potential_path: {potential_path}")
+    if os.path.isdir(potential_path):
+        is_valid, _, normalized = PathValidator.validate_project_path(potential_path)
+        if is_valid:
+            project_registry.register_project(project_name, normalized)
+            logger.info(f"[get_project_path] Found in parent_dir: {normalized}")
+            return normalized
     
     # 不再直接返回用户输入的路径，而是返回安全的默认值
-    logger.warning(f"未找到项目: {project_name}, 返回当前工作目录")
+    logger.warning(f"[get_project_path] 未找到项目: {project_name}, 返回当前工作目录: {os.getcwd()}")
     return os.getcwd()
 
 agent_cache = {}
@@ -432,7 +467,66 @@ async def save_project_file(project_name: str, req: SaveFileRequest):
 
 @app.get("/api/git/status")
 async def get_git_status(project: str = Query(None)):
-    return git_service.get_status(get_project_path(project))
+    path = get_project_path(project)
+    logger.info(f"Getting git status for project '{project}' at path: '{path}'")
+    return await git_service.get_status(path)
+
+@app.get("/api/git/branches")
+async def get_branches(project: str = Query(None)):
+    branches = await git_service.get_branches(get_project_path(project))
+    return {"branches": branches}
+
+@app.get("/api/git/remote-status")
+async def get_remote_status(project: str = Query(None)):
+    return await git_service.get_remote_status(get_project_path(project))
+
+@app.get("/api/git/diff")
+async def get_diff(project: str = Query(None), file: str = Query(None)):
+    diff = await git_service.get_diff(get_project_path(project), file)
+    return {"diff": diff}
+
+@app.get("/api/git/commits")
+async def get_commits(project: str = Query(None), limit: int = 10):
+    commits = await git_service.get_commits(get_project_path(project), limit)
+    return {"commits": commits}
+
+@app.get("/api/git/commit-diff")
+async def get_commit_diff(project: str = Query(None), commit: str = Query(None)):
+    diff = await git_service.get_commit_diff(get_project_path(project), commit)
+    return {"diff": diff}
+
+@app.post("/api/git/checkout")
+async def checkout_branch(req: CheckoutRequest):
+    await git_service.checkout(get_project_path(req.project), req.branch)
+    return {"success": True}
+
+@app.post("/api/git/create-branch")
+async def create_new_branch(req: CheckoutRequest):
+    await git_service.create_branch(get_project_path(req.project), req.branch)
+    return {"success": True}
+
+@app.post("/api/git/commit")
+async def commit_changes(req: CommitRequest):
+    output = await git_service.commit(get_project_path(req.project), req.message, req.files)
+    return {"success": True, "output": output}
+
+@app.get("/api/git/file-with-diff")
+async def get_file_with_diff(project: str = Query(None), file: str = Query(None)):
+    logger.info(f"[GitDiff] project={project}, file={file}")
+    path = get_project_path(project)
+    current_content = ""
+    try:
+        current_content = file_service.read_file(path, file)
+    except Exception as e:
+        logger.warning(f"[GitDiff] Failed to read current file: {e}")
+        pass # File might be deleted
+
+    old_content = await git_service.get_file_at_head(path, file)
+
+    return {
+        "currentContent": current_content,
+        "oldContent": old_content
+    }
 
 @app.websocket("/shell")
 async def websocket_shell(websocket: WebSocket, project: str = None):
@@ -1277,9 +1371,38 @@ async def get_mcp_servers(scope: str = "user"):
 async def catch_all(path_name: str, request: Request):
     """Catch-all 路由 - 处理未实现的 API 端点"""
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
+
+    # TaskMaster 相关的 API 返回特定格式
+    if path_name.startswith("taskmaster/"):
+        if path_name == "taskmaster/installation-status":
+            return JSONResponse(content={
+                "installation": {"isInstalled": False},
+                "isReady": False
+            }, status_code=200)
+        elif path_name.startswith("taskmaster/tasks/"):
+            return JSONResponse(content={
+                "tasks": [],
+                "total": 0,
+                "completed": 0
+            }, status_code=200)
+        else:
+            return JSONResponse(content={
+                "status": "not-implemented",
+                "message": f"TaskMaster endpoint '{path_name}' is not implemented"
+            }, status_code=200)
+
+    # MCP 相关的 API
+    if path_name.startswith("mcp-utils/"):
+        return JSONResponse(content={
+            "status": "not-implemented",
+            "message": f"MCP endpoint '{path_name}' is not implemented"
+        }, status_code=200)
+
+    # 默认响应
     return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
 
 if __name__ == "__main__":
     import uvicorn
-    if platform.system() == 'Windows': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    if platform.system() == 'Windows':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    uvicorn.run(app, host="0.0.0.0", port=8001)

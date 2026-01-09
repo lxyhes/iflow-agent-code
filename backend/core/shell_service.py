@@ -5,6 +5,7 @@ import platform
 import threading
 import json
 import queue
+import io
 from typing import Dict
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -33,22 +34,35 @@ class ShellSession:
         try:
             # Windows: 使用 powershell，Linux/Mac: 使用 bash
             if platform.system() == "Windows":
-                # PowerShell 交互模式 - 使用异步 subprocess
-                self.process = await asyncio.create_subprocess_exec(
-                    "powershell.exe", "-NoLogo", "-NoProfile", "-Command", "-",
-                    cwd=self.cwd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    creationflags=subprocess.CREATE_NO_WINDOW
+                # PowerShell 交互模式 - 在线程池中创建进程
+                loop = asyncio.get_event_loop()
+                self.process = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.Popen(
+                        ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", "-"],
+                        cwd=self.cwd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=0,
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
                 )
             else:
-                self.process = await asyncio.create_subprocess_exec(
-                    "/bin/bash", "-i",
-                    cwd=self.cwd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT
+                # Linux/Mac: 使用 bash
+                loop = asyncio.get_event_loop()
+                self.process = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.Popen(
+                        ["/bin/bash", "-i"],
+                        cwd=self.cwd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=0
+                    )
                 )
 
             print(f"[Shell] Process started, PID={self.process.pid}")
@@ -114,8 +128,11 @@ class ShellSession:
         
         if data and self.process and self.process.stdin:
             try:
-                # 写入命令
-                self.process.stdin.write(data.encode('utf-8'))
+                # 写入命令 - 如果是文本模式，直接写入字符串
+                if isinstance(self.process.stdin, io.TextIOWrapper):
+                    self.process.stdin.write(data)
+                else:
+                    self.process.stdin.write(data.encode('utf-8'))
                 self.process.stdin.flush()
                 print(f"[Shell] Sent: {repr(data)}")
             except Exception as e:
