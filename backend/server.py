@@ -6,6 +6,7 @@ import platform
 import subprocess
 import logging
 from datetime import datetime
+from typing import Optional
 
 # Windows 事件循环策略设置 - 必须在任何异步操作之前设置
 if platform.system() == 'Windows':
@@ -43,6 +44,11 @@ from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_de
 from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
 from backend.core.rag_service import RAGService, get_rag_service
 from backend.core.document_version_manager import get_version_manager
+from backend.core.project_developer_agent import get_project_developer_agent
+from backend.core.auto_heal_service import get_auto_heal_service
+from backend.core.report_generator_enhanced import get_enhanced_report_generator
+from backend.core.context_graph_service import get_context_graph_service
+from backend.core.gamification_service import get_gamification_service
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -160,6 +166,7 @@ def get_project_path(project_name: str) -> str:
 
 agent_cache = {}
 rag_cache = {}
+project_developer_cache = {}
 
 # AI Persona System Prompts
 PERSONA_PROMPTS = {
@@ -2464,6 +2471,531 @@ async def add_files_to_rag(project_name: str, request: Request):
             status_code=500
         )
 
+# ==================== RAG 增强 API ====================
+
+@app.post("/api/rag/delete/{project_name}")
+async def delete_rag_document(project_name: str, request: Request):
+    """删除 RAG 文档"""
+    try:
+        data = await request.json()
+        doc_id = data.get("doc_id")
+        
+        if not doc_id:
+            return JSONResponse(
+                content={"error": "缺少 doc_id 参数"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        result = rag_service.delete_document(doc_id)
+        
+        return result
+    
+    except Exception as e:
+        logger.exception(f"删除 RAG 文档失败: {e}")
+        return JSONResponse(
+            content={"error": f"删除失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/rag/update/{project_name}")
+async def update_rag_document(project_name: str, request: Request):
+    """更新 RAG 文档"""
+    try:
+        data = await request.json()
+        doc_id = data.get("doc_id")
+        new_content = data.get("content")
+        metadata = data.get("metadata")
+        
+        if not doc_id or not new_content:
+            return JSONResponse(
+                content={"error": "缺少 doc_id 或 content 参数"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        result = rag_service.update_document(doc_id, new_content, metadata)
+        
+        return result
+    
+    except Exception as e:
+        logger.exception(f"更新 RAG 文档失败: {e}")
+        return JSONResponse(
+            content={"error": f"更新失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/rag/retrieve-threshold/{project_name}")
+async def retrieve_rag_with_threshold(project_name: str, request: Request):
+    """带相似度阈值的检索"""
+    try:
+        data = await request.json()
+        query = data.get("query", "")
+        n_results = data.get("n_results", 5)
+        similarity_threshold = data.get("similarity_threshold", 0.3)
+        filters = data.get("filters")
+        
+        if not query:
+            return JSONResponse(
+                content={"error": "缺少 query 参数"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        result = rag_service.retrieve_with_threshold(
+            query=query,
+            n_results=n_results,
+            similarity_threshold=similarity_threshold,
+            filters=filters
+        )
+        
+        return result
+    
+    except Exception as e:
+        logger.exception(f"检索失败: {e}")
+        return JSONResponse(
+            content={"error": f"检索失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/rag/documents/{project_name}")
+async def get_all_rag_documents(project_name: str, filters: str = None):
+    """获取所有 RAG 文档"""
+    try:
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        filter_dict = json.loads(filters) if filters else None
+        documents = rag_service.get_all_documents(filter_dict)
+        
+        return {
+            "success": True,
+            "documents": documents,
+            "total": len(documents)
+        }
+    
+    except Exception as e:
+        logger.exception(f"获取文档列表失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/rag/delete-batch/{project_name}")
+async def delete_rag_documents_batch(project_name: str, request: Request):
+    """批量删除 RAG 文档"""
+    try:
+        data = await request.json()
+        doc_ids = data.get("doc_ids", [])
+        
+        if not doc_ids:
+            return JSONResponse(
+                content={"error": "缺少 doc_ids 参数"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        result = rag_service.delete_documents_batch(doc_ids)
+        
+        return result
+    
+    except Exception as e:
+        logger.exception(f"批量删除失败: {e}")
+        return JSONResponse(
+            content={"error": f"批量删除失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/rag/export/{project_name}")
+async def export_rag_documents(project_name: str, request: Request):
+    """导出 RAG 文档"""
+    try:
+        data = await request.json()
+        format = data.get("format", "json")
+        filters = data.get("filters")
+        
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        result = rag_service.export_documents(format, filters)
+        
+        return result
+    
+    except Exception as e:
+        logger.exception(f"导出失败: {e}")
+        return JSONResponse(
+            content={"error": f"导出失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/rag/search-history/{project_name}")
+async def get_rag_search_history(project_name: str, limit: int = 20):
+    """获取搜索历史记录"""
+    try:
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        history = rag_service.get_search_history(limit)
+        
+        return {
+            "success": True,
+            "history": history,
+            "total": len(history)
+        }
+    
+    except Exception as e:
+        logger.exception(f"获取搜索历史失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.delete("/api/rag/search-history/{project_name}")
+async def clear_rag_search_history(project_name: str):
+    """清除搜索历史记录"""
+    try:
+        project_path = get_project_path(project_name)
+        rag_service = rag_cache.get(project_path)
+        
+        if not rag_service:
+            rag_service = get_rag_service(project_path)
+            rag_cache[project_path] = rag_service
+        
+        rag_service.clear_search_history()
+        
+        return {
+            "success": True,
+            "message": "搜索历史已清除"
+        }
+    
+    except Exception as e:
+        logger.exception(f"清除搜索历史失败: {e}")
+        return JSONResponse(
+            content={"error": f"清除失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 自动修复 API ====================
+
+@app.post("/api/auto-heal/analyze")
+async def analyze_error(request: Request):
+    """分析错误输出"""
+    try:
+        data = await request.json()
+        error_output = data.get("error_output", "")
+        file_path = data.get("file_path")
+        
+        if not error_output:
+            return JSONResponse(
+                content={"error": "缺少 error_output 参数"},
+                status_code=400
+            )
+        
+        auto_heal_service = get_auto_heal_service()
+        analysis = await auto_heal_service.analyze_error(error_output, file_path)
+        
+        return analysis
+    
+    except Exception as e:
+        logger.exception(f"分析错误失败: {e}")
+        return JSONResponse(
+            content={"error": f"分析失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/auto-heal/fix")
+async def attempt_auto_fix(request: Request):
+    """尝试自动修复错误"""
+    try:
+        data = await request.json()
+        error_analysis = data.get("error_analysis")
+        context = data.get("context", {})
+        
+        if not error_analysis:
+            return JSONResponse(
+                content={"error": "缺少 error_analysis 参数"},
+                status_code=400
+            )
+        
+        async def event_generator():
+            auto_heal_service = get_auto_heal_service()
+            async for update in auto_heal_service.attempt_auto_fix(error_analysis, context):
+                yield f"data: {json.dumps(update)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"自动修复失败: {e}")
+        return JSONResponse(
+            content={"error": f"自动修复失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/auto-heal/history")
+async def get_auto_heal_history(limit: int = 20):
+    """获取自动修复历史"""
+    try:
+        auto_heal_service = get_auto_heal_service()
+        history = auto_heal_service.get_fix_history(limit)
+        
+        return {
+            "success": True,
+            "history": history,
+            "total": len(history)
+        }
+    
+    except Exception as e:
+        logger.exception(f"获取修复历史失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.delete("/api/auto-heal/history")
+async def clear_auto_heal_history():
+    """清除自动修复历史"""
+    try:
+        auto_heal_service = get_auto_heal_service()
+        auto_heal_service.clear_fix_history()
+        
+        return {
+            "success": True,
+            "message": "修复历史已清除"
+        }
+    
+    except Exception as e:
+        logger.exception(f"清除修复历史失败: {e}")
+        return JSONResponse(
+            content={"error": f"清除失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 智能报告 API ====================
+
+@app.get("/api/reports/daily/{project_name}")
+async def get_daily_report(project_name: str, date: Optional[str] = None):
+    """获取日报"""
+    try:
+        project_path = get_project_path(project_name)
+        report_generator = get_enhanced_report_generator()
+        
+        report = await report_generator.generate_daily_report(project_path, date)
+        
+        return {
+            "success": True,
+            "report": report
+        }
+    
+    except Exception as e:
+        logger.exception(f"生成日报失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/reports/weekly/{project_name}")
+async def get_weekly_report(project_name: str, start_date: Optional[str] = None):
+    """获取周报"""
+    try:
+        project_path = get_project_path(project_name)
+        report_generator = get_enhanced_report_generator()
+        
+        report = await report_generator.generate_weekly_report(project_path, start_date)
+        
+        return {
+            "success": True,
+            "report": report
+        }
+    
+    except Exception as e:
+        logger.exception(f"生成周报失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/reports/format")
+async def format_report(request: Request):
+    """格式化报告为文本"""
+    try:
+        data = await request.json()
+        report = data.get("report")
+        
+        if not report:
+            return JSONResponse(
+                content={"error": "缺少 report 参数"},
+                status_code=400
+            )
+        
+        report_generator = get_enhanced_report_generator()
+        formatted_text = report_generator.format_report_as_text(report)
+        
+        return {
+            "success": True,
+            "text": formatted_text
+        }
+    
+    except Exception as e:
+        logger.exception(f"格式化报告失败: {e}")
+        return JSONResponse(
+            content={"error": f"格式化失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 上下文图 API ====================
+
+@app.get("/api/context-graph/{project_name}")
+async def get_context_graph(project_name: str, max_depth: int = 3):
+    """获取上下文图"""
+    try:
+        project_path = get_project_path(project_name)
+        context_graph_service = get_context_graph_service()
+        
+        graph = context_graph_service.analyze_project_context(project_path, max_depth)
+        
+        return {
+            "success": True,
+            "graph": graph
+        }
+    
+    except Exception as e:
+        logger.exception(f"生成上下文图失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/context-graph/clear-cache")
+async def clear_context_graph_cache():
+    """清除上下文图缓存"""
+    try:
+        context_graph_service = get_context_graph_service()
+        context_graph_service.clear_cache()
+        
+        return {
+            "success": True,
+            "message": "缓存已清除"
+        }
+    
+    except Exception as e:
+        logger.exception(f"清除缓存失败: {e}")
+        return JSONResponse(
+            content={"error": f"清除失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 游戏化系统 API ====================
+
+@app.get("/api/gamification/progress/{user_id}")
+async def get_user_progress(user_id: str):
+    """获取用户进度"""
+    try:
+        gamification_service = get_gamification_service()
+        progress = gamification_service.get_user_progress(user_id)
+        
+        # 获取等级信息
+        level_info = gamification_service.get_level_info(progress["level"])
+        
+        return {
+            "success": True,
+            "progress": progress,
+            "level_info": level_info
+        }
+    
+    except Exception as e:
+        logger.exception(f"获取用户进度失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/gamification/achievements/{user_id}")
+async def get_user_achievements(user_id: str):
+    """获取用户成就列表"""
+    try:
+        gamification_service = get_gamification_service()
+        achievements = gamification_service.get_achievements(user_id)
+        
+        return {
+            "success": True,
+            "achievements": achievements
+        }
+    
+    except Exception as e:
+        logger.exception(f"获取成就列表失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/gamification/update-stat")
+async def update_user_stat(request: Request):
+    """更新用户统计"""
+    try:
+        data = await request.json()
+        user_id = data.get("user_id")
+        stat_type = data.get("stat_type")
+        value = data.get("value", 1)
+        project_path = data.get("project_path")
+        
+        if not user_id or not stat_type:
+            return JSONResponse(
+                content={"error": "缺少 user_id 或 stat_type 参数"},
+                status_code=400
+            )
+        
+        gamification_service = get_gamification_service()
+        progress = gamification_service.update_stat(user_id, stat_type, value, project_path)
+        
+        return {
+            "success": True,
+            "progress": progress
+        }
+    
+    except Exception as e:
+        logger.exception(f"更新统计失败: {e}")
+        return JSONResponse(
+            content={"error": f"更新失败: {str(e)}"},
+            status_code=500
+        )
+
 # --- Catch-all 路由 ---
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
@@ -2661,6 +3193,558 @@ async def get_version_statistics(project_name: str):
         logger.exception(f"获取版本统计失败: {e}")
         return JSONResponse(
             content={"error": f"获取版本统计失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 项目开发 Agent API ====================
+
+@app.get("/api/project-developer/health/{project_name}")
+async def get_project_health(project_name: str):
+    """获取项目健康度报告"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        health_report = await agent.get_project_health()
+        
+        return {
+            "success": True,
+            "health": health_report
+        }
+    except Exception as e:
+        logger.exception(f"获取项目健康度失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取项目健康度失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/develop/{project_name}")
+async def develop_feature(project_name: str, request: Request):
+    """开发新功能"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        feature_description = data.get("feature_description", "")
+        create_tests = data.get("create_tests", True)
+        auto_fix = data.get("auto_fix", True)
+        
+        if not feature_description:
+            return JSONResponse(
+                content={"error": "功能描述不能为空"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.develop_feature(
+                    feature_description=feature_description,
+                    create_tests=create_tests,
+                    auto_fix=auto_fix
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"功能开发失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"功能开发请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"功能开发请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/debug/{project_name}")
+async def debug_issue(project_name: str, request: Request):
+    """调试问题"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        error_message = data.get("error_message", "")
+        stack_trace = data.get("stack_trace", "")
+        context = data.get("context", {})
+        
+        if not error_message:
+            return JSONResponse(
+                content={"error": "错误消息不能为空"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.debug_issue(
+                    error_message=error_message,
+                    stack_trace=stack_trace,
+                    context=context
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"调试失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"调试请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"调试请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/code-review/{project_name}")
+async def code_review(project_name: str, request: Request):
+    """代码审查"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        file_path = data.get("file_path")
+        code = data.get("code")
+        review_type = data.get("review_type", "comprehensive")
+        
+        if not file_path and not code:
+            return JSONResponse(
+                content={"error": "必须提供文件路径或代码内容"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.code_review(
+                    file_path=file_path,
+                    code=code,
+                    review_type=review_type
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"代码审查失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"代码审查请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"代码审查请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/chat/{project_name}")
+async def chat_with_context(project_name: str, request: Request):
+    """带项目上下文的对话"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        user_input = data.get("message", "")
+        use_rag = data.get("use_rag", True)
+        use_context_graph = data.get("use_context_graph", True)
+        n_results = data.get("n_results", 5)
+        
+        if not user_input:
+            return JSONResponse(
+                content={"error": "消息不能为空"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.chat_with_context(
+                    user_input=user_input,
+                    use_rag=use_rag,
+                    use_context_graph=use_context_graph,
+                    n_results=n_results
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"对话失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"对话请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"对话请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/config/{project_name}")
+async def set_dev_mode_config(project_name: str, request: Request):
+    """设置开发模式配置"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        agent.set_dev_mode(**data)
+        
+        return {
+            "success": True,
+            "message": "开发模式配置已更新"
+        }
+    except Exception as e:
+        logger.exception(f"设置开发模式配置失败: {e}")
+        return JSONResponse(
+            content={"error": f"设置开发模式配置失败: {str(e)}"},
+            status_code=500
+        )
+
+# ==================== 项目开发 Agent 高级功能 API ====================
+
+@app.post("/api/project-developer/refactor/{project_name}")
+async def refactor_code(project_name: str, request: Request):
+    """代码重构"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        file_path = data.get("file_path")
+        refactor_type = data.get("refactor_type", "optimize")
+        target = data.get("target")
+        
+        if not file_path:
+            return JSONResponse(
+                content={"error": "文件路径不能为空"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.refactor_code(
+                    file_path=file_path,
+                    refactor_type=refactor_type,
+                    target=target
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"代码重构失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"代码重构请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"代码重构请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/generate-doc/{project_name}")
+async def generate_documentation(project_name: str, request: Request):
+    """生成文档"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        target = data.get("target", "project")
+        format = data.get("format", "markdown")
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.generate_documentation(
+                    target=target,
+                    format=format
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"文档生成失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"文档生成请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"文档生成请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/analyze-performance/{project_name}")
+async def analyze_performance(project_name: str, request: Request):
+    """性能分析"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        file_path = data.get("file_path")
+        code = data.get("code")
+        
+        if not file_path and not code:
+            return JSONResponse(
+                content={"error": "必须提供文件路径或代码内容"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.analyze_performance(
+                    file_path=file_path,
+                    code=code
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"性能分析失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"性能分析请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"性能分析请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/security-scan/{project_name}")
+async def security_scan(project_name: str, request: Request):
+    """安全扫描"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        file_path = data.get("file_path")
+        code = data.get("code")
+        
+        if not file_path and not code:
+            return JSONResponse(
+                content={"error": "必须提供文件路径或代码内容"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.security_scan(
+                    file_path=file_path,
+                    code=code
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"安全扫描失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"安全扫描请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"安全扫描请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/project-developer/intelligent-completion/{project_name}")
+async def intelligent_completion(project_name: str, request: Request):
+    """智能代码补全"""
+    try:
+        project_path = get_project_path(project_name)
+        data = await request.json()
+        
+        file_path = data.get("file_path")
+        line_number = data.get("line_number", 1)
+        context_lines = data.get("context_lines", 10)
+        
+        if not file_path:
+            return JSONResponse(
+                content={"error": "文件路径不能为空"},
+                status_code=400
+            )
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        
+        async def event_generator():
+            try:
+                async for message in agent.intelligent_completion(
+                    file_path=file_path,
+                    line_number=line_number,
+                    context_lines=context_lines
+                ):
+                    yield f"data: {json.dumps(message)}\n\n"
+            except Exception as e:
+                logger.exception(f"智能补全失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"智能补全请求失败: {e}")
+        return JSONResponse(
+            content={"error": f"智能补全请求失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/project-developer/smart-suggestions/{project_name}")
+async def get_smart_suggestions(project_name: str, current_context: str = Query(...), task_type: str = Query("general")):
+    """获取智能建议"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        suggestions = await agent.get_smart_suggestions(current_context, task_type)
+        
+        return {
+            "success": True,
+            "suggestions": suggestions
+        }
+    except Exception as e:
+        logger.exception(f"获取智能建议失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取智能建议失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/project-developer/performance-metrics/{project_name}")
+async def get_performance_metrics(project_name: str):
+    """获取性能指标"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        if project_path not in project_developer_cache:
+            project_developer_cache[project_path] = get_project_developer_agent(
+                project_path=project_path,
+                mode=global_config.get("mode", "yolo"),
+                model=global_config.get("model"),
+                persona=global_config.get("persona", "senior")
+            )
+            await project_developer_cache[project_path].initialize_services()
+        
+        agent = project_developer_cache[project_path]
+        metrics = agent.get_performance_metrics()
+        
+        return {
+            "success": True,
+            "metrics": metrics
+        }
+    except Exception as e:
+        logger.exception(f"获取性能指标失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取性能指标失败: {str(e)}"},
             status_code=500
         )
 

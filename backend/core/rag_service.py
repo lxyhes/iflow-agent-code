@@ -773,6 +773,52 @@ class TFIDFRetriever:
         except Exception as e:
             logger.error(f"Error getting stats: {e}")
             return {"error": str(e)}
+    
+    def delete_document(self, doc_id: str):
+        """删除特定文档"""
+        try:
+            # 从文档列表中删除
+            self.documents = [doc for doc in self.documents if doc.doc_id != doc_id]
+            
+            # 重建索引
+            if self.documents:
+                texts = [doc.content for doc in self.documents]
+                self.embeddings = self.vectorizer.transform(texts)
+            else:
+                self.embeddings = None
+            
+            # 保存索引
+            self._save_index()
+            
+            logger.info(f"Deleted document: {doc_id}")
+        except Exception as e:
+            logger.error(f"Error deleting document {doc_id}: {e}")
+    
+    def get_all_documents(self, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """获取所有文档"""
+        try:
+            results = []
+            for doc in self.documents:
+                # 应用过滤条件
+                if filters:
+                    match = True
+                    for key, value in filters.items():
+                        if doc.metadata.get(key) != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                
+                results.append({
+                    "id": doc.doc_id,
+                    "content": doc.content,
+                    "metadata": doc.metadata
+                })
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error getting all documents: {e}")
+            return []
 
 
 class RAGRetriever:
@@ -1101,6 +1147,10 @@ class RAGService:
         self._initialized = False
         self.use_hybrid = use_hybrid
         
+        # 搜索历史记录
+        self.search_history = []
+        self._load_search_history()
+        
         # 自动选择检索器
         if use_hybrid:
             # 使用混合检索
@@ -1318,19 +1368,25 @@ class RAGService:
             "deleted_files": len(deleted_files)
         }
     
-    def retrieve(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, n_results: int = 5, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
         检索相关文档
         
         Args:
             query: 查询文本
             n_results: 返回结果数量
+            filters: 元数据过滤条件
         
         Returns:
             检索结果
         """
         self._ensure_initialized()
-        return self.retriever.retrieve(query, n_results)
+        results = self.retriever.retrieve(query, n_results, filters)
+        
+        # 记录搜索历史
+        self._add_search_history(query, len(results), filters)
+        
+        return results
     
     async def add_document(
         self,
@@ -1497,6 +1553,322 @@ class RAGService:
         if self.retriever:
             self.retriever.delete_collection()
         self._initialized = False
+    
+    def delete_document(self, doc_id: str) -> Dict[str, Any]:
+        """
+        删除特定文档
+        
+        Args:
+            doc_id: 文档 ID
+        
+        Returns:
+            删除结果
+        """
+        self._ensure_initialized()
+        
+        try:
+            if hasattr(self.retriever, 'delete_document'):
+                self.retriever.delete_document(doc_id)
+                logger.info(f"Deleted document: {doc_id}")
+                return {
+                    "success": True,
+                    "message": f"成功删除文档: {doc_id}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "当前检索器不支持删除单个文档"
+                }
+        except Exception as e:
+            logger.error(f"Error deleting document {doc_id}: {e}")
+            return {
+                "success": False,
+                "message": f"删除文档失败: {str(e)}"
+            }
+    
+    def update_document(self, doc_id: str, new_content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        更新已存在的文档
+        
+        Args:
+            doc_id: 文档 ID
+            new_content: 新内容
+            metadata: 新的元数据（可选）
+        
+        Returns:
+            更新结果
+        """
+        self._ensure_initialized()
+        
+        try:
+            # 先删除旧文档
+            delete_result = self.delete_document(doc_id)
+            
+            if not delete_result.get("success"):
+                return delete_result
+            
+            # 创建新文档
+            new_doc = Document(
+                content=new_content,
+                metadata=metadata or {},
+                doc_id=doc_id
+            )
+            
+            # 添加新文档
+            if hasattr(self.retriever, 'add_documents'):
+                import asyncio
+                asyncio.run(self.retriever.add_documents([new_doc]))
+                logger.info(f"Updated document: {doc_id}")
+                return {
+                    "success": True,
+                    "message": f"成功更新文档: {doc_id}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "当前检索器不支持更新文档"
+                }
+        except Exception as e:
+            logger.error(f"Error updating document {doc_id}: {e}")
+            return {
+                "success": False,
+                "message": f"更新文档失败: {str(e)}"
+            }
+    
+    def retrieve_with_threshold(
+        self,
+        query: str,
+        n_results: int = 5,
+        similarity_threshold: float = 0.3,
+        filters: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        带相似度阈值的检索
+        
+        Args:
+            query: 查询文本
+            n_results: 返回结果数量
+            similarity_threshold: 最低相似度阈值（0-1）
+            filters: 元数据过滤条件
+        
+        Returns:
+            检索结果
+        """
+        self._ensure_initialized()
+        
+        try:
+            results = self.retriever.retrieve(query, n_results=n_results, filters=filters)
+            
+            # 过滤低相似度结果
+            filtered_results = []
+            for result in results:
+                similarity = result.get("similarity", 0.0)
+                if similarity >= similarity_threshold:
+                    filtered_results.append(result)
+            
+            logger.info(f"Retrieved {len(filtered_results)}/{len(results)} results above threshold {similarity_threshold}")
+            
+            return {
+                "results": filtered_results,
+                "total": len(filtered_results),
+                "threshold": similarity_threshold,
+                "filtered": len(results) - len(filtered_results)
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving with threshold: {e}")
+            return {
+                "results": [],
+                "total": 0,
+                "threshold": similarity_threshold,
+                "error": str(e)
+            }
+    
+    def get_all_documents(self, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """
+        获取所有文档
+        
+        Args:
+            filters: 元数据过滤条件
+        
+        Returns:
+            文档列表
+        """
+        self._ensure_initialized()
+        
+        try:
+            if hasattr(self.retriever, 'get_all_documents'):
+                return self.retriever.get_all_documents(filters)
+            else:
+                logger.warning("Current retriever does not support get_all_documents")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting all documents: {e}")
+            return []
+    
+    def delete_documents_batch(self, doc_ids: List[str]) -> Dict[str, Any]:
+        """
+        批量删除文档
+        
+        Args:
+            doc_ids: 文档 ID 列表
+        
+        Returns:
+            删除结果
+        """
+        self._ensure_initialized()
+        
+        success_count = 0
+        failed_count = 0
+        errors = []
+        
+        for doc_id in doc_ids:
+            result = self.delete_document(doc_id)
+            if result.get("success"):
+                success_count += 1
+            else:
+                failed_count += 1
+                errors.append({
+                    "doc_id": doc_id,
+                    "error": result.get("message", "Unknown error")
+                })
+        
+        logger.info(f"Batch delete: {success_count} succeeded, {failed_count} failed")
+        
+        return {
+            "success": True,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "total": len(doc_ids),
+            "errors": errors
+        }
+    
+    def export_documents(self, format: str = "json", filters: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        导出文档
+        
+        Args:
+            format: 导出格式（json 或 csv）
+            filters: 元数据过滤条件
+        
+        Returns:
+            导出结果
+        """
+        self._ensure_initialized()
+        
+        try:
+            documents = self.get_all_documents(filters)
+            
+            if format == "json":
+                return {
+                    "success": True,
+                    "format": "json",
+                    "data": documents,
+                    "count": len(documents)
+                }
+            elif format == "csv":
+                import csv
+                import io
+                
+                output = io.StringIO()
+                if documents:
+                    fieldnames = ["id", "content"] + list(documents[0].get("metadata", {}).keys())
+                    writer = csv.DictWriter(output, fieldnames=fieldnames)
+                    writer.writeheader()
+                    
+                    for doc in documents:
+                        row = {
+                            "id": doc.get("id", ""),
+                            "content": doc.get("content", "")
+                        }
+                        row.update(doc.get("metadata", {}))
+                        writer.writerow(row)
+                
+                return {
+                    "success": True,
+                    "format": "csv",
+                    "data": output.getvalue(),
+                    "count": len(documents)
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"不支持的导出格式: {format}"
+                }
+        except Exception as e:
+            logger.error(f"Error exporting documents: {e}")
+            return {
+                "success": False,
+                "message": f"导出失败: {str(e)}"
+            }
+    
+    def _load_search_history(self):
+        """加载搜索历史记录"""
+        history_file = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "..", "storage", "rag",
+            hashlib.md5(self.project_path.encode()).hexdigest(),
+            "search_history.json"
+        )
+        
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    self.search_history = json.load(f)
+                logger.info(f"Loaded {len(self.search_history)} search history entries")
+            except Exception as e:
+                logger.error(f"Failed to load search history: {e}")
+                self.search_history = []
+    
+    def _save_search_history(self):
+        """保存搜索历史记录"""
+        history_file = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "..", "storage", "rag",
+            hashlib.md5(self.project_path.encode()).hexdigest(),
+            "search_history.json"
+        )
+        
+        os.makedirs(os.path.dirname(history_file), exist_ok=True)
+        
+        try:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.search_history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save search history: {e}")
+    
+    def _add_search_history(self, query: str, results_count: int, filters: Dict[str, Any] = None):
+        """添加搜索历史记录"""
+        entry = {
+            "query": query,
+            "results_count": results_count,
+            "filters": filters,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 添加到历史记录（保留最近 100 条）
+        self.search_history.insert(0, entry)
+        self.search_history = self.search_history[:100]
+        
+        # 保存到文件
+        self._save_search_history()
+    
+    def get_search_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        获取搜索历史记录
+        
+        Args:
+            limit: 返回记录数量
+        
+        Returns:
+            搜索历史记录列表
+        """
+        return self.search_history[:limit]
+    
+    def clear_search_history(self):
+        """清除搜索历史记录"""
+        self.search_history = []
+        self._save_search_history()
+        logger.info("Cleared search history")
 
 
 # 便捷函数

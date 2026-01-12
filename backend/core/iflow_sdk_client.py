@@ -238,8 +238,7 @@ class IFlowSDKClient:
             process_start_port=self.process_start_port,
             timeout=self.timeout,
             cwd=self.cwd,
-            log_level=self.log_level,
-            session_id=self.session_id
+            log_level=self.log_level
         )
 
         # 设置工具执行权限模式

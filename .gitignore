@@ -3,35 +3,115 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.env
-.venv
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.pytest_cache/
+.coverage
+*.cover
+htmlcov/
+.tox/
+.mypy_cache/
+*.manifest
+*.spec
+
+# --- 环境变量 (敏感信息) ---
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development.local
+.secrets/
+*.pem
+*.key
+*.crt
 
 # --- Node.js Frontend ---
 frontend/node_modules/
 frontend/dist/
+frontend/build/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/pnpm-error.log*
+frontend/.pnpm-store/
+frontend/.cache/
 
 # --- IDE & OS ---
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
 Thumbs.db
+*.log
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 
 # --- Project Specific ---
-# Ignore the mock projects file if you want to keep data local
-# projects.json
-# Ignore local temporary storage
 tmp/
 logs/
+storage/
+*.sqlite3
+*.db
+*.sqlite
+.backup/
+*.bak
+*.orig
+*.rej
+*~
+.#*
+.#*
+
+# --- Session & Cache Data ---
+storage/backend/sessions/*.jsonl
+!storage/backend/sessions/.gitkeep
+storage/backend/vector_db/
+storage/backend/uploads/
+*.uploaded
+
+# --- Test & Coverage ---
+htmlcov/
+.coverage
+coverage.xml
+.nyc_output/
+
+# --- Python Virtual Environment ---
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg
+pip-delete-this-directory.txt
+
+# --- Secrets & Credentials ---
+.creds/
+credentials.json
+token.json
+*.secret
+*password*
+*credential*
+
+# --- Docker & DevOps ---
+.docker/
+docker-compose.override.yml
+.dockerenv
+*.tar
+*.tar.gz
