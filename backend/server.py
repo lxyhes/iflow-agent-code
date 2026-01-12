@@ -586,6 +586,235 @@ async def commit_changes(req: CommitRequest):
     output = await git_service.commit(get_project_path(req.project), req.message, req.files)
     return {"success": True, "output": output}
 
+@app.post("/api/git/generate-commit-message")
+async def generate_commit_message(request: Request):
+    """生成 Git 提交消息"""
+    try:
+        data = await request.json()
+        project_name = data.get("project")
+        files = data.get("files", [])
+        provider = data.get("provider", "claude")
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        if not files or len(files) == 0:
+            return JSONResponse(
+                content={"error": "没有选择文件"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        
+        # 获取文件差异和详细信息
+        file_changes = []
+        for file in files:
+            try:
+                current_content = file_service.read_file(project_path, file)
+                old_content = await git_service.get_file_at_head(project_path, file)
+                
+                # 分析变更
+                change_info = {
+                    "file": file,
+                    "old_lines": old_content.split('\n') if old_content else [],
+                    "new_lines": current_content.split('\n') if current_content else [],
+                    "is_new": old_content is None or old_content == "",
+                    "is_deleted": current_content is None or current_content == "",
+                    "ext": os.path.splitext(file)[1].lower()
+                }
+                
+                # 统计变更行数
+                if old_content and current_content:
+                    old_set = set(old_content.split('\n'))
+                    new_set = set(current_content.split('\n'))
+                    added_lines = len(new_set - old_set)
+                    removed_lines = len(old_set - new_set)
+                    change_info["added"] = added_lines
+                    change_info["removed"] = removed_lines
+                elif not old_content and current_content:
+                    change_info["added"] = len(current_content.split('\n'))
+                    change_info["removed"] = 0
+                elif old_content and not current_content:
+                    change_info["added"] = 0
+                    change_info["removed"] = len(old_content.split('\n'))
+                
+                file_changes.append(change_info)
+                
+            except Exception as e:
+                logger.warning(f"Failed to analyze {file}: {e}")
+        
+        # 分析变更特征
+        features = {
+            "keywords": set(),
+            "type": "chore",
+            "components": [],
+            "scope": ""
+        }
+        
+        # 提取文件名中的关键信息
+        for change in file_changes:
+            file_path = change["file"]
+            file_name = os.path.basename(file_path)
+            name_without_ext = os.path.splitext(file_name)[0]
+            
+            # 提取关键组件名
+            if name_without_ext:
+                features["components"].append(name_without_ext)
+            
+            # 分析内容关键词
+            if change["new_lines"]:
+                content_lower = ' '.join(line.lower() for line in change["new_lines"])
+                
+                # 修复相关
+                fix_keywords = ['修复', 'fix', '解决', 'solve', '修正', 'correct', 'bug', 'error', '异常', 'exception']
+                for kw in fix_keywords:
+                    if kw in content_lower:
+                        features["keywords"].add('fix')
+                        break
+                
+                # 功能相关
+                feat_keywords = ['新增', '新增功能', 'add', 'implement', 'create', '新增', '实现', '创建']
+                for kw in feat_keywords:
+                    if kw in content_lower:
+                        features["keywords"].add('feat')
+                        break
+                
+                # 重构相关
+                refactor_keywords = ['重构', 'refactor', '优化', 'optimize', '改进', 'improve', 'extract', '简化']
+                for kw in refactor_keywords:
+                    if kw in content_lower:
+                        features["keywords"].add('refactor')
+                        break
+                
+                # 测试相关
+                if 'test' in content_lower or 'spec' in content_lower or '测试' in content_lower:
+                    features["keywords"].add('test')
+        
+        # 确定变更类型
+        if 'fix' in features["keywords"]:
+            features["type"] = "fix"
+        elif 'feat' in features["keywords"]:
+            features["type"] = "feat"
+        elif 'refactor' in features["keywords"]:
+            features["type"] = "refactor"
+        elif 'test' in features["keywords"]:
+            features["type"] = "test"
+        else:
+            # 根据文件扩展名推断
+            for change in file_changes:
+                ext = change["ext"]
+                if ext in ['.md', '.txt', '.rst', '.docx']:
+                    features["type"] = "docs"
+                    break
+                elif 'test' in change["file"].lower():
+                    features["type"] = "test"
+                    break
+        
+        # 确定作用域（主要组件或模块）
+        if features["components"]:
+            # 找出最常出现的组件名
+            from collections import Counter
+            component_counts = Counter(features["components"])
+            main_component = component_counts.most_common(1)[0][0]
+            features["scope"] = main_component
+        
+        # 生成提交消息
+        commit_message = ""
+        type_prefix = features["type"]
+        
+        # 根据类型和作用域生成描述
+        if features["scope"]:
+            scope = features["scope"]
+            
+            if type_prefix == "feat":
+                commit_message = f"新增{scope}功能"
+            elif type_prefix == "fix":
+                commit_message = f"修复{scope}问题"
+            elif type_prefix == "docs":
+                commit_message = f"更新{scope}文档"
+            elif type_prefix == "style":
+                commit_message = f"调整{scope}代码格式"
+            elif type_prefix == "refactor":
+                commit_message = f"优化{scope}结构"
+            elif type_prefix == "test":
+                commit_message = f"完善{scope}测试"
+            else:
+                commit_message = f"更新{scope}"
+        else:
+            # 没有明确作用域，使用通用描述
+            generic_messages = {
+                "feat": "新增功能",
+                "fix": "修复问题",
+                "docs": "更新文档",
+                "style": "调整代码格式",
+                "refactor": "优化代码结构",
+                "test": "完善测试",
+                "chore": "更新项目"
+            }
+            commit_message = generic_messages[type_prefix]
+        
+        # 添加类型前缀
+        if not commit_message.startswith(type_prefix + ":"):
+            commit_message = f"{type_prefix}: {commit_message}"
+        
+        # 优化消息，使其更自然
+        commit_message = commit_message.replace("新增新增", "新增")
+        commit_message = commit_message.replace("更新更新", "更新")
+        commit_message = commit_message.replace("修复修复", "修复")
+        commit_message = commit_message.replace("优化优化", "优化")
+        
+        # 限制长度
+        if len(commit_message) > 80:
+            # 如果太长，尝试缩短
+            parts = commit_message.split(": ")
+            if len(parts) == 2:
+                prefix = parts[0]
+                desc = parts[1]
+                # 截断描述
+                if len(desc) > 50:
+                    desc = desc[:50]
+                commit_message = f"{prefix}: {desc}"
+        
+        logger.info(f"生成的提交消息: {commit_message}")
+        
+        return {
+            "success": True,
+            "message": commit_message
+        }
+    
+    except Exception as e:
+        logger.exception(f"生成提交消息失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成提交消息失败: {str(e)}"},
+            status_code=500
+        )
+        commit_message = full_response.strip()
+        
+        # 清理常见的 AI 回复前缀
+        prefixes_to_remove = ["提交消息：", "Commit message:", "建议的提交消息：", "Suggested commit message:"]
+        for prefix in prefixes_to_remove:
+            if commit_message.startswith(prefix):
+                commit_message = commit_message[len(prefix):].strip()
+        
+        # 限制长度
+        if len(commit_message) > 200:
+            commit_message = commit_message[:200]
+        
+        return {
+            "success": True,
+            "message": commit_message
+        }
+    
+    except Exception as e:
+        logger.exception(f"生成提交消息失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成提交消息失败: {str(e)}"},
+            status_code=500
+        )
+
 @app.get("/api/git/file-with-diff")
 async def get_file_with_diff(project: str = Query(None), file: str = Query(None)):
     logger.info(f"[GitDiff] project={project}, file={file}")
