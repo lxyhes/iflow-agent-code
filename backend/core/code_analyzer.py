@@ -501,3 +501,15 @@ def analyze_code(file_path: str, content: str) -> Dict[str, Any]:
     """分析代码文件"""
     analyzer = CodeAnalyzer()
     return analyzer.analyze(file_path, content)
+
+
+# 全局实例
+_code_analyzer = None
+
+
+def get_code_analyzer() -> CodeAnalyzer:
+    """获取代码分析器实例"""
+    global _code_analyzer
+    if _code_analyzer is None:
+        _code_analyzer = CodeAnalyzer()
+    return _code_analyzer

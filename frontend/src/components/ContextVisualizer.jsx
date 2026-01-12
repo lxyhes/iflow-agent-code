@@ -37,21 +37,19 @@ const ContextVisualizer = ({ projectPath, visible, onClose, onFileClick }) => {
         setError(null);
 
         try {
-            const response = await authenticatedFetch('/api/context/analyze-dependencies', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    projectPath: projectPath
-                })
-            });
+            // 使用新的 API 端点
+            const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(projectPath)}/context-graph?max_depth=3`);
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success) {
-                    setStats(data.data.stats);
-                    transformToReactFlow(data.data);
+                
+                if (data.success && data.graph) {
+                    const graphData = data.graph;
+                    setStats(graphData.metadata);
+                    
+                    const { flowNodes, flowEdges } = transformToReactFlow(graphData);
+                    setNodes(flowNodes);
+                    setEdges(flowEdges);
                 } else {
                     setError(data.error || '加载依赖关系失败');
                 }

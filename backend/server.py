@@ -49,6 +49,15 @@ from backend.core.auto_heal_service import get_auto_heal_service
 from backend.core.report_generator_enhanced import get_enhanced_report_generator
 from backend.core.context_graph_service import get_context_graph_service
 from backend.core.gamification_service import get_gamification_service
+from backend.core.sandbox_service import get_sandbox_service
+from backend.core.refactor_suggester import get_refactor_suggester
+from backend.core.test_generator import get_test_generator
+from backend.core.health_analyzer import get_health_analyzer
+from backend.core.code_completion_service import get_code_completion_service
+from backend.core.doc_generator import get_doc_generator
+from backend.core.code_review_service import get_code_review_service
+from backend.core.performance_monitor import get_performance_monitor
+from backend.core.project_template_service import get_project_template_service
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -608,127 +617,116 @@ async def generate_commit_message(request: Request):
             )
         
         project_path = get_project_path(project_name)
+        logger.info(f"开始生成提交消息: 项目={project_name}, 文件数={len(files)}")
         
-        # 获取文件差异和详细信息
+        # 收集文件变更信息
         file_changes = []
         for file in files:
             try:
                 current_content = file_service.read_file(project_path, file)
                 old_content = await git_service.get_file_at_head(project_path, file)
                 
-                # 分析变更
+                # 分析文件变更
                 change_info = {
                     "file": file,
-                    "old_lines": old_content.split('\n') if old_content else [],
-                    "new_lines": current_content.split('\n') if current_content else [],
+                    "file_name": os.path.basename(file),
+                    "file_ext": os.path.splitext(file)[1].lower(),
+                    "old_content": old_content,
+                    "new_content": current_content,
                     "is_new": old_content is None or old_content == "",
                     "is_deleted": current_content is None or current_content == "",
-                    "ext": os.path.splitext(file)[1].lower()
+                    "is_modified": old_content is not None and current_content is not None and old_content != current_content
                 }
                 
-                # 统计变更行数
-                if old_content and current_content:
-                    old_set = set(old_content.split('\n'))
-                    new_set = set(current_content.split('\n'))
-                    added_lines = len(new_set - old_set)
-                    removed_lines = len(old_set - new_set)
-                    change_info["added"] = added_lines
-                    change_info["removed"] = removed_lines
-                elif not old_content and current_content:
-                    change_info["added"] = len(current_content.split('\n'))
-                    change_info["removed"] = 0
-                elif old_content and not current_content:
-                    change_info["added"] = 0
-                    change_info["removed"] = len(old_content.split('\n'))
+                # 分析代码变更行数
+                if change_info["is_modified"]:
+                    old_lines = old_content.split('\n')
+                    new_lines = current_content.split('\n')
+                    removed = len([l for l in old_lines if l.strip()]) - len([l for l in new_lines if l.strip()])
+                    added = len([l for l in new_lines if l.strip()]) - len([l for l in old_lines if l.strip()])
+                    change_info["lines_added"] = max(0, added)
+                    change_info["lines_removed"] = max(0, removed)
+                elif change_info["is_new"]:
+                    change_info["lines_added"] = len([l for l in current_content.split('\n') if l.strip()])
+                    change_info["lines_removed"] = 0
+                elif change_info["is_deleted"]:
+                    change_info["lines_added"] = 0
+                    change_info["lines_removed"] = len([l for l in old_content.split('\n') if l.strip()])
                 
                 file_changes.append(change_info)
                 
             except Exception as e:
-                logger.warning(f"Failed to analyze {file}: {e}")
+                logger.warning(f"分析文件 {file} 失败: {e}")
         
-        # 分析变更特征
-        features = {
-            "keywords": set(),
+        # 智能分析变更特征
+        analysis = {
             "type": "chore",
-            "components": [],
-            "scope": ""
+            "scope": "",
+            "keywords": set(),
+            "components": []
         }
         
-        # 提取文件名中的关键信息
+        # 扩展的关键词库
+        keyword_map = {
+            "fix": ["修复", "fix", "解决", "solve", "修正", "correct", "bug", "error", "错误", "异常", "exception", "问题", "issue", "缺陷", "defect"],
+            "feat": ["新增", "add", "新增功能", "implement", "实现", "create", "创建", "build", "开发", "develop", "添加", "append"],
+            "refactor": ["重构", "refactor", "优化", "optimize", "改进", "improve", "提取", "extract", "简化", "simplify", "重写", "rewrite"],
+            "perf": ["性能", "performance", "优化", "optimize", "加速", "speed", "缓存", "cache", "异步", "async", "并发", "concurrent"],
+            "style": ["格式", "format", "代码风格", "style", "lint", "缩进", "indent", "空格", "space", "换行", "newline"],
+            "test": ["测试", "test", "单元测试", "unit test", "测试用例", "test case", "断言", "assert", "mock", "spec"],
+            "docs": ["文档", "doc", "说明", "readme", "注释", "comment", "更新日志", "changelog", "api", "文档说明"],
+            "deps": ["依赖", "dependency", "安装", "install", "升级", "upgrade", "版本", "version", "package", "包"],
+            "config": ["配置", "config", "设置", "setting", "环境变量", "env", "参数", "parameter"],
+            "ui": ["界面", "ui", "页面", "page", "组件", "component", "样式", "style", "布局", "layout", "视图", "view"],
+            "api": ["接口", "api", "端点", "endpoint", "路由", "route", "请求", "request", "响应", "response"],
+            "auth": ["认证", "auth", "登录", "login", "权限", "permission", "用户", "user", "验证", "verify"],
+            "data": ["数据", "data", "数据库", "database", "模型", "model", "schema", "表", "table"]
+        }
+        
+        # 分析每个文件
         for change in file_changes:
-            file_path = change["file"]
-            file_name = os.path.basename(file_path)
-            name_without_ext = os.path.splitext(file_name)[0]
+            content_to_analyze = change["new_content"] if change["new_content"] else change["old_content"]
+            if not content_to_analyze:
+                continue
             
-            # 提取关键组件名
-            if name_without_ext:
-                features["components"].append(name_without_ext)
+            content_lower = content_to_analyze.lower()
+            file_name_lower = change["file_name"].lower()
             
-            # 分析内容关键词
-            if change["new_lines"]:
-                content_lower = ' '.join(line.lower() for line in change["new_lines"])
-                
-                # 修复相关
-                fix_keywords = ['修复', 'fix', '解决', 'solve', '修正', 'correct', 'bug', 'error', '异常', 'exception']
-                for kw in fix_keywords:
-                    if kw in content_lower:
-                        features["keywords"].add('fix')
-                        break
-                
-                # 功能相关
-                feat_keywords = ['新增', '新增功能', 'add', 'implement', 'create', '新增', '实现', '创建']
-                for kw in feat_keywords:
-                    if kw in content_lower:
-                        features["keywords"].add('feat')
-                        break
-                
-                # 重构相关
-                refactor_keywords = ['重构', 'refactor', '优化', 'optimize', '改进', 'improve', 'extract', '简化']
-                for kw in refactor_keywords:
-                    if kw in content_lower:
-                        features["keywords"].add('refactor')
-                        break
-                
-                # 测试相关
-                if 'test' in content_lower or 'spec' in content_lower or '测试' in content_lower:
-                    features["keywords"].add('test')
+            # 识别关键词
+            for category, keywords in keyword_map.items():
+                for keyword in keywords:
+                    if keyword in content_lower or keyword in file_name_lower:
+                        analysis["keywords"].add(category)
+            
+            # 提取组件名 - 从文件名中提取（去除常见前缀后缀）
+            name = change["file_name"]
+            for prefix in ["test", "spec", "index", "main", "app", "utils", "helpers", "common", "base"]:
+                name = name.replace(prefix, "")
+            for suffix in [".js", ".jsx", ".ts", ".tsx", ".py", ".java", ".go", ".rs", ".md", ".txt"]:
+                name = name.replace(suffix, "")
+            if name and len(name) > 2:
+                analysis["components"].append(name)
         
-        # 确定变更类型
-        if 'fix' in features["keywords"]:
-            features["type"] = "fix"
-        elif 'feat' in features["keywords"]:
-            features["type"] = "feat"
-        elif 'refactor' in features["keywords"]:
-            features["type"] = "refactor"
-        elif 'test' in features["keywords"]:
-            features["type"] = "test"
-        else:
-            # 根据文件扩展名推断
-            for change in file_changes:
-                ext = change["ext"]
-                if ext in ['.md', '.txt', '.rst', '.docx']:
-                    features["type"] = "docs"
-                    break
-                elif 'test' in change["file"].lower():
-                    features["type"] = "test"
-                    break
+        # 确定变更类型（优先级排序）
+        type_priority = ["fix", "perf", "feat", "refactor", "test", "docs", "deps", "config", "style", "ui", "api", "auth", "data", "chore"]
+        for t in type_priority:
+            if t in analysis["keywords"]:
+                analysis["type"] = t
+                break
         
-        # 确定作用域（主要组件或模块）
-        if features["components"]:
-            # 找出最常出现的组件名
+        # 确定作用域（最常出现的组件）
+        if analysis["components"]:
             from collections import Counter
-            component_counts = Counter(features["components"])
-            main_component = component_counts.most_common(1)[0][0]
-            features["scope"] = main_component
+            component_counts = Counter(analysis["components"])
+            analysis["scope"] = component_counts.most_common(1)[0][0]
         
         # 生成提交消息
         commit_message = ""
-        type_prefix = features["type"]
+        type_prefix = analysis["type"]
+        scope = analysis["scope"]
         
         # 根据类型和作用域生成描述
-        if features["scope"]:
-            scope = features["scope"]
-            
+        if scope:
             if type_prefix == "feat":
                 commit_message = f"新增{scope}功能"
             elif type_prefix == "fix":
@@ -741,6 +739,20 @@ async def generate_commit_message(request: Request):
                 commit_message = f"优化{scope}结构"
             elif type_prefix == "test":
                 commit_message = f"完善{scope}测试"
+            elif type_prefix == "perf":
+                commit_message = f"优化{scope}性能"
+            elif type_prefix == "deps":
+                commit_message = f"更新{scope}依赖"
+            elif type_prefix == "config":
+                commit_message = f"调整{scope}配置"
+            elif type_prefix == "ui":
+                commit_message = f"优化{scope}界面"
+            elif type_prefix == "api":
+                commit_message = f"优化{scope}接口"
+            elif type_prefix == "auth":
+                commit_message = f"优化{scope}认证"
+            elif type_prefix == "data":
+                commit_message = f"优化{scope}数据"
             else:
                 commit_message = f"更新{scope}"
         else:
@@ -752,6 +764,13 @@ async def generate_commit_message(request: Request):
                 "style": "调整代码格式",
                 "refactor": "优化代码结构",
                 "test": "完善测试",
+                "perf": "优化性能",
+                "deps": "更新依赖",
+                "config": "调整配置",
+                "ui": "优化界面",
+                "api": "优化接口",
+                "auth": "优化认证",
+                "data": "优化数据",
                 "chore": "更新项目"
             }
             commit_message = generic_messages[type_prefix]
@@ -765,20 +784,20 @@ async def generate_commit_message(request: Request):
         commit_message = commit_message.replace("更新更新", "更新")
         commit_message = commit_message.replace("修复修复", "修复")
         commit_message = commit_message.replace("优化优化", "优化")
+        commit_message = commit_message.replace("调整调整", "调整")
         
         # 限制长度
         if len(commit_message) > 80:
-            # 如果太长，尝试缩短
-            parts = commit_message.split(": ")
+            parts = commit_message.split(": ", 1)
             if len(parts) == 2:
                 prefix = parts[0]
                 desc = parts[1]
-                # 截断描述
                 if len(desc) > 50:
                     desc = desc[:50]
                 commit_message = f"{prefix}: {desc}"
         
         logger.info(f"生成的提交消息: {commit_message}")
+        logger.info(f"分析结果: type={analysis['type']}, scope={analysis['scope']}, keywords={list(analysis['keywords'])}")
         
         return {
             "success": True,
@@ -832,6 +851,666 @@ async def get_file_with_diff(project: str = Query(None), file: str = Query(None)
         "currentContent": current_content,
         "oldContent": old_content
     }
+
+# 代码依赖可视化 API
+@app.get("/api/projects/{project_name}/context-graph")
+async def get_context_graph(project_name: str, max_depth: int = 3):
+    """获取项目的代码依赖关系图"""
+    try:
+        project_path = get_project_path(project_name)
+        context_graph_service = get_context_graph_service()
+        
+        graph = context_graph_service.analyze_project_context(project_path, max_depth)
+        
+        return {
+            "success": True,
+            "graph": graph
+        }
+    except Exception as e:
+        logger.exception(f"获取上下文图失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取上下文图失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/projects/{project_name}/context-graph/refresh")
+async def refresh_context_graph(project_name: str):
+    """刷新项目的代码依赖关系图"""
+    try:
+        project_path = get_project_path(project_name)
+        context_graph_service = get_context_graph_service()
+        
+        # 清除缓存
+        context_graph_service.clear_cache()
+        
+        # 重新分析
+        graph = context_graph_service.analyze_project_context(project_path)
+        
+        return {
+            "success": True,
+            "graph": graph
+        }
+    except Exception as e:
+        logger.exception(f"刷新上下文图失败: {e}")
+        return JSONResponse(
+            content={"error": f"刷新上下文图失败: {str(e)}"},
+            status_code=500
+        )
+
+# 实时代码预览沙盒 API
+@app.post("/api/sandbox/create")
+async def create_sandbox(request: Request):
+    """创建代码预览沙盒"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        component_code = data.get("component_code")
+        component_type = data.get("component_type", "react")
+        dependencies = data.get("dependencies")
+        
+        if not project_name or not component_code:
+            return JSONResponse(
+                content={"error": "项目名称和组件代码不能为空"},
+                status_code=400
+            )
+        
+        sandbox_service = get_sandbox_service()
+        result = await sandbox_service.create_sandbox(
+            project_name,
+            component_code,
+            component_type,
+            dependencies
+        )
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=500)
+        
+        return {
+            "success": True,
+            "sandbox": result
+        }
+    except Exception as e:
+        logger.exception(f"创建沙盒失败: {e}")
+        return JSONResponse(
+            content={"error": f"创建沙盒失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/sandbox/{sandbox_id}/update")
+async def update_sandbox(sandbox_id: str, request: Request):
+    """更新沙盒中的组件代码"""
+    try:
+        data = await request.json()
+        component_code = data.get("component_code")
+        
+        if not component_code:
+            return JSONResponse(
+                content={"error": "组件代码不能为空"},
+                status_code=400
+            )
+        
+        sandbox_service = get_sandbox_service()
+        result = await sandbox_service.update_sandbox_component(sandbox_id, component_code)
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=500)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"更新沙盒失败: {e}")
+        return JSONResponse(
+            content={"error": f"更新沙盒失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/sandbox/{sandbox_id}/status")
+async def get_sandbox_status(sandbox_id: str):
+    """获取沙盒状态"""
+    try:
+        sandbox_service = get_sandbox_service()
+        result = await sandbox_service.get_sandbox_status(sandbox_id)
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=404)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"获取沙盒状态失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取沙盒状态失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.delete("/api/sandbox/{sandbox_id}")
+async def destroy_sandbox(sandbox_id: str):
+    """销毁沙盒"""
+    try:
+        sandbox_service = get_sandbox_service()
+        result = await sandbox_service.destroy_sandbox(sandbox_id)
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=404)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"销毁沙盒失败: {e}")
+        return JSONResponse(
+            content={"error": f"销毁沙盒失败: {str(e)}"},
+            status_code=500
+        )
+
+# 智能代码重构建议 API
+@app.post("/api/refactor/analyze")
+async def analyze_refactor(request: Request):
+    """分析代码并生成重构建议"""
+    try:
+        data = await request.json()
+        file_path = data.get("file_path")
+        content = data.get("content")
+        
+        if not file_path or not content:
+            return JSONResponse(
+                content={"error": "文件路径和内容不能为空"},
+                status_code=400
+            )
+        
+        refactor_suggester = get_refactor_suggester()
+        suggestions = refactor_suggester.analyze_file(file_path, content)
+        
+        return {
+            "success": True,
+            "suggestions": [s.to_dict() for s in suggestions],
+            "total": len(suggestions),
+            "summary": {
+                "critical": len([s for s in suggestions if s.severity == "critical"]),
+                "high": len([s for s in suggestions if s.severity == "high"]),
+                "medium": len([s for s in suggestions if s.severity == "medium"]),
+                "low": len([s for s in suggestions if s.severity == "low"])
+            }
+        }
+    except Exception as e:
+        logger.exception(f"分析重构建议失败: {e}")
+        return JSONResponse(
+            content={"error": f"分析重构建议失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/projects/{project_name}/refactor/analyze-all")
+async def analyze_project_refactor(project_name: str, request: Request):
+    """分析整个项目的重构建议"""
+    try:
+        data = await request.json()
+        file_paths = data.get("file_paths", [])
+        
+        if not file_paths:
+            return JSONResponse(
+                content={"error": "文件列表不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        refactor_suggester = get_refactor_suggester()
+        all_suggestions = []
+        
+        for file_path in file_paths:
+            try:
+                full_path = os.path.join(project_path, file_path)
+                content = file_service.read_file(project_path, file_path)
+                suggestions = refactor_suggester.analyze_file(full_path, content)
+                all_suggestions.extend(suggestions)
+            except Exception as e:
+                logger.warning(f"Failed to analyze {file_path}: {e}")
+        
+        return {
+            "success": True,
+            "suggestions": [s.to_dict() for s in all_suggestions],
+            "total": len(all_suggestions),
+            "summary": {
+                "critical": len([s for s in all_suggestions if s.severity == "critical"]),
+                "high": len([s for s in all_suggestions if s.severity == "high"]),
+                "medium": len([s for s in all_suggestions if s.severity == "medium"]),
+                "low": len([s for s in all_suggestions if s.severity == "low"])
+            }
+        }
+    except Exception as e:
+        logger.exception(f"分析项目重构建议失败: {e}")
+        return JSONResponse(
+            content={"error": f"分析项目重构建议失败: {str(e)}"},
+            status_code=500
+        )
+
+# 自动化测试生成 API
+@app.post("/api/test/generate")
+async def generate_tests(request: Request):
+    """生成单元测试"""
+    try:
+        data = await request.json()
+        file_path = data.get("file_path")
+        content = data.get("content")
+        test_framework = data.get("test_framework", "pytest")
+        
+        if not file_path or not content:
+            return JSONResponse(
+                content={"error": "文件路径和内容不能为空"},
+                status_code=400
+            )
+        
+        test_generator = get_test_generator()
+        result = test_generator.generate_tests(file_path, content, test_framework)
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=500)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"生成测试失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成测试失败: {str(e)}"},
+            status_code=500
+        )
+
+# 项目健康度仪表盘 API
+@app.post("/api/projects/{project_name}/health")
+async def get_project_health(project_name: str, request: Request):
+    """获取项目健康度指标"""
+    try:
+        data = await request.json()
+        file_paths = data.get("file_paths", [])
+        
+        if not file_paths:
+            return JSONResponse(
+                content={"error": "文件列表不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        health_analyzer = get_health_analyzer()
+        metrics = health_analyzer.analyze_project_health(project_path, file_paths)
+        
+        if "error" in metrics:
+            return JSONResponse(content=metrics, status_code=500)
+        
+        return metrics
+    except Exception as e:
+        logger.exception(f"获取项目健康度失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取项目健康度失败: {str(e)}"},
+            status_code=500
+        )
+
+# 智能代码补全 API
+@app.post("/api/completion")
+async def get_code_completions(request: Request):
+    """获取代码补全建议"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_path = data.get("file_path")
+        content = data.get("content")
+        line_number = data.get("line_number", 1)
+        column = data.get("column", 0)
+        trigger_character = data.get("trigger_character")
+        
+        if not project_name or not file_path or not content:
+            return JSONResponse(
+                content={"error": "项目名称、文件路径和内容不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        completion_service = get_code_completion_service()
+        
+        suggestions = await completion_service.get_completions(
+            project_path,
+            file_path,
+            content,
+            line_number,
+            column,
+            trigger_character
+        )
+        
+        return {
+            "success": True,
+            "suggestions": [s.to_dict() for s in suggestions],
+            "total": len(suggestions)
+        }
+    except Exception as e:
+        logger.exception(f"获取代码补全失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取代码补全失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/completion/clear-cache")
+async def clear_completion_cache(request: Request):
+    """清除代码补全缓存"""
+    try:
+        completion_service = get_code_completion_service()
+        completion_service.clear_cache()
+        
+        return {
+            "success": True,
+            "message": "缓存已清除"
+        }
+    except Exception as e:
+        logger.exception(f"清除缓存失败: {e}")
+        return JSONResponse(
+            content={"error": f"清除缓存失败: {str(e)}"},
+            status_code=500
+        )
+
+# 智能文档生成 API
+@app.post("/api/docs/generate-api")
+async def generate_api_docs(request: Request):
+    """生成 API 文档"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_paths = data.get("file_paths", [])
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        doc_generator = get_doc_generator()
+        
+        api_docs = doc_generator.generate_api_docs(project_path, file_paths)
+        
+        return {
+            "success": True,
+            "docs": api_docs
+        }
+    except Exception as e:
+        logger.exception(f"生成 API 文档失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成 API 文档失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/docs/generate-readme")
+async def generate_readme(request: Request):
+    """生成 README 文档"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_paths = data.get("file_paths", [])
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        doc_generator = get_doc_generator()
+        
+        readme = doc_generator.generate_readme(project_path, file_paths)
+        
+        return {
+            "success": True,
+            "readme": readme
+        }
+    except Exception as e:
+        logger.exception(f"生成 README 失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成 README 失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/docs/generate-comments")
+async def generate_code_comments(request: Request):
+    """生成代码注释"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_path = data.get("file_path")
+        
+        if not project_name or not file_path:
+            return JSONResponse(
+                content={"error": "项目名称和文件路径不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        content = file_service.read_file(project_path, file_path)
+        
+        doc_generator = get_doc_generator()
+        comments = doc_generator.generate_code_comments(file_path, content)
+        
+        return {
+            "success": True,
+            "comments": comments
+        }
+    except Exception as e:
+        logger.exception(f"生成代码注释失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成代码注释失败: {str(e)}"},
+            status_code=500
+        )
+
+# AI 代码审查助手 API
+@app.post("/api/review/code")
+async def review_code(request: Request):
+    """审查单个文件代码"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_path = data.get("file_path")
+        check_types = data.get("check_types", ['quality', 'style', 'security', 'performance'])
+        
+        if not project_name or not file_path:
+            return JSONResponse(
+                content={"error": "项目名称和文件路径不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        content = file_service.read_file(project_path, file_path)
+        
+        code_review_service = get_code_review_service()
+        result = code_review_service.review_code(file_path, content, check_types)
+        
+        if "error" in result:
+            return JSONResponse(content=result, status_code=400)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"代码审查失败: {e}")
+        return JSONResponse(
+            content={"error": f"代码审查失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/review/pr")
+async def review_pr(request: Request):
+    """审查 Pull Request"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        changed_files = data.get("changed_files", [])
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        if not changed_files:
+            return JSONResponse(
+                content={"error": "变更文件列表不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        code_review_service = get_code_review_service()
+        
+        # 读取每个文件的内容
+        for file_info in changed_files:
+            file_path = file_info.get("path")
+            if file_info.get("status") != "deleted":
+                try:
+                    content = file_service.read_file(project_path, file_path)
+                    file_info["content"] = content
+                except Exception as e:
+                    logger.warning(f"Failed to read {file_path}: {e}")
+        
+        result = code_review_service.review_pr(project_path, changed_files)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"PR 审查失败: {e}")
+        return JSONResponse(
+            content={"error": f"PR 审查失败: {str(e)}"},
+            status_code=500
+        )
+
+# 性能监控 API
+@app.post("/api/performance/analyze")
+async def analyze_performance(request: Request):
+    """分析项目性能"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_paths = data.get("file_paths", [])
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        performance_monitor = get_performance_monitor()
+        
+        metrics = performance_monitor.analyze_performance(project_path, file_paths)
+        
+        return metrics
+    except Exception as e:
+        logger.exception(f"性能分析失败: {e}")
+        return JSONResponse(
+            content={"error": f"性能分析失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/performance/detect-leaks")
+async def detect_memory_leaks(request: Request):
+    """检测内存泄漏"""
+    try:
+        data = await request.json()
+        project_name = data.get("project_name")
+        file_path = data.get("file_path")
+        
+        if not project_name or not file_path:
+            return JSONResponse(
+                content={"error": "项目名称和文件路径不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        content = file_service.read_file(project_path, file_path)
+        
+        performance_monitor = get_performance_monitor()
+        leaks = performance_monitor.detect_memory_leaks(file_path, content)
+        
+        return {
+            "success": True,
+            "leaks": leaks,
+            "total": len(leaks)
+        }
+    except Exception as e:
+        logger.exception(f"内存泄漏检测失败: {e}")
+        return JSONResponse(
+            content={"error": f"内存泄漏检测失败: {str(e)}"},
+            status_code=500
+        )
+
+# 项目模板生成器 API
+@app.get("/api/templates")
+async def get_templates():
+    """获取所有可用模板"""
+    try:
+        template_service = get_project_template_service()
+        templates = template_service.get_templates()
+        
+        return {
+            "success": True,
+            "templates": templates,
+            "total": len(templates)
+        }
+    except Exception as e:
+        logger.exception(f"获取模板列表失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取模板列表失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/templates/{template_id}")
+async def get_template(template_id: str):
+    """获取特定模板详情"""
+    try:
+        template_service = get_project_template_service()
+        template = template_service.get_template(template_id)
+        
+        if not template:
+            return JSONResponse(
+                content={"error": f"模板 {template_id} 不存在"},
+                status_code=404
+            )
+        
+        return {
+            "success": True,
+            "template": template
+        }
+    except Exception as e:
+        logger.exception(f"获取模板详情失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取模板详情失败: {str(e)}"},
+            status_code=500
+        )
+
+@app.post("/api/templates/generate")
+async def generate_project(request: Request):
+    """生成项目"""
+    try:
+        data = await request.json()
+        template_id = data.get("template_id")
+        project_name = data.get("project_name")
+        output_path = data.get("output_path", ".")
+        custom_config = data.get("custom_config", {})
+        
+        if not template_id:
+            return JSONResponse(
+                content={"error": "模板 ID 不能为空"},
+                status_code=400
+            )
+        
+        if not project_name:
+            return JSONResponse(
+                content={"error": "项目名称不能为空"},
+                status_code=400
+            )
+        
+        template_service = get_project_template_service()
+        result = template_service.generate_project(
+            template_id,
+            project_name,
+            output_path,
+            custom_config
+        )
+        
+        if not result.get("success"):
+            return JSONResponse(content=result, status_code=400)
+        
+        return result
+    except Exception as e:
+        logger.exception(f"生成项目失败: {e}")
+        return JSONResponse(
+            content={"error": f"生成项目失败: {str(e)}"},
+            status_code=500
+        )
 
 @app.websocket("/shell")
 async def websocket_shell(websocket: WebSocket, project: str = None):
