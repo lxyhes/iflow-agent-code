@@ -41,6 +41,7 @@ from backend.core.dependency_analyzer import DependencyAnalyzer, get_dependency_
 from backend.core.auto_fixer import AutoFixer, get_auto_fixer
 from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_dependency_analyzer as get_code_dependency_analyzer
 from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
+from backend.core.rag_service import RAGService, get_rag_service
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -70,7 +71,8 @@ global_config = {
     "mode": "yolo",
     "model": "GLM-4.7", # Set to recommended model
     "mcp_servers": [],
-    "iflow_path": "iflow" # Default command
+    "iflow_path": "iflow", # Default command
+    "rag_mode": "tfidf" # RAG 模式: "chromadb" (需要下载模型) 或 "tfidf" (轻量级)
 }
 
 # --- HELPERS ---
@@ -94,10 +96,21 @@ def get_agent(cwd: str, mode: str = "yolo", model: str = None, mcp_servers: list
 def get_project_path(project_name: str) -> str:
     """安全地获取项目路径，防止路径遍历攻击"""
     logger.info(f"[get_project_path] Looking for project: '{project_name}'")
-    
+
     if not project_name:
         logger.warning(f"[get_project_path] No project name provided, returning cwd: {os.getcwd()}")
         return os.getcwd()
+
+    # 检查 project_name 是否本身就是一个有效的项目路径
+    # 如果包含路径分隔符（Windows: \ 或 /），则认为它是一个路径
+    if '\\' in project_name or '/' in project_name:
+        # 验证路径安全性
+        is_valid, error, normalized = PathValidator.validate_project_path(project_name)
+        if is_valid and os.path.exists(normalized):
+            logger.info(f"[get_project_path] project_name is a valid path: {normalized}")
+            # 注册到项目注册表
+            project_registry.register_project(os.path.basename(normalized), normalized)
+            return normalized
 
     # 首先尝试从注册表获取
     registered_path = project_registry.get_project_path(project_name)
@@ -145,6 +158,7 @@ def get_project_path(project_name: str) -> str:
     return os.getcwd()
 
 agent_cache = {}
+rag_cache = {}
 
 # AI Persona System Prompts
 PERSONA_PROMPTS = {
@@ -1771,6 +1785,557 @@ async def get_taskmaster_server_status():
         "status": "not-implemented",
         "message": "TaskMaster MCP server is not implemented"
     }
+
+# --- RAG API 端点 ---
+
+@app.get("/api/rag/stats")
+async def get_rag_stats(project_path: str = None, project_name: str = None):
+    """获取 RAG 统计信息"""
+    try:
+        # 优先使用 project_path，如果没有则使用 project_name
+        if project_path:
+            # 直接使用提供的项目路径
+            final_project_path = project_path
+        elif project_name:
+            # 通过项目名称查找项目路径
+            final_project_path = get_project_path(project_name)
+        else:
+            return JSONResponse(
+                content={"error": "缺少 project_path 或 project_name 参数"},
+                status_code=400
+            )
+
+        if final_project_path not in rag_cache:
+            rag_cache[final_project_path] = get_rag_service(final_project_path)
+
+        rag_service = rag_cache[final_project_path]
+        stats = rag_service.get_stats()
+
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        logger.exception(f"获取 RAG 统计失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取 RAG 统计失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.get("/api/rag/status")
+async def get_rag_status():
+    """获取 RAG 依赖状态"""
+    try:
+        from backend.core.rag_service import CHROMADB_AVAILABLE, SKLEARN_AVAILABLE, SENTENCE_TRANSFORMERS_AVAILABLE
+        
+        return {
+            "success": True,
+            "dependencies": {
+                "chromadb": CHROMADB_AVAILABLE,
+                "sentence_transformers": SENTENCE_TRANSFORMERS_AVAILABLE,
+                "sklearn": SKLEARN_AVAILABLE
+            },
+            "current_mode": global_config.get("rag_mode", "tfidf"),
+            "available_retrievers": []
+        }
+    except Exception as e:
+        logger.exception(f"获取 RAG 状态失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取 RAG 状态失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/index")
+async def index_project_rag(request: Request, project_path: str = None, project_name: str = None):
+    """索引项目文档到 RAG（支持增量索引）"""
+    try:
+        # 优先使用 project_path，如果没有则使用 project_name
+        if project_path:
+            # 直接使用提供的项目路径
+            final_project_path = project_path
+            logger.info(f"RAG indexing request for project_path: {project_path}")
+        elif project_name:
+            # 通过项目名称查找项目路径
+            final_project_path = get_project_path(project_name)
+            logger.info(f"RAG indexing request for project_name: {project_name}, path: {final_project_path}")
+        else:
+            return JSONResponse(
+                content={"error": "缺少 project_path 或 project_name 参数"},
+                status_code=400
+            )
+
+        logger.info(f"RAG indexing request for project: {final_project_path}")
+        
+        # 解析请求参数
+        try:
+            data = await request.json() if request.method == "POST" else {}
+            force_reindex = data.get("force_reindex", False)
+        except Exception as e:
+            logger.warning(f"Failed to parse request JSON: {e}")
+            data = {}
+            force_reindex = False
+        
+        # 检查依赖
+        from backend.core.rag_service import CHROMADB_AVAILABLE, SKLEARN_AVAILABLE
+        
+        if not CHROMADB_AVAILABLE and not SKLEARN_AVAILABLE:
+            error_msg = "缺少必要的依赖库。请安装 chromadb 或 scikit-learn:\n" \
+                        "pip install chromadb sentence-transformers\n" \
+                        "或\n" \
+                        "pip install scikit-learn"
+            logger.error(error_msg)
+            return JSONResponse(
+                content={"error": error_msg},
+                status_code=500
+            )
+        
+        logger.info(f"Dependencies check: CHROMADB_AVAILABLE={CHROMADB_AVAILABLE}, SKLEARN_AVAILABLE={SKLEARN_AVAILABLE}")
+        
+        # 确保 RAG 服务被创建（使用项目路径作为缓存键）
+        if project_path not in rag_cache:
+            # 根据配置选择 RAG 模式
+            rag_mode = global_config.get("rag_mode", "tfidf")
+            use_chromadb = (rag_mode == "chromadb")
+            
+            if use_chromadb and not CHROMADB_AVAILABLE:
+                logger.warning("ChromaDB requested but not available, falling back to TF-IDF")
+                use_chromadb = False
+            
+            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
+            logger.info(f"Created new RAG service for {project_name} at {project_path} (mode: {'ChromaDB' if use_chromadb else 'TF-IDF'})")
+        
+        rag_service = rag_cache[project_path]
+        
+        # 创建异步生成器用于进度更新
+        async def progress_generator():
+            try:
+                logger.info(f"Starting progress generator for {project_name}")
+                async for result in rag_service.index_project(force_reindex=force_reindex):
+                    # 发送所有类型的结果
+                    msg = f"data: {json.dumps(result)}\n\n"
+                    logger.debug(f"Yielding: {msg.strip()}")
+                    yield msg
+                    
+                    # 完成后退出
+                    if result.get("type") == "complete":
+                        logger.info(f"Indexing complete for {project_name}")
+                        break
+                    elif result.get("type") == "error":
+                        logger.error(f"Indexing error for {project_name}: {result.get('message')}")
+                        break
+            except Exception as e:
+                logger.exception(f"Progress generator error for {project_name}: {e}")
+                error_msg = f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                yield error_msg
+        
+        return StreamingResponse(progress_generator(), media_type="text/event-stream")
+    
+    except Exception as e:
+        logger.exception(f"RAG 索引失败: {e}")
+        return JSONResponse(
+            content={"error": f"RAG 索引失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/retrieve/{project_name}")
+async def retrieve_rag(project_name: str, request: Request):
+    """检索相关文档"""
+    try:
+        data = await request.json()
+        query = data.get("query", "")
+        n_results = data.get("n_results", 5)
+        
+        if not query:
+            return JSONResponse(
+                content={"error": "查询文本不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        
+        if project_path not in rag_cache:
+            rag_cache[project_path] = get_rag_service(project_path)
+        
+        rag_service = rag_cache[project_path]
+        results = rag_service.retrieve(query, n_results)
+        
+        return {
+            "success": True,
+            "query": query,
+            "results": results,
+            "count": len(results)
+        }
+    except Exception as e:
+        logger.exception(f"RAG 检索失败: {e}")
+        return JSONResponse(
+            content={"error": f"RAG 检索失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/reset/{project_name}")
+async def reset_rag(project_name: str):
+    """重置 RAG 索引"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        if project_path in rag_cache:
+            rag_service = rag_cache[project_path]
+            rag_service.reset()
+            del rag_cache[project_path]
+        
+        return {
+            "success": True,
+            "message": "RAG 索引已重置"
+        }
+    except Exception as e:
+        logger.exception(f"RAG 重置失败: {e}")
+        return JSONResponse(
+            content={"error": f"RAG 重置失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/clear-cache")
+async def clear_rag_cache():
+    """清除 RAG 服务缓存"""
+    try:
+        count = len(rag_cache)
+        rag_cache.clear()
+        logger.info(f"Cleared RAG cache: {count} services removed")
+        
+        return {
+            "success": True,
+            "message": f"已清除 {count} 个 RAG 服务缓存"
+        }
+    except Exception as e:
+        logger.exception(f"清除 RAG 缓存失败: {e}")
+        return JSONResponse(
+            content={"error": f"清除 RAG 缓存失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/ask/{project_name}")
+async def ask_rag_question(project_name: str, request: Request):
+    """向 RAG 知识库提问"""
+    try:
+        data = await request.json()
+        question = data.get("question", "")
+        
+        if not question:
+            return JSONResponse(
+                content={"error": "问题不能为空"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        
+        # 获取 RAG 服务
+        if project_path not in rag_cache:
+            rag_mode = global_config.get("rag_mode", "tfidf")
+            use_chromadb = (rag_mode == "chromadb")
+            if use_chromadb and not CHROMADB_AVAILABLE:
+                use_chromadb = False
+            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
+        
+        rag_service = rag_cache[project_path]
+        
+        # 检查是否有文档
+        stats = rag_service.get_stats()
+        if stats.get("document_count", 0) == 0:
+            return JSONResponse(
+                content={"answer": "知识库中还没有文档。请先添加文档或索引项目。", "sources": []},
+                status_code=200
+            )
+        
+        # 检索相关文档
+        results = rag_service.retrieve(question, n_results=5)
+        
+        if not results or len(results) == 0:
+            return JSONResponse(
+                content={"answer": "知识库中没有找到相关文档。", "sources": []},
+                status_code=200
+            )
+        
+        # 构建上下文
+        context_parts = []
+        sources = []
+        for i, result in enumerate(results):
+            # result 是字典，不是对象
+            metadata = result.get('metadata', {})
+            context_parts.append(f"[文档 {i+1}] {metadata.get('file_path', '未知文件')}:\n{result['content']}")
+            sources.append({
+                "file_path": metadata.get('file_path', '未知文件'),
+                "content": result['content'][:200] + '...' if len(result['content']) > 200 else result['content'],
+                "similarity": result.get('similarity', 0)
+            })
+        
+        context = '\n\n'.join(context_parts)
+        
+        # 使用 AI 生成回答
+        try:
+            agent = get_agent(project_path, global_config.get("mode", "yolo"), global_config.get("model"))
+            
+            # 构建包含上下文的提示
+            rag_prompt = f"""你是一个智能助手，请基于以下知识库内容回答用户的问题。
+
+知识库内容：
+{context}
+
+用户问题：{question}
+
+请基于以上知识库内容回答问题。如果知识库中没有相关信息，请明确说明。回答要准确、简洁、有帮助。"""
+            
+            # 收集 AI 回答
+            answer_parts = []
+            async for msg in agent.chat_stream(rag_prompt):
+                if isinstance(msg, str):
+                    answer_parts.append(msg)
+                elif isinstance(msg, dict) and msg.get("type") == "assistant":
+                    answer_parts.append(msg.get("content", ""))
+            
+            answer = "".join(answer_parts)
+            
+            # 如果没有生成回答，使用默认回答
+            if not answer:
+                answer = f"基于知识库找到 {len(results)} 个相关文档。\n\n相关文档：\n"
+                for i, source in enumerate(sources):
+                    answer += f"{i+1}. {source['file_path']}\n"
+        
+        except Exception as ai_error:
+            logger.warning(f"AI 生成回答失败，使用默认回答: {ai_error}")
+            answer = f"基于知识库找到 {len(results)} 个相关文档。\n\n相关文档：\n"
+            for i, source in enumerate(sources):
+                answer += f"{i+1}. {source['file_path']}\n"
+        
+        return JSONResponse(
+            content={
+                "answer": answer,
+                "question": question,
+                "sources": sources
+            },
+            status_code=200
+        )
+        
+    except Exception as e:
+        logger.exception(f"RAG 问答失败: {e}")
+        return JSONResponse(
+            content={"error": f"RAG 问答失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/upload/{project_name}")
+async def upload_document_to_rag(project_name: str, request: Request):
+    """上传文档到 RAG 知识库"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        # 解析表单数据
+        form = await request.form()
+        file = form.get("file")
+        
+        if not file:
+            return JSONResponse(
+                content={"error": "未找到文件"},
+                status_code=400
+            )
+        
+        # 读取文件内容
+        content = await file.read()
+        text_content = content.decode('utf-8', errors='ignore')
+        
+        # 获取 RAG 服务
+        if project_path not in rag_cache:
+            rag_mode = global_config.get("rag_mode", "tfidf")
+            use_chromadb = (rag_mode == "chromadb")
+            if use_chromadb and not CHROMADB_AVAILABLE:
+                use_chromadb = False
+            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
+        
+        rag_service = rag_cache[project_path]
+        
+        # 添加文档
+        result = await rag_service.add_document(
+            file_name=file.filename,
+            content=text_content,
+            file_type=os.path.splitext(file.filename)[1].lower()
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.exception(f"上传文档到 RAG 失败: {e}")
+        return JSONResponse(
+            content={"error": f"上传文档到 RAG 失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/upload-batch/{project_name}")
+async def upload_documents_batch_to_rag(project_name: str, request: Request):
+    """批量上传文档到 RAG 知识库"""
+    try:
+        project_path = get_project_path(project_name)
+        
+        # 解析表单数据
+        form = await request.form()
+        files = form.getlist("files")
+        
+        if not files:
+            return JSONResponse(
+                content={"error": "未找到文件"},
+                status_code=400
+            )
+        
+        # 保存文件到临时目录
+        temp_dir = os.path.join(project_path, ".rag_temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        file_paths = []
+        for file in files:
+            file_path = os.path.join(temp_dir, file.filename)
+            with open(file_path, 'wb') as f:
+                f.write(await file.read())
+            file_paths.append(file_path)
+        
+        # 获取 RAG 服务
+        if project_path not in rag_cache:
+            rag_mode = global_config.get("rag_mode", "tfidf")
+            use_chromadb = (rag_mode == "chromadb")
+            if use_chromadb and not CHROMADB_AVAILABLE:
+                use_chromadb = False
+            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
+        
+        rag_service = rag_cache[project_path]
+        
+        # 创建流式响应
+        async def progress_generator():
+            try:
+                async for result in rag_service.add_documents_from_files(file_paths):
+                    yield f"data: {json.dumps(result)}\n\n"
+                    
+                    if result.get("type") == "complete":
+                        # 清理临时文件
+                        for fp in file_paths:
+                            try:
+                                os.remove(fp)
+                            except:
+                                pass
+                        break
+            except Exception as e:
+                logger.exception(f"批量上传文档失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(progress_generator(), media_type="text/event-stream")
+        
+    except Exception as e:
+        logger.exception(f"批量上传文档到 RAG 失败: {e}")
+        return JSONResponse(
+            content={"error": f"批量上传文档到 RAG 失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/rag/add-files/{project_name}")
+async def add_files_to_rag(project_name: str, request: Request):
+    """添加系统文件路径到 RAG 知识库（直接读取，不上传）"""
+    try:
+        data = await request.json()
+        file_paths = data.get("file_paths", [])
+        
+        logger.info(f"收到添加文件请求，项目: {project_name}, 文件数: {len(file_paths)}")
+        logger.info(f"文件路径列表: {file_paths}")
+        
+        if not file_paths:
+            return JSONResponse(
+                content={"error": "未提供文件路径"},
+                status_code=400
+            )
+        
+        project_path = get_project_path(project_name)
+        
+        # 验证路径安全性（RAG 允许更宽松的路径限制）
+        valid_paths = []
+        for file_path in file_paths:
+            # 规范化路径
+            file_path = os.path.abspath(file_path)
+            logger.info(f"处理文件: {file_path}")
+            
+            # 检查路径是否存在
+            if not os.path.exists(file_path):
+                logger.warning(f"跳过不存在的文件路径: {file_path}")
+                continue
+            
+            # 检查是否是文件
+            if not os.path.isfile(file_path):
+                logger.warning(f"跳过非文件路径: {file_path}")
+                continue
+            
+            # 检查文件大小（限制 500MB）
+            try:
+                file_size = os.path.getsize(file_path)
+                if file_size > 500 * 1024 * 1024:  # 500MB
+                    logger.warning(f"跳过过大的文件: {file_path} ({file_size} bytes)")
+                    continue
+            except:
+                logger.warning(f"无法获取文件大小: {file_path}")
+                continue
+            
+            # 检查文件类型
+            allowed_extensions = {
+                '.txt', '.md', '.rst', '.py', '.js', '.ts', '.jsx', '.tsx',
+                '.java', '.go', '.rs', '.json', '.yaml', '.yml', '.html', '.css',
+                '.xml', '.csv', '.log', '.sql', '.sh', '.bat', '.ps1',
+                '.docx', '.xlsx', '.pptx', '.pdf'
+            }
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in allowed_extensions:
+                logger.warning(f"跳过不支持的文件类型: {file_path} ({ext})")
+                continue
+            
+            valid_paths.append(file_path)
+            logger.info(f"文件有效: {file_path}")
+        
+        logger.info(f"有效文件数: {len(valid_paths)}")
+        
+        if not valid_paths:
+            return JSONResponse(
+                content={"error": "没有有效的文件路径（文件不存在、过大或不支持的类型）。支持的最大文件大小: 500MB"},
+                status_code=400
+            )
+        
+        # 获取 RAG 服务
+        if project_path not in rag_cache:
+            rag_mode = global_config.get("rag_mode", "tfidf")
+            use_chromadb = (rag_mode == "chromadb")
+            if use_chromadb and not CHROMADB_AVAILABLE:
+                use_chromadb = False
+            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
+        
+        rag_service = rag_cache[project_path]
+        
+        # 创建流式响应
+        async def progress_generator():
+            try:
+                async for result in rag_service.add_documents_from_files(valid_paths):
+                    yield f"data: {json.dumps(result)}\n\n"
+            except Exception as e:
+                logger.exception(f"添加文件到 RAG 失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return StreamingResponse(progress_generator(), media_type="text/event-stream")
+        
+    except Exception as e:
+        logger.exception(f"添加文件到 RAG 失败: {e}")
+        return JSONResponse(
+            content={"error": f"添加文件到 RAG 失败: {str(e)}"},
+            status_code=500
+        )
 
 # --- Catch-all 路由 ---
 

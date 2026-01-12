@@ -44,6 +44,7 @@ import ErrorFixPrompt from './ErrorFixPrompt';
 import Shell from './Shell';
 import AutoFixPanel from './AutoFixPanel';
 import ContextVisualizer from './ContextVisualizer';
+import { retrieveRAG } from '../utils/rag';
 
 
 // Helper function to decode HTML entities in text
@@ -4256,7 +4257,72 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     setChatMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
+
+    // RAG: Retrieve relevant documents from project knowledge base
+          let ragContext = '';
+          let ragResults = [];
+          
+          // 智能判断是否需要 RAG 检索
+          const shouldUseRAG = (
+            // 包含代码相关关键词
+            /函数|类|方法|接口|实现|定义|import|from|require|export|module|component|service|api|endpoint|route/i.test(input) ||
+            // 包含文件相关关键词
+            /文件|文档|代码|项目|路径|目录/i.test(input) ||
+            // 包含查找相关关键词
+            /查找|搜索|哪里|如何|怎么|什么|哪个|哪个文件|在哪个|在哪里/i.test(input) ||
+            // 包含问题相关关键词
+            /为什么|怎么|如何|什么|哪个|哪里|何时|谁/i.test(input) ||
+            // 输入较长（可能是复杂问题）
+            input.length > 50
+          );
+          
+          if (shouldUseRAG) {
+            try {
+              // 使用混合检索获取更准确的结果
+              const ragResultsData = await retrieveRAG(selectedProject.name, input, 5, {
+                alpha: 0.6, // 稍微偏向语义检索
+              });
+              
+              if (ragResultsData && ragResultsData.results && ragResultsData.results.length > 0) {
+                ragResults = ragResultsData.results;
+                
+                // 过滤低相关性结果（相似度 < 0.3）
+                const relevantResults = ragResults.filter(r => {
+                  const similarity = r.similarity !== undefined ? r.similarity : (1 - (r.distance || 1));
+                  return similarity > 0.3;
+                });
+                
+                if (relevantResults.length > 0) {
+                  ragContext = '\n\n--- 相关项目文档（按相关性排序）---\n';
+                  relevantResults.forEach((result, index) => {
+                    const similarity = result.similarity !== undefined 
+                      ? result.similarity.toFixed(2) 
+                      : (1 - (result.distance || 1)).toFixed(2);
+                    
+                    ragContext += `\n[${index + 1}] ${result.metadata?.file_path || '未知文件'} (相关性: ${similarity})\n`;
+                    ragContext += `${result.content}\n`;
+                    
+                    // 添加代码结构信息
+                    if (result.metadata?.structure) {
+                      const structure = result.metadata.structure;
+                      if (structure.functions && structure.functions.length > 0) {
+                        ragContext += `  函数: ${structure.functions.join(', ')}\n`;
+                      }
+                      if (structure.classes && structure.classes.length > 0) {
+                        ragContext += `  类: ${structure.classes.join(', ')}\n`;
+                      }
+                    }
+                  });
+                  ragContext += '--- 相关项目文档结束 ---\n';
+                  
+                  console.log(`RAG: Retrieved ${relevantResults.length} relevant documents for query: "${input.substring(0, 50)}..."`);
+                }
+              }
+            } catch (error) {
+              console.error('RAG retrieval failed:', error);
+              // Don't fail the request if RAG fails
+            }
+          }    setIsLoading(true);
     setCanAbortSession(true);
     // Set a default status when starting
     setIflowStatus({
@@ -4322,7 +4388,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const targetModel = provider === 'cursor' ? currentCursorModel : currentIFlowModel;
 
       // Use relative path - Vite proxy handles the rest
-      const streamUrl = `/stream?message=${encodeURIComponent(input)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}&persona=${encodeURIComponent(aiPersona || 'partner')}&model=${encodeURIComponent(targetModel)}`;
+      const streamUrl = `/stream?message=${encodeURIComponent(input + ragContext)}&cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(projectName)}&persona=${encodeURIComponent(aiPersona || 'partner')}&model=${encodeURIComponent(targetModel)}`;
 
       // Create new AbortController
       if (abortControllerRef.current) {

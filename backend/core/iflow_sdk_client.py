@@ -195,7 +195,12 @@ class IFlowSDKClient:
         self.file_max_size = file_max_size
         self.timeout = timeout
         self.url = url
-        self.auto_start_process = auto_start_process
+        # Windows 上禁用自动进程启动，因为 asyncio.create_subprocess_exec 在 Windows 上有兼容性问题
+        # iFlow CLI 应该通过 launch_all_fixed.bat 手动启动
+        if platform.system() == 'Windows':
+            self.auto_start_process = False
+        else:
+            self.auto_start_process = auto_start_process
         self.process_start_port = process_start_port
         self.session_id = session_id
         self.auto_approve_types = auto_approve_types or ["edit", "fetch"]
@@ -218,7 +223,11 @@ class IFlowSDKClient:
     async def _get_options(self) -> IFlowOptions:
         """构建 SDK 配置选项"""
         # Windows 上禁用自动进程启动，避免事件循环策略问题
-        auto_start_process = self.auto_start_process and platform.system() != 'Windows'
+        # 默认情况下，Windows 上 auto_start_process 应该为 False
+        if platform.system() == 'Windows':
+            auto_start_process = False
+        else:
+            auto_start_process = self.auto_start_process
 
         # 转换 approval_mode 字符串为枚举
         approval_mode_enum = self._get_approval_mode_enum()
@@ -501,13 +510,13 @@ class IFlowSDKClient:
                 "reason": "max_tokens",
                 "description": "达到最大令牌限制"
             },
-            StopReason.STOP_SEQUENCE: {
-                "reason": "stop_sequence",
-                "description": "遇到停止序列"
+            StopReason.REFUSAL: {
+                "reason": "refusal",
+                "description": "请求被拒绝"
             },
-            StopReason.ABORTED: {
-                "reason": "aborted",
-                "description": "任务被中止"
+            StopReason.CANCELLED: {
+                "reason": "cancelled",
+                "description": "任务被取消"
             }
         }
         return reason_map.get(stop_reason, {"reason": "unknown", "description": "未知原因"})
