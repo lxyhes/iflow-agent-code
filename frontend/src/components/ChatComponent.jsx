@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, User, Bot, Copy, Check, Sparkles } from 'lucide-react';
+import { Send, Loader2, User, Bot, Copy, Check, Sparkles, FileText, ChevronDown, ChevronUp, ExternalLink, TrendingUp, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -15,11 +15,13 @@ const ChatComponent = ({
   placeholder = "输入消息...",
   disabled = false,
   showCopyButton = true,
+  showSources = true,
   className = "",
   maxHeight = "400px"
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [expandedSources, setExpandedSources] = useState({});
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -33,6 +35,14 @@ const ChatComponent = ({
     navigator.clipboard.writeText(content);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  // 切换来源展开/收起
+  const toggleSources = (index) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
   };
 
   // 发送消息
@@ -92,30 +102,122 @@ const ChatComponent = ({
                 } px-5 py-3.5`}>
                   <div className="text-sm leading-relaxed break-words prose prose-invert max-w-none">
                     {msg.role === 'assistant' ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({node, ...props}) => <h1 className="text-lg font-bold mt-4 mb-2 text-white border-b border-white/10 pb-1" {...props} />,
-                          h2: ({node, ...props}) => <h2 className="text-base font-bold mt-3 mb-2 text-white" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1 text-slate-200" {...props} />,
-                          p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                          ul: ({node, ...props}) => <ul className="list-disc list-outside ml-4 mb-2 space-y-1" {...props} />,
-                          ol: ({node, ...props}) => <ol className="list-decimal list-outside ml-4 mb-2 space-y-1" {...props} />,
-                          li: ({node, ...props}) => <li className="" {...props} />,
-                          a: ({node, ...props}) => <a className="text-blue-300 hover:text-blue-200 underline decoration-blue-300/30 underline-offset-2 transition-colors" {...props} />,
-                          strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
-                          code: ({node, inline, ...props}) => 
-                            inline 
-                              ? <code className="bg-slate-900/50 px-1.5 py-0.5 rounded text-xs font-mono text-amber-200 border border-amber-500/10" {...props} />
-                              : <code className="block bg-slate-950/50 p-3 rounded-lg text-xs font-mono text-slate-300 overflow-x-auto border border-slate-800 my-2 shadow-inner" {...props} />,
-                          blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-slate-600 pl-3 my-2 text-slate-400 italic bg-slate-900/20 py-1 pr-2 rounded-r" {...props} />,
-                          table: ({node, ...props}) => <div className="overflow-x-auto my-2 rounded-lg border border-slate-700"><table className="min-w-full divide-y divide-slate-700" {...props} /></div>,
-                          th: ({node, ...props}) => <th className="bg-slate-900/50 px-3 py-2 text-left text-xs font-medium text-slate-300 uppercase tracking-wider" {...props} />,
-                          td: ({node, ...props}) => <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-300 border-t border-slate-800" {...props} />,
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      <>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({node, ...props}) => <h1 className="text-lg font-bold mt-4 mb-2 text-white border-b border-white/10 pb-1" {...props} />,
+                            h2: ({node, ...props}) => <h2 className="text-base font-bold mt-3 mb-2 text-white" {...props} />,
+                            h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1 text-slate-200" {...props} />,
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc list-outside ml-4 mb-2 space-y-1" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal list-outside ml-4 mb-2 space-y-1" {...props} />,
+                            li: ({node, ...props}) => <li className="" {...props} />,
+                            a: ({node, ...props}) => <a className="text-blue-300 hover:text-blue-200 underline decoration-blue-300/30 underline-offset-2 transition-colors" {...props} />,
+                            strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
+                            code: ({node, inline, ...props}) => 
+                              inline 
+                                ? <code className="bg-slate-900/50 px-1.5 py-0.5 rounded text-xs font-mono text-amber-200 border border-amber-500/10" {...props} />
+                                : <code className="block bg-slate-950/50 p-3 rounded-lg text-xs font-mono text-slate-300 overflow-x-auto border border-slate-800 my-2 shadow-inner" {...props} />,
+                            blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-slate-600 pl-3 my-2 text-slate-400 italic bg-slate-900/20 py-1 pr-2 rounded-r" {...props} />,
+                            table: ({node, ...props}) => <div className="overflow-x-auto my-2 rounded-lg border border-slate-700"><table className="min-w-full divide-y divide-slate-700" {...props} /></div>,
+                            th: ({node, ...props}) => <th className="bg-slate-900/50 px-3 py-2 text-left text-xs font-medium text-slate-300 uppercase tracking-wider" {...props} />,
+                            td: ({node, ...props}) => <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-300 border-t border-slate-800" {...props} />,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                        
+                        {/* 显示来源信息 */}
+                        {showSources && msg.sources && msg.sources.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-700/50">
+                            {/* 置信度评分 */}
+                            {msg.confidence && (
+                              <div className="flex items-center gap-2 mb-2">
+                                <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+                                <span className="text-xs text-slate-400">
+                                  置信度: <span className={`font-medium ${
+                                    msg.confidence.level === 'high' ? 'text-green-400' :
+                                    msg.confidence.level === 'medium' ? 'text-yellow-400' :
+                                    'text-red-400'
+                                  }`}>{msg.confidence.score}%</span>
+                                  <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] ${
+                                    msg.confidence.level === 'high' ? 'bg-green-900/30 text-green-300' :
+                                    msg.confidence.level === 'medium' ? 'bg-yellow-900/30 text-yellow-300' :
+                                    'bg-red-900/30 text-red-300'
+                                  }`}>
+                                    {msg.confidence.level === 'high' ? '高' :
+                                     msg.confidence.level === 'medium' ? '中' : '低'}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* 相关文档推荐 */}
+                            {msg.related_documents && msg.related_documents.length > 0 && (
+                              <div className="flex items-center gap-2 mb-2">
+                                <Star className="w-3.5 h-3.5 text-amber-400" />
+                                <span className="text-xs text-slate-400">
+                                  相关文档推荐
+                                </span>
+                              </div>
+                            )}
+                            
+                            <button
+                              onClick={() => toggleSources(index)}
+                              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-300 transition-colors mb-2"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span className="font-medium">参考来源 ({msg.sources.length})</span>
+                              {expandedSources[index] ? (
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            
+                            {expandedSources[index] && (
+                              <div className="space-y-2 mt-2">
+                                {msg.sources.map((source, sourceIndex) => (
+                                  <div
+                                    key={sourceIndex}
+                                    className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-700/30 hover:border-slate-600/50 transition-colors"
+                                  >
+                                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <FileText className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                                        <span className="text-xs font-mono text-slate-300 truncate flex-1">
+                                          {source.file_path}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs text-slate-500 flex-shrink-0">
+                                        {source.similarity ? `相似度: ${(source.similarity * 100).toFixed(0)}%` : ''}
+                                      </span>
+                                    </div>
+                                    
+                                    {(source.start_line || source.end_line) && (
+                                      <div className="text-xs text-slate-500 mb-1.5">
+                                        行 {source.start_line || '?'}-{source.end_line || '?'}
+                                        {source.language && ` · ${source.language}`}
+                                      </div>
+                                    )}
+                                    
+                                    {source.summary && (
+                                      <p className="text-xs text-slate-400 italic mb-1.5">
+                                        {source.summary}
+                                      </p>
+                                    )}
+                                    
+                                    <p className="text-xs text-slate-500 line-clamp-2">
+                                      {source.content}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     )}

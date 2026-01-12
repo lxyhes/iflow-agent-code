@@ -42,6 +42,7 @@ from backend.core.auto_fixer import AutoFixer, get_auto_fixer
 from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_dependency_analyzer as get_code_dependency_analyzer
 from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
 from backend.core.rag_service import RAGService, get_rag_service
+from backend.core.document_version_manager import get_version_manager
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -1942,11 +1943,19 @@ async def index_project_rag(request: Request, project_path: str = None, project_
 
 @app.post("/api/rag/retrieve/{project_name}")
 async def retrieve_rag(project_name: str, request: Request):
-    """检索相关文档"""
+    """检索相关文档（支持高级检索选项）"""
     try:
         data = await request.json()
         query = data.get("query", "")
         n_results = data.get("n_results", 5)
+        
+        # 高级检索选项
+        similarity_threshold = data.get("similarity_threshold", 0.0)  # 相似度阈值
+        file_types = data.get("file_types", [])  # 文件类型过滤
+        languages = data.get("languages", [])  # 编程语言过滤
+        min_chunk_size = data.get("min_chunk_size", 0)  # 最小块大小
+        max_chunk_size = data.get("max_chunk_size", float('inf'))  # 最大块大小
+        sort_by = data.get("sort_by", "similarity")  # 排序方式: similarity, date, size
         
         if not query:
             return JSONResponse(
@@ -1960,13 +1969,64 @@ async def retrieve_rag(project_name: str, request: Request):
             rag_cache[project_path] = get_rag_service(project_path)
         
         rag_service = rag_cache[project_path]
+        
+        # 执行检索
         results = rag_service.retrieve(query, n_results)
+        
+        # 应用过滤和排序
+        filtered_results = []
+        for result in results:
+            metadata = result.get('metadata', {})
+            similarity = result.get('similarity', 0)
+            
+            # 相似度阈值过滤
+            if similarity < similarity_threshold:
+                continue
+            
+            # 文件类型过滤
+            if file_types:
+                file_ext = os.path.splitext(metadata.get('file_path', ''))[1].lower()
+                if file_ext not in file_types:
+                    continue
+            
+            # 编程语言过滤
+            if languages:
+                language = metadata.get('language', '')
+                if language not in languages:
+                    continue
+            
+            # 块大小过滤
+            content_size = len(result.get('content', ''))
+            if content_size < min_chunk_size or content_size > max_chunk_size:
+                continue
+            
+            filtered_results.append(result)
+        
+        # 排序
+        if sort_by == "similarity":
+            filtered_results.sort(key=lambda x: x.get('similarity', 0), reverse=True)
+        elif sort_by == "date":
+            filtered_results.sort(key=lambda x: x.get('metadata', {}).get('timestamp', ''), reverse=True)
+        elif sort_by == "size":
+            filtered_results.sort(key=lambda x: len(x.get('content', '')), reverse=True)
+        
+        # 限制结果数量
+        final_results = filtered_results[:n_results]
         
         return {
             "success": True,
             "query": query,
-            "results": results,
-            "count": len(results)
+            "results": final_results,
+            "count": len(final_results),
+            "total_filtered": len(filtered_results),
+            "filters_applied": {
+                "similarity_threshold": similarity_threshold,
+                "file_types": file_types,
+                "languages": languages,
+                "min_chunk_size": min_chunk_size,
+                "max_chunk_size": max_chunk_size,
+                "sort_by": sort_by
+            }
         }
     except Exception as e:
         logger.exception(f"RAG 检索失败: {e}")
@@ -2064,17 +2124,60 @@ async def ask_rag_question(project_name: str, request: Request):
         # 构建上下文
         context_parts = []
         sources = []
+        max_similarity = 0
+        
         for i, result in enumerate(results):
             # result 是字典，不是对象
             metadata = result.get('metadata', {})
-            context_parts.append(f"[文档 {i+1}] {metadata.get('file_path', '未知文件')}:\n{result['content']}")
+            similarity = result.get('similarity', 0)
+            
+            # 记录最高相似度
+            if similarity > max_similarity:
+                max_similarity = similarity
+            
+            # 提取更详细的来源信息
+            file_path = metadata.get('file_path', '未知文件')
+            chunk_index = metadata.get('chunk_index', 0)
+            total_chunks = metadata.get('total_chunks', 1)
+            start_line = metadata.get('start_line', 1)
+            end_line = metadata.get('end_line', 1)
+            language = metadata.get('language', '')
+            summary = metadata.get('summary', '')
+            
+            # 构建来源描述
+            source_desc = f"{file_path}"
+            if language:
+                source_desc += f" ({language})"
+            if start_line and end_line:
+                source_desc += f" [行 {start_line}-{end_line}]"
+            
+            context_parts.append(f"[文档 {i+1}] {source_desc}:\n{result['content']}")
+            
             sources.append({
-                "file_path": metadata.get('file_path', '未知文件'),
+                "file_path": file_path,
                 "content": result['content'][:200] + '...' if len(result['content']) > 200 else result['content'],
-                "similarity": result.get('similarity', 0)
+                "similarity": similarity,
+                "chunk_index": chunk_index,
+                "total_chunks": total_chunks,
+                "start_line": start_line,
+                "end_line": end_line,
+                "language": language,
+                "summary": summary,
+                "source_desc": source_desc
             })
         
+        logger.info(f"RAG 问答: 为问题 '{question}' 找到 {len(sources)} 个来源")
+        for i, source in enumerate(sources):
+            logger.info(f"  来源 {i+1}: {source['file_path']} (相似度: {source['similarity']:.2f}, 块: {source['chunk_index']}/{source['total_chunks']})")
+        
         context = '\n\n'.join(context_parts)
+        
+        # 计算置信度评分（基于检索结果的相似度）
+        confidence_score = 0
+        if sources:
+            # 使用平均相似度作为置信度
+            avg_similarity = sum(s['similarity'] for s in sources) / len(sources)
+            confidence_score = avg_similarity * 100
         
         # 使用 AI 生成回答
         try:
@@ -2116,7 +2219,19 @@ async def ask_rag_question(project_name: str, request: Request):
             content={
                 "answer": answer,
                 "question": question,
-                "sources": sources
+                "sources": sources,
+                "confidence": {
+                    "score": round(confidence_score, 2),
+                    "level": "high" if confidence_score > 70 else "medium" if confidence_score > 40 else "low"
+                },
+                "related_documents": [
+                    {
+                        "file_path": s['file_path'],
+                        "similarity": s['similarity'],
+                        "summary": s.get('summary', '')
+                    }
+                    for s in sources[:3]  # 推荐 top 3 相关文档
+                ]
             },
             status_code=200
         )
@@ -2353,6 +2468,189 @@ async def catch_all(path_name: str, request: Request):
 
     # 默认响应
     return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
+
+
+# ==================== 文档版本管理 API ====================
+
+@app.get("/api/document-versions/{project_name}/{file_path:path}")
+async def get_document_versions(project_name: str, file_path: str):
+    """获取文档的所有版本"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        # 构建完整的文件路径
+        full_file_path = os.path.join(project_path, file_path)
+        
+        if not os.path.exists(full_file_path):
+            return JSONResponse(
+                content={"error": "文件不存在"},
+                status_code=404
+            )
+        
+        versions = version_manager.get_versions(full_file_path)
+        
+        return {
+            "success": True,
+            "file_path": file_path,
+            "versions": versions,
+            "total": len(versions)
+        }
+    except Exception as e:
+        logger.exception(f"获取文档版本失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取文档版本失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.get("/api/document-versions/{project_name}/{file_path:path}/{version_id}")
+async def get_document_version(project_name: str, file_path: str, version_id: str):
+    """获取特定版本的文档内容"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        # 构建完整的文件路径
+        full_file_path = os.path.join(project_path, file_path)
+        
+        version = version_manager.get_version(full_file_path, version_id)
+        
+        if not version:
+            return JSONResponse(
+                content={"error": "版本不存在"},
+                status_code=404
+            )
+        
+        return {
+            "success": True,
+            "version": version
+        }
+    except Exception as e:
+        logger.exception(f"获取文档版本内容失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取文档版本内容失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.post("/api/document-versions/{project_name}/{file_path:path}/record")
+async def record_document_version(project_name: str, file_path: str, request: Request):
+    """记录文档版本"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        # 构建完整的文件路径
+        full_file_path = os.path.join(project_path, file_path)
+        
+        if not os.path.exists(full_file_path):
+            return JSONResponse(
+                content={"error": "文件不存在"},
+                status_code=404
+            )
+        
+        # 获取元数据
+        try:
+            data = await request.json()
+            metadata = data.get("metadata", {})
+        except:
+            metadata = {}
+        
+        # 记录版本
+        version = version_manager.record_version(full_file_path, metadata=metadata)
+        
+        if not version:
+            return JSONResponse(
+                content={"error": "记录版本失败"},
+                status_code=500
+            )
+        
+        return {
+            "success": True,
+            "version": version
+        }
+    except Exception as e:
+        logger.exception(f"记录文档版本失败: {e}")
+        return JSONResponse(
+            content={"error": f"记录文档版本失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.get("/api/document-versions/{project_name}/{file_path:path}/compare/{version_id1}/{version_id2}")
+async def compare_document_versions(project_name: str, file_path: str, version_id1: str, version_id2: str):
+    """比较两个文档版本"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        # 构建完整的文件路径
+        full_file_path = os.path.join(project_path, file_path)
+        
+        comparison = version_manager.compare_versions(full_file_path, version_id1, version_id2)
+        
+        if not comparison:
+            return JSONResponse(
+                content={"error": "比较版本失败"},
+                status_code=500
+            )
+        
+        return {
+            "success": True,
+            "comparison": comparison
+        }
+    except Exception as e:
+        logger.exception(f"比较文档版本失败: {e}")
+        return JSONResponse(
+            content={"error": f"比较文档版本失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.delete("/api/document-versions/{project_name}/{file_path:path}/{version_id}")
+async def delete_document_version(project_name: str, file_path: str, version_id: str):
+    """删除特定版本"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        # 构建完整的文件路径
+        full_file_path = os.path.join(project_path, file_path)
+        
+        success = version_manager.delete_version(full_file_path, version_id)
+        
+        return {
+            "success": success,
+            "message": "版本已删除" if success else "删除版本失败"
+        }
+    except Exception as e:
+        logger.exception(f"删除文档版本失败: {e}")
+        return JSONResponse(
+            content={"error": f"删除文档版本失败: {str(e)}"},
+            status_code=500
+        )
+
+
+@app.get("/api/document-versions/{project_name}/statistics")
+async def get_version_statistics(project_name: str):
+    """获取版本统计信息"""
+    try:
+        project_path = get_project_path(project_name)
+        version_manager = get_version_manager(project_path)
+        
+        stats = version_manager.get_statistics()
+        
+        return {
+            "success": True,
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.exception(f"获取版本统计失败: {e}")
+        return JSONResponse(
+            content={"error": f"获取版本统计失败: {str(e)}"},
+            status_code=500
+        )
 
 if __name__ == "__main__":
     import uvicorn

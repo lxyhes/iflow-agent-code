@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Database, FileText, RefreshCw, Trash2, CheckCircle, AlertCircle, Loader2, Zap, Settings, Upload, X, FileUp, FolderOpen, Send, MessageSquare, LayoutGrid, List, Sparkles, Command, ChevronRight, FileCode, SearchCode } from 'lucide-react';
+import { Search, Database, FileText, RefreshCw, Trash2, CheckCircle, AlertCircle, Loader2, Zap, Settings, Upload, X, FileUp, FolderOpen, Send, MessageSquare, LayoutGrid, List, Sparkles, Command, ChevronRight, FileCode, SearchCode, Tag, Folder } from 'lucide-react';
 import { getRAGStats, indexProjectRAG, retrieveRAG, resetRAG, uploadDocumentToRAG, uploadDocumentsBatchToRAG, addFilesToRAG, askRAG } from '../utils/rag';
+import { retrieveRAGAdvanced, getDocumentVersions, getDocumentVersion, recordDocumentVersion } from '../utils/ragEnhanced';
 import ChatComponent from './ChatComponent';
 
 /**
@@ -31,6 +32,23 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
   const [showSettings, setShowSettings] = useState(false);
   const [hasAutoIndexed, setHasAutoIndexed] = useState(false);
   const autoIndexTriggered = useRef(false);
+  
+  // 高级检索选项
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [searchOptions, setSearchOptions] = useState({
+    similarityThreshold: 0.0,
+    fileTypes: [],
+    languages: [],
+    minChunkSize: 0,
+    maxChunkSize: Infinity,
+    sortBy: 'similarity'
+  });
+  
+  // 文档版本管理
+  const [selectedFileForVersions, setSelectedFileForVersions] = useState(null);
+  const [fileVersions, setFileVersions] = useState([]);
+  const [showVersionPanel, setShowVersionPanel] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState(null);
 
   // 使用项目路径生成唯一的存储键
   const getStorageKey = () => {
@@ -208,7 +226,29 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
       setSearchResults([]);
   
       try {
-        const results = await retrieveRAG(projectPath, searchQuery, 5);
+        let results;
+        if (showAdvancedSearch) {
+          // 使用高级检索
+          const data = await retrieveRAGAdvanced(projectPath, searchQuery, {
+            nResults: 5,
+            similarityThreshold: searchOptions.similarityThreshold,
+            fileTypes: searchOptions.fileTypes,
+            languages: searchOptions.languages,
+            minChunkSize: searchOptions.minChunkSize,
+            maxChunkSize: searchOptions.maxChunkSize,
+            sortBy: searchOptions.sortBy
+          });
+          results = data.results;
+          
+          // 显示过滤信息
+          if (data.filters_applied) {
+            console.log('应用了过滤条件:', data.filters_applied);
+          }
+        } else {
+          // 使用基本检索
+          results = await retrieveRAG(projectPath, searchQuery, 5);
+        }
+        
         setSearchResults(results);
       } catch (err) {
         console.error('检索失败:', err);
@@ -216,8 +256,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
       } finally {
         setIsRetrieving(false);
       }
-    };
-  
+    };  
     const handleReset = async () => {
       if (!projectPath) return;
       if (!confirm('确定要清空知识库吗？\n\n这将删除所有已索引的文档，包括之前可能读取的二进制数据。\n清空后，请重新上传您的文档，系统将使用新的读取功能正确提取内容。')) return;
@@ -264,12 +303,31 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
     try {
       // 调用 RAG 问答 API
       const result = await askRAG(projectPath, message);
+      
+      // 添加调试日志
+      console.log('RAG 问答结果:', {
+        answer: result.answer?.substring(0, 100),
+        sourcesCount: result.sources?.length || 0,
+        confidence: result.confidence,
+        relatedDocsCount: result.related_documents?.length || 0
+      });
+      
+      if (result.sources && result.sources.length > 0) {
+        console.log('来源详情:', result.sources.map(s => ({
+          file: s.file_path,
+          similarity: s.similarity,
+          chunk: `${s.chunk_index}/${s.total_chunks}`,
+          contentPreview: s.content.substring(0, 50)
+        })));
+      }
 
       // 添加 AI 回复
       const aiMessage = {
         role: 'assistant',
         content: result.answer || '抱歉，无法回答您的问题。',
-        sources: result.sources || []
+        sources: result.sources || [],
+        confidence: result.confidence || null,
+        related_documents: result.related_documents || []
       };
       setChatMessages(prev => [...prev, aiMessage]);
 
@@ -392,6 +450,50 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
 
   const handleAutoIndexToggle = () => {
     setAutoIndexEnabled(!autoIndexEnabled);
+  };
+  
+  // 查看文档版本
+  const handleViewVersions = async (filePath) => {
+    try {
+      const data = await getDocumentVersions(projectPath, filePath);
+      setFileVersions(data.versions || []);
+      setSelectedFileForVersions(filePath);
+      setShowVersionPanel(true);
+    } catch (err) {
+      console.error('获取文档版本失败:', err);
+      setError(err.message);
+    }
+  };
+  
+  // 查看特定版本
+  const handleViewVersion = async (versionId) => {
+    try {
+      const data = await getDocumentVersion(projectPath, selectedFileForVersions, versionId);
+      setSelectedVersion(data.version);
+    } catch (err) {
+      console.error('获取版本内容失败:', err);
+      setError(err.message);
+    }
+  };
+  
+  // 记录新版本
+  const handleRecordVersion = async () => {
+    if (!selectedFileForVersions) return;
+    
+    try {
+      const data = await recordDocumentVersion(projectPath, selectedFileForVersions, {
+        recorded_by: 'user',
+        timestamp: new Date().toISOString()
+      });
+      if (data.success) {
+        setSuccess('版本记录成功');
+        // 重新加载版本列表
+        await handleViewVersions(selectedFileForVersions);
+      }
+    } catch (err) {
+      console.error('记录版本失败:', err);
+      setError(err.message);
+    }
   };
 
   if (!visible) return null;
@@ -538,6 +640,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                     placeholder="向知识库提问...（Enter 发送，Shift+Enter 换行）"
                     maxHeight="calc(100vh - 250px)"
                     className="h-full"
+                    showSources={true}
                   />
                 </div>
               </div>
@@ -582,6 +685,18 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                     <span className="text-gray-400">集合名称:</span>
                     <span className="text-gray-200 font-mono text-xs">{stats.collection_name}</span>
                   </div>
+                  {stats.total_chunks && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">文档块总数:</span>
+                      <span className="text-gray-200">{stats.total_chunks}</span>
+                    </div>
+                  )}
+                  {stats.total_size && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">索引大小:</span>
+                      <span className="text-gray-200">{(stats.total_size / 1024).toFixed(1)} KB</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">尚未建立索引</p>
@@ -643,15 +758,40 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
             <div className="bg-gray-800/40 rounded-lg p-4 border border-gray-700/30 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-200">添加文档</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowUpload(false);
+                      setUploadedFiles([]);
+                      setSelectedFilePaths([]);
+                    }}
+                    className="text-gray-400 hover:text-gray-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 批量操作按钮 */}
+              <div className="flex gap-2 pb-3 border-b border-gray-700/30">
                 <button
                   onClick={() => {
-                    setShowUpload(false);
-                    setUploadedFiles([]);
-                    setSelectedFilePaths([]);
+                    if (confirm('确定要清空知识库吗？这将删除所有已索引的文档。')) {
+                      handleReset();
+                    }
                   }}
-                  className="text-gray-400 hover:text-gray-200"
+                  className="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-600/30 flex items-center justify-center gap-2"
                 >
-                  <X className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" />
+                  清空知识库
+                </button>
+                <button
+                  onClick={() => handleIndexProject(true)}
+                  disabled={isIndexing}
+                  className="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 border border-orange-600/30 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  强制重新索引
                 </button>
               </div>
 
@@ -877,7 +1017,74 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
 
         {/* 搜索框 */}
         <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700/30">
-          <label className="block text-sm font-medium text-gray-200 mb-2">检索文档</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-200">检索文档</label>
+            <button
+              onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                showAdvancedSearch
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {showAdvancedSearch ? '高级选项 ▲' : '高级选项 ▼'}
+            </button>
+          </div>
+          
+          {/* 高级检索选项 */}
+          {showAdvancedSearch && (
+            <div className="mb-3 p-3 bg-gray-900/50 rounded-lg border border-gray-700/30 space-y-3">
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">相似度阈值: {searchOptions.similarityThreshold}</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={searchOptions.similarityThreshold}
+                  onChange={(e) => setSearchOptions({...searchOptions, similarityThreshold: parseFloat(e.target.value)})}
+                  className="w-full"
+                />
+              </div>
+              
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">排序方式</label>
+                <select
+                  value={searchOptions.sortBy}
+                  onChange={(e) => setSearchOptions({...searchOptions, sortBy: e.target.value})}
+                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-200"
+                >
+                  <option value="similarity">相似度</option>
+                  <option value="date">日期</option>
+                  <option value="size">大小</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">文件类型</label>
+                <div className="flex flex-wrap gap-2">
+                  {['.py', '.js', '.ts', '.tsx', '.jsx', '.md', '.json', '.yaml'].map(ext => (
+                    <label key={ext} className="flex items-center gap-1 text-xs text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={searchOptions.fileTypes.includes(ext)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSearchOptions({...searchOptions, fileTypes: [...searchOptions.fileTypes, ext]});
+                          } else {
+                            setSearchOptions({...searchOptions, fileTypes: searchOptions.fileTypes.filter(t => t !== ext)});
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      {ext}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="relative">
             <input
               type="text"
@@ -917,15 +1124,27 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                   className="bg-gray-800/40 rounded-lg p-3 border border-gray-700/30 hover:border-purple-500/30 transition-colors"
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <span className="text-xs font-mono text-purple-400 bg-purple-900/20 px-2 py-0.5 rounded">
-                      {result.metadata?.file_path || '未知文件'}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {result.metadata?.language && (
-                        <span className="text-xs text-blue-400 bg-blue-900/20 px-2 py-0.5 rounded">
-                          {result.metadata.language}
-                        </span>
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-mono text-purple-400 bg-purple-900/20 px-2 py-0.5 rounded block mb-1">
+                        {result.metadata?.file_path || '未知文件'}
+                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {result.metadata?.language && (
+                          <span className="text-xs text-blue-400 bg-blue-900/20 px-2 py-0.5 rounded">
+                            {result.metadata.language}
+                          </span>
+                        )}
+                        {result.metadata?.categories && result.metadata.categories.length > 0 && (
+                          result.metadata.categories.map((cat, idx) => (
+                            <span key={idx} className="text-xs text-green-400 bg-green-900/20 px-2 py-0.5 rounded flex items-center gap-1">
+                              <Tag className="w-3 h-3" />
+                              {cat}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
                       {result.distance !== undefined && (
                         <span className="text-xs text-gray-500">
                           相似度: {(1 - result.distance).toFixed(2)}
@@ -947,9 +1166,18 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                         ? `${result.metadata.chunk_index + 1} / ${result.metadata.total_chunks}`
                         : '完整文档'}
                     </span>
-                    {result.metadata?.total_lines && (
-                      <span>{result.metadata.total_lines} 行</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {result.metadata?.total_lines && (
+                        <span>{result.metadata.total_lines} 行</span>
+                      )}
+                      <button
+                        onClick={() => handleViewVersions(result.metadata?.file_path)}
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                        title="查看版本历史"
+                      >
+                        查看版本
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -994,6 +1222,119 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
           </div>
         )}
       </>
+      
+      {/* 文档版本管理面板 */}
+      {showVersionPanel && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-700/50 max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            {/* 标题栏 */}
+            <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-100">文档版本历史</h3>
+                <p className="text-sm text-gray-400 mt-1 truncate">{selectedFileForVersions}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowVersionPanel(false);
+                  setSelectedFileForVersions(null);
+                  setFileVersions([]);
+                  setSelectedVersion(null);
+                }}
+                className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {/* 内容区域 */}
+            <div className="flex-1 overflow-hidden flex">
+              {/* 版本列表 */}
+              <div className="w-1/3 border-r border-gray-700/50 overflow-y-auto p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-medium text-gray-200">版本列表 ({fileVersions.length})</span>
+                  <button
+                    onClick={handleRecordVersion}
+                    className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors"
+                  >
+                    记录新版本
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  {fileVersions.map((version, index) => (
+                    <div
+                      key={version.version_id}
+                      onClick={() => handleViewVersion(version.version_id)}
+                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                        selectedVersion?.version_id === version.version_id
+                          ? 'bg-purple-600/20 border border-purple-500/50'
+                          : 'bg-gray-800/50 border border-gray-700/30 hover:border-gray-600/50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-1">
+                        <span className="text-xs font-mono text-purple-300">v{version.version_number}</span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(version.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        大小: {(version.size / 1024).toFixed(1)} KB
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 版本详情 */}
+              <div className="w-2/3 overflow-y-auto p-4">
+                {selectedVersion ? (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-200 mb-2">版本信息</h4>
+                      <div className="bg-gray-800/50 rounded-lg p-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">版本号:</span>
+                          <span className="text-gray-200">v{selectedVersion.version_number}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">版本 ID:</span>
+                          <span className="text-gray-200 font-mono text-xs">{selectedVersion.version_id}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">时间戳:</span>
+                          <span className="text-gray-200">{new Date(selectedVersion.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">文件大小:</span>
+                          <span className="text-gray-200">{(selectedVersion.size / 1024).toFixed(1)} KB</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">文件哈希:</span>
+                          <span className="text-gray-200 font-mono text-xs">{selectedVersion.hash.substring(0, 16)}...</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-200 mb-2">文件内容</h4>
+                      <div className="bg-gray-900/50 rounded-lg p-4 overflow-auto max-h-96">
+                        <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono">
+                          {selectedVersion.content}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <FileText className="w-12 h-12 mb-3 opacity-50" />
+                    <p className="text-sm">选择一个版本查看详情</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>
 );
