@@ -429,24 +429,37 @@ class SmartChunker:
         chunks = []
         
         if len(content) <= self.max_chunk_size:
+            # 计算行号
+            lines = content.split('\n')
             chunks.append({
                 "content": content,
                 "metadata": {
                     "type": "text",
-                    "file_path": file_path
+                    "file_path": file_path,
+                    "start_line": 1,
+                    "end_line": len(lines),
+                    "chunk_index": 0,
+                    "total_chunks": 1
                 }
             })
         else:
             chunks = self._split_large_chunk(content)
+            # 计算每个块的行号
+            current_line = 1
             for i, chunk in enumerate(chunks):
+                lines_in_chunk = chunk.count('\n') + 1
                 chunks[i] = {
                     "content": chunk,
                     "metadata": {
                         "type": "text",
                         "chunk_index": i,
-                        "file_path": file_path
+                        "file_path": file_path,
+                        "start_line": current_line,
+                        "end_line": current_line + lines_in_chunk - 1,
+                        "total_chunks": len(chunks)
                     }
                 }
+                current_line += lines_in_chunk
         
         return chunks
     

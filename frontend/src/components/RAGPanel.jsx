@@ -304,23 +304,34 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
       // 调用 RAG 问答 API
       const result = await askRAG(projectPath, message);
       
-      // 添加调试日志
-      console.log('RAG 问答结果:', {
-        answer: result.answer?.substring(0, 100),
-        sourcesCount: result.sources?.length || 0,
-        confidence: result.confidence,
-        relatedDocsCount: result.related_documents?.length || 0
-      });
+      // 添加详细调试日志
+      console.log('='.repeat(80));
+      console.log('RAG 问答结果:');
+      console.log('='.repeat(80));
+      console.log('回答预览:', result.answer?.substring(0, 100));
+      console.log('来源数量:', result.sources?.length || 0);
+      console.log('置信度:', result.confidence);
+      console.log('相关文档数量:', result.related_documents?.length || 0);
       
       if (result.sources && result.sources.length > 0) {
-        console.log('来源详情:', result.sources.map(s => ({
-          file: s.file_path,
-          similarity: s.similarity,
-          chunk: `${s.chunk_index}/${s.total_chunks}`,
-          contentPreview: s.content.substring(0, 50)
-        })));
+        console.log('='.repeat(80));
+        console.log('来源详细信息:');
+        console.log('='.repeat(80));
+        result.sources.forEach((source, index) => {
+          console.log(`\n来源 #${index + 1}:`);
+          console.log('  文件路径:', source.file_path);
+          console.log('  相似度:', source.similarity);
+          console.log('  块索引:', `${source.chunk_index}/${source.total_chunks}`);
+          console.log('  行号:', `${source.start_line}-${source.end_line}`);
+          console.log('  语言:', source.language);
+          console.log('  内容长度:', source.content?.length || 0);
+          console.log('  内容预览:', source.content?.substring(0, 150));
+          console.log('  摘要:', source.summary?.substring(0, 100) || 'N/A');
+          console.log('  来源描述:', source.source_desc);
+        });
+        console.log('='.repeat(80));
       }
-
+      
       // 添加 AI 回复
       const aiMessage = {
         role: 'assistant',
@@ -329,6 +340,16 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
         confidence: result.confidence || null,
         related_documents: result.related_documents || []
       };
+      
+      console.log('添加到聊天记录的消息:', {
+        role: aiMessage.role,
+        contentLength: aiMessage.content.length,
+        sourcesCount: aiMessage.sources.length,
+        confidence: aiMessage.confidence,
+        relatedDocsCount: aiMessage.related_documents.length
+      });
+      console.log('='.repeat(80));
+      
       setChatMessages(prev => [...prev, aiMessage]);
 
     } catch (err) {

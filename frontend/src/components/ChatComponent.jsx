@@ -178,6 +178,23 @@ const ChatComponent = ({
                             
                             {expandedSources[index] && (
                               <div className="space-y-2 mt-2">
+                                {(() => {
+                                  console.log('='.repeat(80));
+                                  console.log(`渲染消息 #${index} 的参考资料:`);
+                                  console.log('='.repeat(80));
+                                  console.log('sources 数量:', msg.sources?.length || 0);
+                                  msg.sources?.forEach((source, sourceIndex) => {
+                                    console.log(`\n来源 #${sourceIndex + 1}:`);
+                                    console.log('  文件路径:', source.file_path);
+                                    console.log('  相似度:', source.similarity);
+                                    console.log('  块索引:', `${source.chunk_index}/${source.total_chunks}`);
+                                    console.log('  行号:', `${source.start_line}-${source.end_line}`);
+                                    console.log('  语言:', source.language);
+                                    console.log('  摘要:', source.summary?.substring(0, 50));
+                                    console.log('  内容:', source.content?.substring(0, 100));
+                                  });
+                                  console.log('='.repeat(80));
+                                })()}
                                 {msg.sources.map((source, sourceIndex) => (
                                   <div
                                     key={sourceIndex}
@@ -199,6 +216,7 @@ const ChatComponent = ({
                                       <div className="text-xs text-slate-500 mb-1.5">
                                         行 {source.start_line || '?'}-{source.end_line || '?'}
                                         {source.language && ` · ${source.language}`}
+                                        {source.chunk_index !== undefined && ` · 块 ${source.chunk_index}/${source.total_chunks}`}
                                       </div>
                                     )}
                                     
@@ -208,9 +226,19 @@ const ChatComponent = ({
                                       </p>
                                     )}
                                     
-                                    <p className="text-xs text-slate-500 line-clamp-2">
-                                      {source.content}
-                                    </p>
+                                    <div className="text-xs text-slate-500 line-clamp-2">
+                                      <span className="font-medium text-gray-300 mb-1 block">内容预览:</span>
+                                      {(() => {
+                                        // 移除图片信息，只显示实际内容
+                                        let content = source.content;
+                                        const imageInfoMatch = content.match(/\[文档包含 \d+ 张图片\][\s\S]*?\n\n/);
+                                        if (imageInfoMatch) {
+                                          content = content.replace(imageInfoMatch[0], '');
+                                        }
+                                        console.log(`来源 #${sourceIndex + 1} 处理后内容:`, content.substring(0, 100));
+                                        return content;
+                                      })()}
+                                    </div>
                                   </div>
                                 ))}
                               </div>

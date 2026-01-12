@@ -698,6 +698,9 @@ class TFIDFRetriever:
             
             # 构建结果
             results = []
+            logger.info(f"TF-IDF 检索开始: 查询='{query}', 请求结果数={n_results}, 总文档数={len(self.documents)}")
+            logger.info(f"  相似度数组: {similarities[:10]}... (前10个)")
+            
             for idx in top_indices:
                 doc = self.documents[idx]
                 similarity = similarities[idx]
@@ -712,6 +715,22 @@ class TFIDFRetriever:
                     if not match:
                         continue
                 
+                # 添加详细调试日志
+                logger.info(f"=" * 80)
+                logger.info(f"TF-IDF 检索结果 #{len(results)+1}:")
+                logger.info(f"  索引位置: {idx}")
+                logger.info(f"  文档ID: {doc.doc_id}")
+                logger.info(f"  文件路径: {doc.metadata.get('file_path')}")
+                logger.info(f"  块索引: {doc.metadata.get('chunk_index')}/{doc.metadata.get('total_chunks')}")
+                logger.info(f"  相似度: {similarity:.6f}")
+                logger.info(f"  距离: {1 - similarity:.6f}")
+                logger.info(f"  行号范围: {doc.metadata.get('start_line')}-{doc.metadata.get('end_line')}")
+                logger.info(f"  语言: {doc.metadata.get('language', 'N/A')}")
+                logger.info(f"  内容长度: {len(doc.content)} 字符")
+                logger.info(f"  内容预览: {doc.content[:200]}")
+                logger.info(f"  完整元数据: {doc.metadata}")
+                logger.info(f"=" * 80)
+                
                 results.append({
                     "id": doc.doc_id,
                     "content": doc.content,
@@ -719,6 +738,8 @@ class TFIDFRetriever:
                     "distance": 1 - similarity,  # 转换为距离
                     "similarity": similarity
                 })
+            
+            logger.info(f"TF-IDF 检索完成: 返回 {len(results)} 个结果")
             
             return results
         

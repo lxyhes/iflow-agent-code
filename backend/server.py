@@ -2167,8 +2167,20 @@ async def ask_rag_question(project_name: str, request: Request):
             })
         
         logger.info(f"RAG 问答: 为问题 '{question}' 找到 {len(sources)} 个来源")
+        logger.info("=" * 80)
+        logger.info("返回给前端的 sources 数组:")
+        logger.info("=" * 80)
         for i, source in enumerate(sources):
-            logger.info(f"  来源 {i+1}: {source['file_path']} (相似度: {source['similarity']:.2f}, 块: {source['chunk_index']}/{source['total_chunks']})")
+            logger.info(f"\n来源 #{i+1}:")
+            logger.info(f"  file_path: {source['file_path']}")
+            logger.info(f"  chunk_index: {source['chunk_index']}")
+            logger.info(f"  total_chunks: {source['total_chunks']}")
+            logger.info(f"  start_line: {source['start_line']}")
+            logger.info(f"  end_line: {source['end_line']}")
+            logger.info(f"  similarity: {source['similarity']}")
+            logger.info(f"  content_length: {len(source['content'])}")
+            logger.info(f"  content_preview: {source['content'][:150]}")
+        logger.info("=" * 80)
         
         context = '\n\n'.join(context_parts)
         
