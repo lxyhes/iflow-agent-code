@@ -100,6 +100,11 @@ import agentRoutes from './routes/agent.js';
 import projectsRoutes from './routes/projects.js';
 import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
+import snippetsRoutes from './routes/snippets.js';
+import commandShortcutsRoutes from './routes/command-shortcuts.js';
+import reviewRoutes from './routes/review.js';
+import solutionsRoutes from './routes/solutions.js';
+import businessFlowRoutes from './routes/business-flow.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -288,6 +293,21 @@ app.use('/api/user', authenticateToken, userRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
+
+// Snippets API Routes (protected)
+app.use('/api/snippets', authenticateToken, snippetsRoutes);
+
+// Command Shortcuts API Routes (protected)
+app.use('/api/command-shortcuts', authenticateToken, commandShortcutsRoutes);
+
+// Code Review API Routes (protected)
+app.use('/api/review', authenticateToken, reviewRoutes);
+
+// Solutions API Routes (protected)
+app.use('/api/solutions', authenticateToken, solutionsRoutes);
+
+// Business Flow API Routes (protected)
+app.use('/api/business-flow', authenticateToken, businessFlowRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(__dirname, '../public')));

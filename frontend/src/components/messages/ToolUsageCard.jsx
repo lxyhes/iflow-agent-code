@@ -1,16 +1,41 @@
 /**
  * Tool Usage Card Component
- * 工具调用卡片组件
+ * 工具调用卡片组件 - 增强版
+ * 
+ * 支持显示：
+ * - 工具调用状态
+ * - 工具参数
+ * - Agent 信息
+ * - 代码修改对比（write_file）
+ * - 命令执行结果（run_shell_command）
  */
 
-import React from 'react';
+import React, { useState } from 'react';
+import CodeDiffViewer from './CodeDiffViewer';
 
 const ToolUsageCard = ({ message }) => {
   if (!message.isToolUse || !message.toolType) return null;
 
+  const [showDiff, setShowDiff] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+
   const isRunning = message.toolStatus === 'running';
   const isFailed = message.toolStatus === 'failed';
   const isSuccess = message.toolStatus === 'success' || message.toolStatus === 'completed';
+
+  // 判断是否是文件写入操作
+  const isFileWrite = message.toolType === 'write_file' || message.toolType === 'replace';
+  
+  // 判断是否是命令执行操作
+  const isCommand = message.toolType === 'command' || message.toolType === 'run_shell_command';
+
+  // 提取文件信息
+  const fileName = message.toolLabel?.match(/path:\s*([^\s,]+)/)?.[1] || 
+                  message.toolLabel?.split(',')[0] || 
+                  'unknown.js';
+  
+  // 提取语言类型
+  const language = fileName.split('.').pop() || 'javascript';
 
   return (
     <div className={`group relative border-l-2 pl-3 py-2 my-2 rounded-r-lg transition-all duration-300 ${
@@ -22,6 +47,7 @@ const ToolUsageCard = ({ message }) => {
               ? 'bg-green-50/50 dark:bg-green-900/20 border-green-400'
               : 'bg-gray-50/50 dark:bg-gray-900/20 border-gray-400'
       }`}>
+      {/* 工具信息头部 */}
       <div className="flex items-center gap-2 text-sm">
         {/* 运行中动画 */}
         {isRunning && (
@@ -103,7 +129,7 @@ const ToolUsageCard = ({ message }) => {
           </span>
         )}
 
-        {/* AgentInfo 显示 - 支持多种格式 */}
+        {/* AgentInfo 显示 */}
         {message.agentInfo && (
           <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-200 dark:border-indigo-800">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,7 +140,105 @@ const ToolUsageCard = ({ message }) => {
              'Agent'}
           </span>
         )}
+
+        {/* 展开/折叠按钮 */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="ml-auto p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        >
+          <svg 
+            className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${showDetails ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
+
+      {/* 详细信息区域 */}
+      {showDetails && (
+        <div className="mt-3 space-y-3">
+          {/* 文件写入操作 - 显示代码对比 */}
+          {isFileWrite && message.oldContent && message.newContent && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  代码修改对比
+                </span>
+                <button
+                  onClick={() => setShowDiff(!showDiff)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    showDiff
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {showDiff ? '隐藏对比' : '显示对比'}
+                </button>
+              </div>
+              
+              {showDiff && (
+                <CodeDiffViewer
+                  oldContent={message.oldContent}
+                  newContent={message.newContent}
+                  fileName={fileName}
+                  language={language}
+                  mode="unified"
+                />
+              )}
+            </div>
+          )}
+
+          {/* 命令执行操作 - 显示命令和输出 */}
+          {isCommand && (
+            <div className="space-y-2">
+              <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-green-400 font-mono">$</span>
+                  <code className="text-xs text-gray-300 dark:text-gray-200 font-mono flex-1">
+                    {message.toolLabel || 'command'}
+                  </code>
+                </div>
+                {message.output && (
+                  <div className="mt-2 pt-2 border-t border-gray-700">
+                    <pre className="text-xs text-gray-400 dark:text-gray-500 font-mono whitespace-pre-wrap">
+                      {message.output}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 工具参数详情 */}
+          {message.toolParams && (
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 block">
+                参数详情
+              </span>
+              <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap">
+                {JSON.stringify(message.toolParams, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* 执行结果 */}
+          {message.result && !isCommand && (
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 block">
+                执行结果
+              </span>
+              <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap">
+                {typeof message.result === 'string' 
+                  ? message.result 
+                  : JSON.stringify(message.result, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

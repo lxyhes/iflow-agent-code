@@ -32,7 +32,7 @@ const AssistantMessage = ({
   const provider = localStorage.getItem('selected-provider') || 'iflow';
   const [showMenu, setShowMenu] = useState(false);
   const isEditing = editingMessageId === message.id;
-  const isFavorited = favoritedMessages?.includes(message.id);
+  const isFavorited = favoritedMessages?.has(message.id);
 
   return (
     <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2 relative">
