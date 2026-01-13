@@ -343,11 +343,6 @@ const ChatInterfaceMinimal = memo(({
     }
   }, [selectedSession?.id, chatState.syncSessionId]);
 
-  // 调试：追踪 selectedProject 变化
-  useEffect(() => {
-    console.log('[ChatInterfaceMinimal] selectedProject changed:', selectedProject?.name || 'null');
-  }, [selectedProject]);
-
   // 搜索结果点击
   const handleSearchResultClick = useCallback((messageId) => {
     chatState.setShowSearch(false);
@@ -400,23 +395,25 @@ const ChatInterfaceMinimal = memo(({
       )}
 
       {/* 消息列表或空状态 */}
-      {visibleMessages.length === 0 ? (
-        <EmptyState provider={chatState.provider} />
-      ) : (
-        <MessageList
-          messages={visibleMessages}
-          isLoading={chatState.isLoading}
-          scrollContainerRef={scrollManagement.scrollContainerRef}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          selectedProject={selectedProject}
-          onFileOpen={onFileOpen}
-          onShowSettings={onShowSettings}
-          messageActions={messageActions}
-          provider={chatState.provider}
-        />
-      )}
+      <div className="flex-1 overflow-hidden">
+        {visibleMessages.length === 0 ? (
+          <EmptyState provider={chatState.provider} />
+        ) : (
+          <MessageList
+            messages={visibleMessages}
+            isLoading={chatState.isLoading}
+            scrollContainerRef={scrollManagement.scrollContainerRef}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            showThinking={showThinking}
+            selectedProject={selectedProject}
+            onFileOpen={onFileOpen}
+            onShowSettings={onShowSettings}
+            messageActions={messageActions}
+            provider={chatState.provider}
+          />
+        )}
+      </div>
 
       {/* 状态栏 */}
       <ChatStatusBar
