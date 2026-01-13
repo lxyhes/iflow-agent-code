@@ -3,18 +3,39 @@
  * 助手消息卡片组件
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import IFlowLogo from '../IFlowLogo.jsx';
 import CursorLogo from '../CursorLogo.jsx';
 import MarkdownRenderer from '../markdown/MarkdownRenderer';
 import ThinkingBlock from '../markdown/ThinkingBlock';
 import ToolUsageCard from './ToolUsageCard';
 
-const AssistantMessage = ({ message, isGrouped, showThinking }) => {
+const AssistantMessage = ({ 
+  message, 
+  isGrouped, 
+  showThinking,
+  onCopyMessage,
+  onEditMessage,
+  onDeleteMessage,
+  onRegenerate,
+  onToggleFavorite,
+  editingMessageId,
+  editingContent,
+  setEditingContent,
+  handleSaveEdit,
+  handleCancelEdit,
+  copiedMessageId,
+  regeneratingMessageId,
+  favoritedMessages,
+  isLoading
+}) => {
   const provider = localStorage.getItem('selected-provider') || 'iflow';
+  const [showMenu, setShowMenu] = useState(false);
+  const isEditing = editingMessageId === message.id;
+  const isFavorited = favoritedMessages?.includes(message.id);
 
   return (
-    <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2">
+    <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2 relative">
       {/* Left Column: Avatar */}
       <div className="flex-shrink-0 flex flex-col items-center">
         {!isGrouped && (
@@ -38,7 +59,7 @@ const AssistantMessage = ({ message, isGrouped, showThinking }) => {
       </div>
 
       {/* Right Column: Content */}
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden relative">
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -70,6 +91,82 @@ const AssistantMessage = ({ message, isGrouped, showThinking }) => {
             </MarkdownRenderer>
           )}
         </div>
+
+        {/* 操作菜单按钮 */}
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="absolute -left-10 top-2 w-8 h-8 rounded-full bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700"
+        >
+          <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+          </svg>
+        </button>
+
+        {/* 操作菜单 */}
+        {showMenu && (
+          <div className="absolute -left-32 top-0 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 py-1 min-w-[120px] z-50">
+            <button
+              onClick={() => {
+                onCopyMessage(message.id);
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              复制
+            </button>
+            <button
+              onClick={() => {
+                onEditMessage(message.id);
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              编辑
+            </button>
+            <button
+              onClick={() => {
+                onRegenerate(message.id);
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:gray-700 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新生成
+            </button>
+            <button
+              onClick={() => {
+                onToggleFavorite(message.id);
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l-7.07 7.071.42.42 6.6.6 1.417.921 1.603.921 1.902 0 7.828-7.787 7.828-7.787 0-1.051.42-1.417.921-1.603.921-1.902 0l-7.07 7.071c-.42.42-.6-1.417-.921-1.902-.921-.485 0-.921.42-1.417.921l-7.07 7.07c-.42.42-.6.42-1.417.921-1.902 0l7.07-7.07c.921-.42 1.603-.42 1.902 0l7.07 7.07c.42.42.6 1.417.921 1.902 0 .921-.42 1.603-.921 1.902 0l-7.07-7.07c-.42-.42-.6-1.417-.921-1.902-.921-.485 0-.921.42-1.417.921l-7.07 7.07c-.42.42-.6.42-1.417.921-1.902 0l7.07-7.07c.921-.42 1.603-.42 1.902 0l7.07 7.07c.42.42.6 1.417.921 1.902 0 .921-.42 1.603-.921 1.902 0z" />
+              </svg>
+              {isFavorited ? '取消收藏' : '收藏'}
+            </button>
+            <button
+              onClick={() => {
+                onDeleteMessage(message.id);
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 011-1h2a1 1 0 011 1v3M4 7h16" />
+              </svg>
+              删除
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

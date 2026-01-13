@@ -73,12 +73,40 @@ const MessageComponent = memo(({
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end' : ''} animate-fade-in-up`}
     >
       {message.type === 'user' ? (
-        <UserMessage message={message} isGrouped={isGrouped} />
+        <UserMessage 
+          message={message} 
+          isGrouped={isGrouped}
+          onCopyMessage={onCopyMessage}
+          onEditMessage={onEditMessage}
+          onDeleteMessage={onDeleteMessage}
+          onRegenerate={onRegenerate}
+          editingMessageId={editingMessageId}
+          editingContent={editingContent}
+          setEditingContent={setEditingContent}
+          handleSaveEdit={handleSaveEdit}
+          handleCancelEdit={handleCancelEdit}
+          copiedMessageId={copiedMessageId}
+          isLoading={isLoading}
+        />
       ) : (
         <AssistantMessage 
           message={message} 
           isGrouped={isGrouped} 
           showThinking={showThinking}
+          onCopyMessage={onCopyMessage}
+          onEditMessage={onEditMessage}
+          onDeleteMessage={onDeleteMessage}
+          onRegenerate={onRegenerate}
+          onToggleFavorite={onToggleFavorite}
+          editingMessageId={editingMessageId}
+          editingContent={editingContent}
+          setEditingContent={setEditingContent}
+          handleSaveEdit={handleSaveEdit}
+          handleCancelEdit={handleCancelEdit}
+          copiedMessageId={copiedMessageId}
+          regeneratingMessageId={regeneratingMessageId}
+          favoritedMessages={favoritedMessages}
+          isLoading={isLoading}
         />
       )}
     </div>
