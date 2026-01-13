@@ -18,7 +18,7 @@
  * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -82,6 +82,9 @@ function AppContent() {
   // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+
+  // WebSocket message tracking - 避免重复处理
+  const lastProcessedMessageRef = useRef(null);
 
   const { ws, sendMessage, messages } = useWebSocketContext();
 
@@ -187,14 +190,22 @@ function AppContent() {
 
   // Handle WebSocket messages for real-time project updates
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
+    if (messages.length === 0) return;
 
-      if (latestMessage.type === 'projects_updated') {
+    const latestMessage = messages[messages.length - 1];
 
-        // External Session Update Detection: Check if the changed file is the current session's JSONL
-        // If so, and the session is not active, trigger a message reload in ChatInterface
-        if (latestMessage.changedFile && selectedSession && selectedProject) {
+    // 避免重复处理同一条消息
+    if (lastProcessedMessageRef.current === latestMessage) {
+      return;
+    }
+
+    // 只处理最新的一条消息
+    if (latestMessage.type === 'projects_updated') {
+      lastProcessedMessageRef.current = latestMessage;
+
+      // External Session Update Detection: Check if the changed file is the current session's JSONL
+      // If so, and the session is not active, trigger a message reload in ChatInterface
+      if (latestMessage.changedFile && selectedSession && selectedProject) {
           // Extract session ID from changedFile (format: "project-name/session-id.jsonl")
           const changedFileParts = latestMessage.changedFile.split('/');
           if (changedFileParts.length >= 2) {
@@ -244,8 +255,15 @@ function AppContent() {
         if (selectedProject) {
           const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
           if (updatedSelectedProject) {
-            // Only update selected project if it actually changed - prevents flickering
-            if (JSON.stringify(updatedSelectedProject) !== JSON.stringify(selectedProject)) {
+            // 🔒 更保守的更新策略：只在项目名称或路径实际变化时才更新
+            // 避免因会话列表变化等无关字段更新导致的闪烁
+            const shouldUpdateProject =
+              updatedSelectedProject.name !== selectedProject.name ||
+              updatedSelectedProject.fullPath !== selectedProject.fullPath ||
+              updatedSelectedProject.path !== selectedProject.path;
+
+            if (shouldUpdateProject) {
+              console.log('[App] Updating selectedProject:', selectedProject.name);
               setSelectedProject(updatedSelectedProject);
             }
 
@@ -254,11 +272,16 @@ function AppContent() {
               const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
               if (!updatedSelectedSession) {
                 // Session was deleted
+                console.log('[App] Session deleted:', selectedSession.id);
                 setSelectedSession(null);
               }
               // Don't update if session still exists with same ID - prevents reload
             }
-          }
+          } else {
+            // Project was deleted or removed from the list
+            // Don't clear selectedProject here - only clear if user explicitly deletes it
+            // This prevents accidental project deselection during updates
+            console.warn(`[App] Project ${selectedProject.name} not found in updated projects list`);
         }
       }
     }
@@ -921,7 +944,7 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
+      <div className={`flex-1 flex flex-col ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -1024,4 +1047,5 @@ function App() {
   );
 }
 
+// Ensure default export is properly defined
 export default App;

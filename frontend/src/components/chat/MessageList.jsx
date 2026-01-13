@@ -1,42 +1,75 @@
 /**
- * 消息列表组件
- * 优化的消息渲染，支持虚拟滚动（未来扩展）
+ * MessageList Component
+ * 消息列表容器组件
  */
 
-import React, { useRef, useEffect } from 'react';
-import MessageItem from './MessageItem';
+import React, { memo } from 'react';
+import { Virtuoso } from 'react-virtuoso';
+import MessageComponent from '../messages/MessageComponent';
+import UsageLimitBanner from '../UsageLimitBanner';
+import LoadingIndicator from './LoadingIndicator';
 
-export default function MessageList({ messages, onCopyCode, onRetry }) {
-  const messagesEndRef = useRef(null);
-
-  // 自动滚动到底部
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  if (!messages || messages.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
-        <p>开始对话吧！</p>
-      </div>
-    );
-  }
-
+const MessageList = memo(({
+  messages,
+  isLoading,
+  scrollContainerRef,
+  autoExpandTools,
+  showRawParameters,
+  showThinking,
+  selectedProject,
+  onFileOpen,
+  onShowSettings,
+  messageActions,
+  provider = 'iflow'
+}) => {
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-      {messages.map((message, index) => (
-        <MessageItem
-          key={message.id || index}
-          message={message}
-          onCopyCode={onCopyCode}
-          onRetry={onRetry}
-        />
-      ))}
-      <div ref={messagesEndRef} />
+    <div className="flex-1 overflow-hidden relative">
+      <Virtuoso
+        ref={scrollContainerRef}
+        style={{ height: '100%', paddingLeft: '16px', paddingRight: '20px' }}
+        data={messages}
+        initialTopMostItemIndex={messages.length - 1}
+        components={{
+          Footer: () => <LoadingIndicator isLoading={isLoading} provider={provider} />
+        }}
+        itemContent={(index, message) => {
+          // 检查是否为配额限制消息
+          if (message.content && message.content.includes('IFlow AI usage limit reached')) {
+            return <UsageLimitBanner text={message.content} />;
+          }
+
+          return (
+            <MessageComponent
+              message={message}
+              index={index}
+              prevMessage={index > 0 ? messages[index - 1] : null}
+              createDiff={messageActions.createDiff}
+              onFileOpen={onFileOpen}
+              onShowSettings={onShowSettings}
+              autoExpandTools={autoExpandTools}
+              showRawParameters={showRawParameters}
+              showThinking={showThinking}
+              selectedProject={selectedProject}
+              onEditMessage={messageActions.handleEditMessage}
+              onRegenerate={messageActions.handleRegenerate}
+              onCopyMessage={messageActions.handleCopyMessage}
+              onDeleteMessage={messageActions.handleDeleteMessage}
+              onToggleFavorite={messageActions.handleToggleFavorite}
+              editingMessageId={messageActions.editingMessageId}
+              editingContent={messageActions.editingContent}
+              setEditingContent={messageActions.setEditingContent}
+              handleSaveEdit={messageActions.handleSaveEdit}
+              handleCancelEdit={messageActions.handleCancelEdit}
+              copiedMessageId={messageActions.copiedMessageId}
+              regeneratingMessageId={messageActions.regeneratingMessageId}
+              favoritedMessages={messageActions.favoritedMessages}
+              isLoading={isLoading}
+            />
+          );
+        }}
+      />
     </div>
   );
-}
+});
+
+export default MessageList;

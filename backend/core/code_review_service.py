@@ -120,13 +120,13 @@ class CodeReviewService:
         Args:
             file_path: 文件路径
             content: 文件内容
-            check_types: 检查类型列表 ['quality', 'style', 'security', 'performance']
+            check_types: 检查类型列表 ['quality', 'style', 'security', 'performance', 'complexity', 'duplication']
         
         Returns:
             审查结果
         """
         if check_types is None:
-            check_types = ['quality', 'style', 'security', 'performance']
+            check_types = ['quality', 'style', 'security', 'performance', 'complexity', 'duplication']
         
         ext = Path(file_path).suffix.lower()
         
@@ -157,6 +157,14 @@ class CodeReviewService:
                 perf_issues = self._check_performance(content, file_path, ext)
                 issues.extend(perf_issues)
             
+            if 'complexity' in check_types:
+                complexity_issues = self._check_complexity(content, file_path, ext)
+                issues.extend(complexity_issues)
+            
+            if 'duplication' in check_types:
+                duplication_issues = self._check_duplication(content, file_path, ext)
+                issues.extend(duplication_issues)
+            
             # 语言特定检查
             language_issues = self.supported_languages[ext](content, file_path)
             issues.extend(language_issues)
@@ -168,7 +176,8 @@ class CodeReviewService:
                 "success": True,
                 "issues": [issue.to_dict() for issue in issues],
                 "summary": summary,
-                "total_issues": len(issues)
+                "total_issues": len(issues),
+                "metrics": self._calculate_metrics(content, ext)
             }
         
         except Exception as e:
@@ -389,7 +398,188 @@ class CodeReviewService:
                                 )
                                 issues.append(issue)
         
+        # 检查不必要的重新渲染（React）
+        if ext in ['.js', '.jsx', '.ts', '.tsx']:
+            # 检查在 useEffect 中缺少依赖
+            use_effect_pattern = r'useEffect\s*\(\s*\([^)]*\)\s*=>\s*\{'
+            for line_num, line in enumerate(lines, 1):
+                if re.search(use_effect_pattern, line):
+                    # 检查是否有依赖数组
+                    if line_num < len(lines) - 5:
+                        next_lines = ''.join(lines[line_num:min(line_num + 5, len(lines))])
+                        if ']' not in next_lines or 'useEffect' not in next_lines:
+                            issue = CodeIssue(
+                                issue_id=f"performance_missing_deps_{line_num}",
+                                severity=IssueSeverity.HIGH,
+                                category=IssueCategory.PERFORMANCE,
+                                title="useEffect 缺少依赖",
+                                description="useEffect 缺少依赖数组，可能导致无限循环或不正确的行为",
+                                line=line_num,
+                                suggestion="添加正确的依赖数组到 useEffect",
+                                code_snippet=line.strip()
+                            )
+                            issues.append(issue)
+        
+        # 检查大对象拷贝
+        large_copy_pattern = r'(?:JSON\.parse\(\s*JSON\.stringify|Object\.assign|spread.*object)'
+        for line_num, line in enumerate(lines, 1):
+            if re.search(large_copy_pattern, line):
+                issue = CodeIssue(
+                    issue_id=f"performance_deep_copy_{line_num}",
+                    severity=IssueSeverity.MEDIUM,
+                    category=IssueCategory.PERFORMANCE,
+                    title="深拷贝操作",
+                    description="检测到可能的深拷贝操作，可能影响性能",
+                    line=line_num,
+                    suggestion="考虑使用浅拷贝或专门的深拷贝库",
+                    code_snippet=line.strip()
+                )
+                issues.append(issue)
+        
         return issues
+    
+    def _check_complexity(self, content: str, file_path: str, ext: str) -> List[CodeIssue]:
+        """检查代码复杂度"""
+        issues = []
+        
+        if ext == '.py':
+            try:
+                tree = ast.parse(content)
+                
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        # 计算圈复杂度
+                        complexity = self._calculate_cyclomatic_complexity(node)
+                        
+                        if complexity > 10:
+                            severity = IssueSeverity.HIGH if complexity > 20 else IssueSeverity.MEDIUM
+                            issue = CodeIssue(
+                                issue_id=f"complexity_high_{node.name}_{node.lineno}",
+                                severity=severity,
+                                category=IssueCategory.QUALITY,
+                                title=f"函数复杂度过高 ({complexity})",
+                                description=f"函数 {node.name} 的圈复杂度为 {complexity}，建议不超过 10",
+                                line=node.lineno,
+                                suggestion="考虑将函数拆分为更小的函数或使用策略模式",
+                                code_snippet=f"def {node.name}(...)"
+                            )
+                            issues.append(issue)
+                        
+                        # 检查函数长度
+                        func_lines = node.end_lineno - node.lineno if node.end_lineno else 0
+                        if func_lines > 50:
+                            issue = CodeIssue(
+                                issue_id=f"complexity_long_function_{node.name}_{node.lineno}",
+                                severity=IssueSeverity.MEDIUM,
+                                category=IssueCategory.QUALITY,
+                                title=f"函数过长 ({func_lines} 行)",
+                                description=f"函数 {node.name} 有 {func_lines} 行，建议不超过 50 行",
+                                line=node.lineno,
+                                suggestion="考虑将函数拆分为更小的函数",
+                                code_snippet=f"def {node.name}(...)"
+                            )
+                            issues.append(issue)
+                        
+                        # 检查参数数量
+                        arg_count = len(node.args.args)
+                        if arg_count > 5:
+                            issue = CodeIssue(
+                                issue_id=f"complexity_many_args_{node.name}_{node.lineno}",
+                                severity=IssueSeverity.MEDIUM,
+                                category=IssueCategory.QUALITY,
+                                title=f"参数过多 ({arg_count} 个)",
+                                description=f"函数 {node.name} 有 {arg_count} 个参数，建议不超过 5 个",
+                                line=node.lineno,
+                                suggestion="考虑使用参数对象或配置字典",
+                                code_snippet=f"def {node.name}(...)"
+                            )
+                            issues.append(issue)
+            
+            except SyntaxError:
+                pass
+        
+        return issues
+    
+    def _check_duplication(self, content: str, file_path: str, ext: str) -> List[CodeIssue]:
+        """检查重复代码"""
+        issues = []
+        lines = content.split('\n')
+        
+        # 简单的行重复检测
+        line_counts = {}
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if line and len(line) > 20:  # 忽略短行
+                if line in line_counts:
+                    line_counts[line].append(line_num)
+                else:
+                    line_counts[line] = [line_num]
+        
+        # 检查重复超过 3 次的行
+        for line, line_nums in line_counts.items():
+            if len(line_nums) > 3:
+                issue = CodeIssue(
+                    issue_id=f"duplication_repeated_line_{line_nums[0]}",
+                    severity=IssueSeverity.LOW,
+                    category=IssueCategory.QUALITY,
+                    title=f"重复代码 (出现 {len(line_nums)} 次)",
+                    description=f"检测到重复的代码行，出现在第 {', '.join(map(str, line_nums[:5]))} 行",
+                    line=line_nums[0],
+                    suggestion="考虑将重复的代码提取为函数或常量",
+                    code_snippet=line[:50] + "..." if len(line) > 50 else line
+                )
+                issues.append(issue)
+        
+        return issues
+    
+    def _calculate_cyclomatic_complexity(self, node) -> int:
+        """计算圈复杂度"""
+        complexity = 1  # 基础复杂度
+        
+        for child in ast.walk(node):
+            if isinstance(child, (ast.If, ast.While, ast.For, ast.AsyncFor)):
+                complexity += 1
+            elif isinstance(child, ast.ExceptHandler):
+                complexity += 1
+            elif isinstance(child, ast.BoolOp):
+                complexity += len(child.values) - 1
+        
+        return complexity
+    
+    def _calculate_metrics(self, content: str, ext: str) -> Dict[str, Any]:
+        """计算代码指标"""
+        lines = content.split('\n')
+        
+        metrics = {
+            "total_lines": len(lines),
+            "code_lines": 0,
+            "comment_lines": 0,
+            "blank_lines": 0,
+            "avg_line_length": 0
+        }
+        
+        total_length = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                metrics["blank_lines"] += 1
+            elif stripped.startswith('#') or stripped.startswith('//') or stripped.startswith('/*'):
+                metrics["comment_lines"] += 1
+            else:
+                metrics["code_lines"] += 1
+            
+            total_length += len(line)
+        
+        if lines:
+            metrics["avg_line_length"] = total_length / len(lines)
+        
+        # 计算注释率
+        if metrics["total_lines"] > 0:
+            metrics["comment_ratio"] = metrics["comment_lines"] / metrics["total_lines"]
+        else:
+            metrics["comment_ratio"] = 0
+        
+        return metrics
     
     def _review_python(self, content: str, file_path: str) -> List[CodeIssue]:
         """Python 特定审查"""

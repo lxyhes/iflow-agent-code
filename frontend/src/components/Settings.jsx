@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, Package, GitPullRequest, Users } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import IFlowLogo from './IFlowLogo';
 import CursorLogo from './CursorLogo';
@@ -10,6 +10,9 @@ import CredentialsSettings from './CredentialsSettings';
 import GitSettings from './GitSettings';
 import TasksSettings from './TasksSettings';
 import LoginModal from './LoginModal';
+import ProjectTemplateGenerator from './ProjectTemplateGenerator';
+import CICDGenerator from './CICDGenerator';
+import CollaborationPanel from './CollaborationPanel';
 import { authenticatedFetch } from '../utils/api';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
@@ -80,6 +83,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState('');
   const [selectedProject, setSelectedProject] = useState(null);
+
+  // 新功能状态
+  const [showProjectTemplate, setShowProjectTemplate] = useState(false);
+  const [showCICDGenerator, setShowCICDGenerator] = useState(false);
+  const [showCollaboration, setShowCollaboration] = useState(false);
+  const [currentProjectPath, setCurrentProjectPath] = useState('');
 
   const [claudeAuthStatus, setClaudeAuthStatus] = useState({
     authenticated: false,
@@ -897,6 +906,36 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               >
                 <Edit3 className="w-4 h-4 inline mr-2" />
                 Prompt Optimizer
+              </button>
+              <button
+                onClick={() => setActiveTab('project-templates')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'project-templates'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Package className="w-4 h-4 inline mr-2" />
+                项目模板
+              </button>
+              <button
+                onClick={() => setActiveTab('cicd')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'cicd'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <GitPullRequest className="w-4 h-4 inline mr-2" />
+                CI/CD
+              </button>
+              <button
+                onClick={() => setActiveTab('collaboration')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'collaboration'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Users className="w-4 h-4 inline mr-2" />
+                协作
               </button>
             </div>
           </div>
@@ -2614,6 +2653,69 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 <CredentialsSettings />
               </div>
             )}
+
+            {/* Project Templates Tab */}
+            {activeTab === 'project-templates' && (
+              <div className="space-y-6 md:space-y-8">
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 mx-auto mb-4 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-xl font-semibold mb-2">项目模板生成器</h3>
+                  <p className="text-muted-foreground mb-6">快速创建新项目，支持多种技术栈</p>
+                  <Button
+                    onClick={() => {
+                      setShowProjectTemplate(true);
+                      setCurrentProjectPath(selectedProject?.path || '');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Package className="w-4 h-4 mr-2" />
+                    创建新项目
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* CI/CD Tab */}
+            {activeTab === 'cicd' && (
+              <div className="space-y-6 md:space-y-8">
+                <div className="text-center py-12">
+                  <GitPullRequest className="w-16 h-16 mx-auto mb-4 text-green-600 dark:text-green-400" />
+                  <h3 className="text-xl font-semibold mb-2">CI/CD 配置生成器</h3>
+                  <p className="text-muted-foreground mb-6">为您的项目生成自动化部署配置</p>
+                  <Button
+                    onClick={() => {
+                      setShowCICDGenerator(true);
+                      setCurrentProjectPath(selectedProject?.path || '');
+                    }}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <GitPullRequest className="w-4 h-4 mr-2" />
+                    生成 CI/CD 配置
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Collaboration Tab */}
+            {activeTab === 'collaboration' && (
+              <div className="space-y-6 md:space-y-8">
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 mx-auto mb-4 text-purple-600 dark:text-purple-400" />
+                  <h3 className="text-xl font-semibold mb-2">实时协作</h3>
+                  <p className="text-muted-foreground mb-6">与团队成员实时协作开发</p>
+                  <Button
+                    onClick={() => {
+                      setShowCollaboration(true);
+                      setCurrentProjectPath(selectedProject?.path || '');
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    开启协作
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2671,6 +2773,28 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         provider={loginProvider}
         project={selectedProject}
         onComplete={handleLoginComplete}
+      />
+
+      {/* Project Template Generator */}
+      <ProjectTemplateGenerator
+        visible={showProjectTemplate}
+        onClose={() => setShowProjectTemplate(false)}
+      />
+
+      {/* CI/CD Generator */}
+      <CICDGenerator
+        visible={showCICDGenerator}
+        onClose={() => setShowCICDGenerator(false)}
+        projectPath={currentProjectPath}
+        projectName={selectedProject?.name}
+      />
+
+      {/* Collaboration Panel */}
+      <CollaborationPanel
+        visible={showCollaboration}
+        onClose={() => setShowCollaboration(false)}
+        projectPath={currentProjectPath}
+        projectName={selectedProject?.name}
       />
     </div>
   );

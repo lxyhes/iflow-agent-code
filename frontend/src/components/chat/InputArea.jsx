@@ -7,7 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Mic, X } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import { MicButton } from '../MicButton.jsx';
+import MicButton from '../MicButton.jsx';
 
 const InputArea = ({
   input,

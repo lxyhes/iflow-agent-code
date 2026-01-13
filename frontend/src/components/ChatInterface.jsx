@@ -34,7 +34,7 @@ import { chatStorage, draftStorage, migrateFromLocalStorage } from '../utils/ind
 
 import IFlowStatus from './IFlowStatus';
 import TokenUsagePie from './TokenUsagePie';
-import { MicButton } from './MicButton.jsx';
+import MicButton from './MicButton.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import Fuse from 'fuse.js';
 import CommandMenu from './CommandMenu';
@@ -45,6 +45,8 @@ import Shell from './Shell';
 import AutoFixPanel from './AutoFixPanel';
 import ContextVisualizer from './ContextVisualizer';
 import { retrieveRAG } from '../utils/rag';
+import DeveloperTools from './DeveloperTools';
+import ChatSearch from './ChatSearch';
 
 
 // Helper function to decode HTML entities in text
@@ -440,7 +442,32 @@ const ThinkingBlock = ({ content, isStreaming, isFinished }) => {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, showThinking, selectedProject }) => {
+const MessageComponent = memo(({ 
+  message, 
+  index, 
+  prevMessage, 
+  createDiff, 
+  onFileOpen, 
+  onShowSettings, 
+  autoExpandTools, 
+  showRawParameters, 
+  showThinking, 
+  selectedProject,
+  onEditMessage,
+  onRegenerate,
+  onCopyMessage,
+  onDeleteMessage,
+  onToggleFavorite,
+  editingMessageId,
+  editingContent,
+  setEditingContent,
+  handleSaveEdit,
+  handleCancelEdit,
+  copiedMessageId,
+  regeneratingMessageId,
+  favoritedMessages,
+  isLoading
+}) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
@@ -1830,6 +1857,109 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             )}
 
+            {/* 消息操作按钮 - 悬停时显示 */}
+            <div className={`flex items-center gap-1 mt-2 pl-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}`}>
+              {/* 编辑按钮（仅用户消息） */}
+              {message.type === 'user' && (
+                <button
+                  onClick={() => onEditMessage(message.id)}
+                  className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all"
+                  title="编辑消息"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
+
+              {/* 重新生成按钮（仅 AI 消息） */}
+              {message.type === 'assistant' && !isLoading && (
+                <button
+                  onClick={() => onRegenerate(message.id)}
+                  disabled={regeneratingMessageId === message.id}
+                  className="p-1.5 text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-all disabled:opacity-50"
+                  title="重新生成"
+                >
+                  {regeneratingMessageId === message.id ? (
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                </button>
+              )}
+
+              {/* 复制按钮 */}
+              <button
+                onClick={() => onCopyMessage(message.content, message.id)}
+                className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-all"
+                title={copiedMessageId === message.id ? '已复制' : '复制'}
+              >
+                {copiedMessageId === message.id ? (
+                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </button>
+
+              {/* 收藏按钮 */}
+              <button
+                onClick={() => onToggleFavorite(message.id)}
+                className={`p-1.5 rounded-lg transition-all ${
+                  favoritedMessages.has(message.id)
+                    ? 'text-yellow-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/30'
+                    : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/30'
+                }`}
+                title={favoritedMessages.has(message.id) ? '取消收藏' : '收藏'}
+              >
+                <svg className="w-4 h-4" fill={favoritedMessages.has(message.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+              </button>
+
+              {/* 删除按钮 */}
+              <button
+                onClick={() => onDeleteMessage(message.id)}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
+                title="删除"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 编辑模式 */}
+            {editingMessageId === message.id && (
+              <div className="mt-2 pl-1">
+                <textarea
+                  value={editingContent}
+                  onChange={(e) => setEditingContent(e.target.value)}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => handleSaveEdit(message.id)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded-lg transition-colors"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className={`text-xs text-gray-400 dark:text-gray-500 mt-1 pl-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'hidden'}`}>
               {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
@@ -1926,6 +2056,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 语音输出状态
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+
+  // 消息操作状态
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState(null);
+  const [favoritedMessages, setFavoritedMessages] = useState(new Set());
+
+  // 任务进度状态
+  const [taskProgress, setTaskProgress] = useState(0);
+  const [taskStatus, setTaskStatus] = useState('idle'); // idle, running, completed, error
+  const [currentTaskName, setCurrentTaskName] = useState('');
+  const [taskSteps, setTaskSteps] = useState([]); // 任务步骤列表
+
+  // 消息通知状态
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]); // 通知历史
+
+  // 搜索状态
+  const [showSearch, setShowSearch] = useState(false);
 
   // Initialize IndexedDB and migrate data from localStorage
   useEffect(() => {
@@ -2062,27 +2216,39 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [currentSessionId, canAbortSession, sendMessage, provider]);
 
-  // Handle global ESC key to abort generation
+  // Handle global ESC key to abort generation and Ctrl/Cmd+K to open search
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
-      if (e.key === 'Escape' && isLoading) {
-        e.preventDefault();
-        console.log('ESC pressed, aborting session...');
+      // ESC key - abort generation or close search
+      if (e.key === 'Escape') {
+        if (showSearch) {
+          e.preventDefault();
+          setShowSearch(false);
+        } else if (isLoading) {
+          e.preventDefault();
+          console.log('ESC pressed, aborting session...');
 
-        // 1. Abort local fetch
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-          abortControllerRef.current = null;
+          // 1. Abort local fetch
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+          }
+
+          // 2. Notify backend to kill process
+          handleAbortSession();
         }
+      }
 
-        // 2. Notify backend to kill process
-        handleAbortSession();
+      // Ctrl/Cmd + K - open search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(true);
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isLoading, handleAbortSession]);
+  }, [isLoading, handleAbortSession, showSearch]);
 
   // When selecting a session from Sidebar, auto-switch provider to match session's origin
   useEffect(() => {
@@ -3415,7 +3581,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
                       last.content = (last.content || '') + chunk;
                     } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
+                      updated.push({ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
                     }
                     return updated;
                   });
@@ -3438,7 +3604,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
                     last.content = (last.content || '') + chunk;
                   } else {
-                    updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
+                    updated.push({ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
                   }
                   return updated;
                 });
@@ -3519,6 +3685,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               if (part.type === 'tool_use') {
                 // Add tool use message
                 const toolInput = part.input ? JSON.stringify(part.input, null, 2) : '';
+                
+                // 更新任务进度
+                const toolNames = {
+                  'read_file': '读取文件',
+                  'write_file': '写入文件',
+                  'command': '执行命令',
+                  'search': '搜索文件',
+                  'list_directory': '列出目录',
+                  'create_directory': '创建目录',
+                  'delete_file': '删除文件',
+                  'move_file': '移动文件',
+                  'copy_file': '复制文件'
+                };
+                const taskName = toolNames[part.name] || part.name;
+                updateTaskProgress(10, 'running', taskName);
+                
                 setChatMessages(prev => [...prev, {
                   type: 'assistant',
                   content: '',
@@ -3562,6 +3744,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 // Find the corresponding tool use and update it with the result
                 setChatMessages(prev => prev.map(msg => {
                   if (msg.isToolUse && msg.toolId === part.tool_use_id) {
+                    // 更新任务进度
+                    updateTaskProgress(100, 'completed', msg.toolName || '工具执行完成');
+                    
                     return {
                       ...msg,
                       toolResult: {
@@ -3595,11 +3780,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
                       last.content = last.content ? `${last.content}\n${chunk}` : chunk;
                     } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
+                      updated.push({ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
                     }
                     return updated;
                   });
                 }, 100);
+              }
+              // 更新任务进度（模拟）
+              if (taskStatus === 'running') {
+                const newProgress = Math.min(taskProgress + 5, 95);
+                updateTaskProgress(newProgress, 'running');
               }
             }
           }
@@ -3615,6 +3805,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'iflow-error':
+          setIsLoading(false);
+          setStreamingMessage(null);
+          
+          // 添加错误通知
+          addNotification({
+            type: 'error',
+            title: '错误',
+            message: latestMessage.error || '发生未知错误',
+            messageId: null
+          });
+          
           setChatMessages(prev => [...prev, {
             type: 'error',
             content: `Error: ${latestMessage.error}`,
@@ -3763,7 +3964,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                     if (last && last.type === 'assistant' && !last.isToolUse && last.isStreaming) {
                       last.content = last.content ? `${last.content}\n${chunk}` : chunk;
                     } else {
-                      updated.push({ type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
+                      updated.push({ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, type: 'assistant', content: chunk, timestamp: new Date(), isStreaming: true });
                     }
                     return updated;
                   });
@@ -3784,6 +3985,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             setIsLoading(false);
             setCanAbortSession(false);
             setIflowStatus(null);
+
+            // 更新任务进度为完成
+            updateTaskProgress(100, 'completed');
+
+            // 增加未读消息计数
+            setUnreadMessages(prev => prev + 1);
 
             // Fetch updated token usage after message completes
             if (selectedProject && selectedSession?.id) {
@@ -3812,6 +4019,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onSessionNotProcessing(completedSessionId);
             }
           }
+
+          // 朗读最后一条 AI 回复
+          if (completedSessionId === currentSessionId && voiceOutputEnabled) {
+            setChatMessages(prev => {
+              const assistantMessages = prev.filter(msg => msg.type === 'assistant' && !msg.isToolUse);
+              if (assistantMessages.length > 0) {
+                const lastMessage = assistantMessages[assistantMessages.length - 1];
+                if (lastMessage && lastMessage.content) {
+                  setTimeout(() => {
+                    speakAIResponse(lastMessage.content);
+                  }, 500);
+                }
+              }
+              return prev;
+            });
+          }
+
+          // 添加完成通知
+          addNotification({
+            type: 'success',
+            title: '任务完成',
+            message: 'AI 回复已完成',
+            messageId: null
+          });
 
           // If we have a pending session ID and the conversation completed successfully, use it
           const pendingSessionId = sessionStorage.getItem('pendingSessionId');
@@ -4136,6 +4367,47 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
+  // 朗读 AI 回复
+  const speakAIResponse = useCallback((text) => {
+    if (!voiceOutputEnabled || !text) return;
+    
+    if ('speechSynthesis' in window) {
+      // 停止当前正在播放的语音
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-CN';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      
+      // 尝试选择中文语音
+      const voices = window.speechSynthesis.getVoices();
+      const chineseVoice = voices.find(voice => voice.lang.includes('zh'));
+      if (chineseVoice) {
+        utterance.voice = chineseVoice;
+      }
+      
+      utterance.onerror = (event) => {
+        console.error('语音合成错误:', event.error);
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [voiceOutputEnabled]);
+
+  // 停止语音播放
+  const stopAISpeaking = useCallback(() => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  // 在组件挂载时设置全局函数
+  useEffect(() => {
+    window.speakAIResponse = speakAIResponse;
+    window.stopAISpeaking = stopAISpeaking;
+  }, [speakAIResponse, stopAISpeaking]);
+
   // Load earlier messages by increasing the visible message count
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount(prevCount => prevCount + 100);
@@ -4213,6 +4485,232 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     noKeyboard: true
   });
 
+  // 消息编辑功能
+  const handleEditMessage = useCallback((messageId) => {
+    const message = chatMessages.find(m => m.id === messageId);
+    if (message) {
+      setEditingMessageId(messageId);
+      setEditingContent(message.content);
+    }
+  }, [chatMessages]);
+
+  const handleSaveEdit = useCallback((messageId) => {
+    setChatMessages(prev => prev.map(msg => {
+      if (msg.id === messageId) {
+        return { ...msg, content: editingContent, timestamp: new Date() };
+      }
+      return msg;
+    }));
+    setEditingMessageId(null);
+    setEditingContent('');
+  }, [editingContent]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null);
+    setEditingContent('');
+  }, []);
+
+  // 搜索结果点击处理
+  const handleSearchResultClick = useCallback((message, index) => {
+    setShowSearch(false);
+    
+    // 滚动到对应消息
+    if (scrollContainerRef.current && index >= 0) {
+      // 使用 Virtuoso 的 scrollToIndex 方法
+      scrollContainerRef.current.scrollToIndex({
+        index: index,
+        behavior: 'smooth',
+        align: 'center'
+      });
+    }
+  }, []);
+
+  // 消息重新生成功能
+  const handleRegenerate = useCallback(async (messageId) => {
+    const messageIndex = chatMessages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+
+    const message = chatMessages[messageIndex];
+    if (message.type !== 'assistant') return;
+
+    setRegeneratingMessageId(messageId);
+    setIsLoading(true);
+
+    try {
+      // 找到用户消息
+      let userMessage = null;
+      for (let i = messageIndex - 1; i >= 0; i--) {
+        if (chatMessages[i].type === 'user') {
+          userMessage = chatMessages[i];
+          break;
+        }
+      }
+
+      if (!userMessage) {
+        throw new Error('找不到对应的用户消息');
+      }
+
+      // 删除旧的 AI 回复
+      setChatMessages(prev => prev.filter(m => m.id !== messageId));
+
+      // 获取工具设置
+      const currentToolsSettings = getToolsSettings();
+
+      // 使用 WebSocket 重新发送用户消息
+      sendMessage({
+        type: 'iflow-command',
+        command: userMessage.content,
+        options: {
+          projectPath: selectedProject.path,
+          cwd: selectedProject.fullPath,
+          sessionId: currentSessionId,
+          resume: !!currentSessionId,
+          toolsSettings: currentToolsSettings,
+          permissionMode: permissionMode,
+          model: iflowModel,
+          images: userMessage.images || []
+        }
+      });
+      
+      // 新的回复会通过 WebSocket 处理
+    } catch (error) {
+      console.error('重新生成失败:', error);
+      setChatMessages(prev => [...prev, {
+        type: 'error',
+        content: `重新生成失败: ${error.message}`,
+        timestamp: new Date()
+      }]);
+    } finally {
+      setRegeneratingMessageId(null);
+      setIsLoading(false);
+    }
+  }, [chatMessages, currentSessionId, selectedProject, sendMessage, permissionMode, iflowModel]);
+
+  // 消息复制功能
+  const handleCopyMessage = useCallback(async (content, messageId) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (error) {
+      console.error('复制失败:', error);
+    }
+  }, []);
+
+  // 消息删除功能
+  const handleDeleteMessage = useCallback((messageId) => {
+    if (confirm('确定要删除这条消息吗？')) {
+      setChatMessages(prev => prev.filter(m => m.id !== messageId));
+    }
+  }, []);
+
+  // 消息收藏功能
+  const handleToggleFavorite = useCallback((messageId) => {
+    setFavoritedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // 消息导出功能
+  const handleExportMessages = useCallback(() => {
+    const exportData = chatMessages.map(msg => ({
+      type: msg.type,
+      content: msg.content,
+      timestamp: msg.timestamp,
+      isFavorite: favoritedMessages.has(msg.id)
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [chatMessages, favoritedMessages]);
+
+  // 更新任务进度
+  const updateTaskProgress = useCallback((progress, status, taskName = '') => {
+    setTaskProgress(progress);
+    if (status) {
+      setTaskStatus(status);
+    }
+    if (taskName) {
+      setCurrentTaskName(taskName);
+    }
+    // 如果状态变为运行中，添加任务步骤
+    if (status === 'running' && taskName) {
+      setTaskSteps(prev => {
+        const newSteps = [...prev];
+        newSteps.push({
+          name: taskName,
+          progress: progress,
+          status: 'running',
+          timestamp: new Date()
+        });
+        return newSteps;
+      });
+    }
+    // 如果状态变为完成，更新最后一个步骤
+    if (status === 'completed') {
+      setTaskSteps(prev => {
+        if (prev.length > 0) {
+          const newSteps = [...prev];
+          newSteps[newSteps.length - 1] = {
+            ...newSteps[newSteps.length - 1],
+            progress: 100,
+            status: 'completed',
+            timestamp: new Date()
+          };
+          return newSteps;
+        }
+        return prev;
+      });
+    }
+  }, []);
+
+  // 添加通知
+  const addNotification = useCallback((notification) => {
+    const newNotification = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      ...notification,
+      timestamp: new Date(),
+      read: false
+    };
+    setNotifications(prev => [newNotification, ...prev].slice(0, 50)); // 最多保留 50 条
+    setUnreadMessages(prev => prev + 1);
+  }, []);
+
+  // 标记通知为已读
+  const markNotificationAsRead = useCallback((notificationId) => {
+    setNotifications(prev => prev.map(notif => 
+      notif.id === notificationId ? { ...notif, read: true } : notif
+    ));
+    setUnreadMessages(prev => Math.max(0, prev - 1));
+  }, []);
+
+  // 清除所有通知
+  const clearAllNotifications = useCallback(() => {
+    setNotifications([]);
+    setUnreadMessages(0);
+  }, []);
+
+  // 切换通知面板
+  const toggleNotifications = useCallback(() => {
+    setShowNotifications(prev => !prev);
+    if (!showNotifications) {
+      setUnreadMessages(0);
+    }
+  }, [showNotifications]);
+
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
@@ -4250,6 +4748,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
 
     const userMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type: 'user',
       content: input,
       images: uploadedImages,
@@ -5125,6 +5624,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                       showRawParameters={showRawParameters}
                       showThinking={showThinking}
                       selectedProject={selectedProject}
+                      onEditMessage={handleEditMessage}
+                      onRegenerate={handleRegenerate}
+                      onCopyMessage={handleCopyMessage}
+                      onDeleteMessage={handleDeleteMessage}
+                      onToggleFavorite={handleToggleFavorite}
+                      editingMessageId={editingMessageId}
+                      editingContent={editingContent}
+                      setEditingContent={setEditingContent}
+                      handleSaveEdit={handleSaveEdit}
+                      handleCancelEdit={handleCancelEdit}
+                      copiedMessageId={copiedMessageId}
+                      regeneratingMessageId={regeneratingMessageId}
+                      favoritedMessages={favoritedMessages}
+                      isLoading={isLoading}
                     />
                   </div>
                 );
@@ -5252,7 +5765,12 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                       ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/30'
                       : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30'
                   }`}
-                title="Click to change permission mode (or press Tab in input)"
+                title={
+                  permissionMode === 'default' ? '默认模式：需要手动确认所有操作' :
+                  permissionMode === 'acceptEdits' ? '接受编辑模式：自动接受文件编辑，其他操作需确认' :
+                  permissionMode === 'bypassPermissions' ? '绕过权限模式：自动执行所有操作（谨慎使用）' :
+                  '计划模式：只规划不执行，适合复杂任务'
+                }
               >
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${permissionMode === 'default'
@@ -5264,13 +5782,181 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                         : 'bg-blue-500'
                     }`} />
                   <span>
-                    {permissionMode === 'default' && 'Default Mode'}
-                    {permissionMode === 'acceptEdits' && 'Accept Edits'}
-                    {permissionMode === 'bypassPermissions' && 'Bypass Permissions'}
-                    {permissionMode === 'plan' && 'Plan Mode'}
+                    {permissionMode === 'default' && '默认模式'}
+                    {permissionMode === 'acceptEdits' && '接受编辑'}
+                    {permissionMode === 'bypassPermissions' && '绕过权限'}
+                    {permissionMode === 'plan' && '计划模式'}
                   </span>
                 </div>
               </button>
+
+              {/* 开发者工具栏 */}
+              <DeveloperTools 
+                onInsertSnippet={(code) => {
+                  // 将代码插入到输入框
+                  setInputValue(prev => prev + code);
+                }}
+                onInsertPrompt={(prompt) => {
+                  // 将提示词插入到输入框
+                  setInputValue(prev => prev + prompt);
+                }}
+              />
+
+              {/* 任务进度显示 */}
+              <div 
+                onClick={() => {
+                  if (taskSteps.length > 0) {
+                    setShowNotifications(true);
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                title={currentTaskName || '任务进度'}
+              >
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  taskStatus === 'running' ? 'border-blue-500 animate-spin' :
+                  taskStatus === 'completed' ? 'border-green-500' :
+                  taskStatus === 'error' ? 'border-red-500' :
+                  'border-gray-400'
+                }`}>
+                  {taskStatus === 'completed' && <div className="w-2 h-2 bg-green-500 rounded-full" />}
+                  {taskStatus === 'error' && <div className="w-2 h-2 bg-red-500 rounded-full" />}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 leading-tight">
+                    {currentTaskName || '准备就绪'}
+                  </span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {taskProgress.toFixed(1)}%
+                  </span>
+                </div>
+                {taskSteps.length > 0 && (
+                  <div className="ml-2 w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${taskProgress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 消息通知按钮 */}
+              <button
+                type="button"
+                onClick={toggleNotifications}
+                className="relative w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                title="Notifications"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                  />
+                </svg>
+                {/* Unread messages badge */}
+                {unreadMessages > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                    style={{ fontSize: '10px' }}
+                  >
+                    {unreadMessages > 99 ? '99+' : unreadMessages}
+                  </span>
+                )}
+              </button>
+
+              {/* 搜索按钮 */}
+              <button
+                type="button"
+                onClick={() => setShowSearch(true)}
+                className="relative w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                title="搜索消息 (Ctrl/Cmd + K)"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </button>
+
+              {/* 通知面板 */}
+              {showNotifications && (
+                <div className="absolute right-0 top-full mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">通知</h3>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={clearAllNotifications}
+                        className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        清除全部
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto p-2">
+                    {notifications.length === 0 ? (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">暂无通知</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            onClick={() => {
+                              markNotificationAsRead(notif.id);
+                              if (notif.messageId) {
+                                // 跳转到对应消息
+                                scrollContainerRef.current?.scrollToIndex({
+                                  index: chatMessages.findIndex(m => m.id === notif.messageId),
+                                  behavior: 'smooth'
+                                });
+                              }
+                            }}
+                            className={`p-3 rounded-lg cursor-pointer transition-all ${
+                              notif.read 
+                                ? 'bg-gray-50 dark:bg-gray-700/30 opacity-60' 
+                                : 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                notif.type === 'success' ? 'bg-green-500' :
+                                notif.type === 'error' ? 'bg-red-500' :
+                                notif.type === 'info' ? 'bg-blue-500' :
+                                'bg-gray-500'
+                              }`} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {notif.title || '通知'}
+                                </p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                  {notif.message}
+                                </p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                  {new Date(notif.timestamp).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Token usage pie chart - positioned next to mode indicator */}
               <TokenUsagePie
                 used={tokenBudget?.used || 0}
@@ -5504,6 +6190,29 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </button>
+
+                {/* Voice Output button */}
+                <button
+                  type="button"
+                  onClick={() => setVoiceOutputEnabled(!voiceOutputEnabled)}
+                  className={`p-2 rounded-xl transition-all hover:scale-110 active:scale-95 group ${
+                    voiceOutputEnabled
+                      ? 'bg-blue-100 dark:bg-blue-900/30'
+                      : 'hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                  }`}
+                  title={voiceOutputEnabled ? "关闭语音输出" : "开启语音输出"}
+                >
+                  {voiceOutputEnabled ? (
+                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
               <textarea
@@ -5534,13 +6243,11 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
 
               {/* Send button container */}
               <div className="absolute right-2 bottom-2 sm:bottom-3 flex items-center gap-2">
-                {/* Mic button - HIDDEN */}
-                <div style={{ display: 'none' }}>
-                  <MicButton
-                    onTranscript={handleTranscript}
-                    className="w-10 h-10"
-                  />
-                </div>
+                {/* Mic button */}
+                <MicButton
+                  onTranscript={handleTranscript}
+                  className="w-10 h-10"
+                />
 
                 {/* Send button */}
                 <button
@@ -5726,6 +6433,17 @@ ${report.metrics.bug_fixes > 0 ? `修复了 ${report.metrics.bug_fixes} 个 Bug`
             </div>
           </div>
         </div>
+      )}
+
+      {/* 聊天搜索面板 */}
+      {showSearch && (
+        <ChatSearch
+          messages={chatMessages}
+          allSessions={[]}
+          favoritedMessages={favoritedMessages}
+          onResultClick={handleSearchResultClick}
+          onClose={() => setShowSearch(false)}
+        />
       )}
     </>
   );

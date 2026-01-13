@@ -6,7 +6,6 @@ import platform
 import subprocess
 import logging
 from datetime import datetime
-from typing import Optional
 
 # Windows 事件循环策略设置 - 必须在任何异步操作之前设置
 if platform.system() == 'Windows':
@@ -44,20 +43,6 @@ from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_de
 from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
 from backend.core.rag_service import RAGService, get_rag_service
 from backend.core.document_version_manager import get_version_manager
-from backend.core.project_developer_agent import get_project_developer_agent
-from backend.core.auto_heal_service import get_auto_heal_service
-from backend.core.report_generator_enhanced import get_enhanced_report_generator
-from backend.core.context_graph_service import get_context_graph_service
-from backend.core.gamification_service import get_gamification_service
-from backend.core.sandbox_service import get_sandbox_service
-from backend.core.refactor_suggester import get_refactor_suggester
-from backend.core.test_generator import get_test_generator
-from backend.core.health_analyzer import get_health_analyzer
-from backend.core.code_completion_service import get_code_completion_service
-from backend.core.doc_generator import get_doc_generator
-from backend.core.code_review_service import get_code_review_service
-from backend.core.performance_monitor import get_performance_monitor
-from backend.core.project_template_service import get_project_template_service
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -175,7 +160,6 @@ def get_project_path(project_name: str) -> str:
 
 agent_cache = {}
 rag_cache = {}
-project_developer_cache = {}
 
 # AI Persona System Prompts
 PERSONA_PROMPTS = {
@@ -595,245 +579,6 @@ async def commit_changes(req: CommitRequest):
     output = await git_service.commit(get_project_path(req.project), req.message, req.files)
     return {"success": True, "output": output}
 
-@app.post("/api/git/generate-commit-message")
-async def generate_commit_message(request: Request):
-    """生成 Git 提交消息"""
-    try:
-        data = await request.json()
-        project_name = data.get("project")
-        files = data.get("files", [])
-        provider = data.get("provider", "claude")
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        if not files or len(files) == 0:
-            return JSONResponse(
-                content={"error": "没有选择文件"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        logger.info(f"开始生成提交消息: 项目={project_name}, 文件数={len(files)}")
-        
-        # 收集文件变更信息
-        file_changes = []
-        for file in files:
-            try:
-                current_content = file_service.read_file(project_path, file)
-                old_content = await git_service.get_file_at_head(project_path, file)
-                
-                # 分析文件变更
-                change_info = {
-                    "file": file,
-                    "file_name": os.path.basename(file),
-                    "file_ext": os.path.splitext(file)[1].lower(),
-                    "old_content": old_content,
-                    "new_content": current_content,
-                    "is_new": old_content is None or old_content == "",
-                    "is_deleted": current_content is None or current_content == "",
-                    "is_modified": old_content is not None and current_content is not None and old_content != current_content
-                }
-                
-                # 分析代码变更行数
-                if change_info["is_modified"]:
-                    old_lines = old_content.split('\n')
-                    new_lines = current_content.split('\n')
-                    removed = len([l for l in old_lines if l.strip()]) - len([l for l in new_lines if l.strip()])
-                    added = len([l for l in new_lines if l.strip()]) - len([l for l in old_lines if l.strip()])
-                    change_info["lines_added"] = max(0, added)
-                    change_info["lines_removed"] = max(0, removed)
-                elif change_info["is_new"]:
-                    change_info["lines_added"] = len([l for l in current_content.split('\n') if l.strip()])
-                    change_info["lines_removed"] = 0
-                elif change_info["is_deleted"]:
-                    change_info["lines_added"] = 0
-                    change_info["lines_removed"] = len([l for l in old_content.split('\n') if l.strip()])
-                
-                file_changes.append(change_info)
-                
-            except Exception as e:
-                logger.warning(f"分析文件 {file} 失败: {e}")
-        
-        # 智能分析变更特征
-        analysis = {
-            "type": "chore",
-            "scope": "",
-            "keywords": set(),
-            "components": []
-        }
-        
-        # 扩展的关键词库
-        keyword_map = {
-            "fix": ["修复", "fix", "解决", "solve", "修正", "correct", "bug", "error", "错误", "异常", "exception", "问题", "issue", "缺陷", "defect"],
-            "feat": ["新增", "add", "新增功能", "implement", "实现", "create", "创建", "build", "开发", "develop", "添加", "append"],
-            "refactor": ["重构", "refactor", "优化", "optimize", "改进", "improve", "提取", "extract", "简化", "simplify", "重写", "rewrite"],
-            "perf": ["性能", "performance", "优化", "optimize", "加速", "speed", "缓存", "cache", "异步", "async", "并发", "concurrent"],
-            "style": ["格式", "format", "代码风格", "style", "lint", "缩进", "indent", "空格", "space", "换行", "newline"],
-            "test": ["测试", "test", "单元测试", "unit test", "测试用例", "test case", "断言", "assert", "mock", "spec"],
-            "docs": ["文档", "doc", "说明", "readme", "注释", "comment", "更新日志", "changelog", "api", "文档说明"],
-            "deps": ["依赖", "dependency", "安装", "install", "升级", "upgrade", "版本", "version", "package", "包"],
-            "config": ["配置", "config", "设置", "setting", "环境变量", "env", "参数", "parameter"],
-            "ui": ["界面", "ui", "页面", "page", "组件", "component", "样式", "style", "布局", "layout", "视图", "view"],
-            "api": ["接口", "api", "端点", "endpoint", "路由", "route", "请求", "request", "响应", "response"],
-            "auth": ["认证", "auth", "登录", "login", "权限", "permission", "用户", "user", "验证", "verify"],
-            "data": ["数据", "data", "数据库", "database", "模型", "model", "schema", "表", "table"]
-        }
-        
-        # 分析每个文件
-        for change in file_changes:
-            content_to_analyze = change["new_content"] if change["new_content"] else change["old_content"]
-            if not content_to_analyze:
-                continue
-            
-            content_lower = content_to_analyze.lower()
-            file_name_lower = change["file_name"].lower()
-            
-            # 识别关键词
-            for category, keywords in keyword_map.items():
-                for keyword in keywords:
-                    if keyword in content_lower or keyword in file_name_lower:
-                        analysis["keywords"].add(category)
-            
-            # 提取组件名 - 从文件名中提取（去除常见前缀后缀）
-            name = change["file_name"]
-            for prefix in ["test", "spec", "index", "main", "app", "utils", "helpers", "common", "base"]:
-                name = name.replace(prefix, "")
-            for suffix in [".js", ".jsx", ".ts", ".tsx", ".py", ".java", ".go", ".rs", ".md", ".txt"]:
-                name = name.replace(suffix, "")
-            if name and len(name) > 2:
-                analysis["components"].append(name)
-        
-        # 确定变更类型（优先级排序）
-        type_priority = ["fix", "perf", "feat", "refactor", "test", "docs", "deps", "config", "style", "ui", "api", "auth", "data", "chore"]
-        for t in type_priority:
-            if t in analysis["keywords"]:
-                analysis["type"] = t
-                break
-        
-        # 确定作用域（最常出现的组件）
-        if analysis["components"]:
-            from collections import Counter
-            component_counts = Counter(analysis["components"])
-            analysis["scope"] = component_counts.most_common(1)[0][0]
-        
-        # 生成提交消息
-        commit_message = ""
-        type_prefix = analysis["type"]
-        scope = analysis["scope"]
-        
-        # 根据类型和作用域生成描述
-        if scope:
-            if type_prefix == "feat":
-                commit_message = f"新增{scope}功能"
-            elif type_prefix == "fix":
-                commit_message = f"修复{scope}问题"
-            elif type_prefix == "docs":
-                commit_message = f"更新{scope}文档"
-            elif type_prefix == "style":
-                commit_message = f"调整{scope}代码格式"
-            elif type_prefix == "refactor":
-                commit_message = f"优化{scope}结构"
-            elif type_prefix == "test":
-                commit_message = f"完善{scope}测试"
-            elif type_prefix == "perf":
-                commit_message = f"优化{scope}性能"
-            elif type_prefix == "deps":
-                commit_message = f"更新{scope}依赖"
-            elif type_prefix == "config":
-                commit_message = f"调整{scope}配置"
-            elif type_prefix == "ui":
-                commit_message = f"优化{scope}界面"
-            elif type_prefix == "api":
-                commit_message = f"优化{scope}接口"
-            elif type_prefix == "auth":
-                commit_message = f"优化{scope}认证"
-            elif type_prefix == "data":
-                commit_message = f"优化{scope}数据"
-            else:
-                commit_message = f"更新{scope}"
-        else:
-            # 没有明确作用域，使用通用描述
-            generic_messages = {
-                "feat": "新增功能",
-                "fix": "修复问题",
-                "docs": "更新文档",
-                "style": "调整代码格式",
-                "refactor": "优化代码结构",
-                "test": "完善测试",
-                "perf": "优化性能",
-                "deps": "更新依赖",
-                "config": "调整配置",
-                "ui": "优化界面",
-                "api": "优化接口",
-                "auth": "优化认证",
-                "data": "优化数据",
-                "chore": "更新项目"
-            }
-            commit_message = generic_messages[type_prefix]
-        
-        # 添加类型前缀
-        if not commit_message.startswith(type_prefix + ":"):
-            commit_message = f"{type_prefix}: {commit_message}"
-        
-        # 优化消息，使其更自然
-        commit_message = commit_message.replace("新增新增", "新增")
-        commit_message = commit_message.replace("更新更新", "更新")
-        commit_message = commit_message.replace("修复修复", "修复")
-        commit_message = commit_message.replace("优化优化", "优化")
-        commit_message = commit_message.replace("调整调整", "调整")
-        
-        # 限制长度
-        if len(commit_message) > 80:
-            parts = commit_message.split(": ", 1)
-            if len(parts) == 2:
-                prefix = parts[0]
-                desc = parts[1]
-                if len(desc) > 50:
-                    desc = desc[:50]
-                commit_message = f"{prefix}: {desc}"
-        
-        logger.info(f"生成的提交消息: {commit_message}")
-        logger.info(f"分析结果: type={analysis['type']}, scope={analysis['scope']}, keywords={list(analysis['keywords'])}")
-        
-        return {
-            "success": True,
-            "message": commit_message
-        }
-    
-    except Exception as e:
-        logger.exception(f"生成提交消息失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成提交消息失败: {str(e)}"},
-            status_code=500
-        )
-        commit_message = full_response.strip()
-        
-        # 清理常见的 AI 回复前缀
-        prefixes_to_remove = ["提交消息：", "Commit message:", "建议的提交消息：", "Suggested commit message:"]
-        for prefix in prefixes_to_remove:
-            if commit_message.startswith(prefix):
-                commit_message = commit_message[len(prefix):].strip()
-        
-        # 限制长度
-        if len(commit_message) > 200:
-            commit_message = commit_message[:200]
-        
-        return {
-            "success": True,
-            "message": commit_message
-        }
-    
-    except Exception as e:
-        logger.exception(f"生成提交消息失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成提交消息失败: {str(e)}"},
-            status_code=500
-        )
-
 @app.get("/api/git/file-with-diff")
 async def get_file_with_diff(project: str = Query(None), file: str = Query(None)):
     logger.info(f"[GitDiff] project={project}, file={file}")
@@ -851,666 +596,6 @@ async def get_file_with_diff(project: str = Query(None), file: str = Query(None)
         "currentContent": current_content,
         "oldContent": old_content
     }
-
-# 代码依赖可视化 API
-@app.get("/api/projects/{project_name}/context-graph")
-async def get_context_graph(project_name: str, max_depth: int = 3):
-    """获取项目的代码依赖关系图"""
-    try:
-        project_path = get_project_path(project_name)
-        context_graph_service = get_context_graph_service()
-        
-        graph = context_graph_service.analyze_project_context(project_path, max_depth)
-        
-        return {
-            "success": True,
-            "graph": graph
-        }
-    except Exception as e:
-        logger.exception(f"获取上下文图失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取上下文图失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/projects/{project_name}/context-graph/refresh")
-async def refresh_context_graph(project_name: str):
-    """刷新项目的代码依赖关系图"""
-    try:
-        project_path = get_project_path(project_name)
-        context_graph_service = get_context_graph_service()
-        
-        # 清除缓存
-        context_graph_service.clear_cache()
-        
-        # 重新分析
-        graph = context_graph_service.analyze_project_context(project_path)
-        
-        return {
-            "success": True,
-            "graph": graph
-        }
-    except Exception as e:
-        logger.exception(f"刷新上下文图失败: {e}")
-        return JSONResponse(
-            content={"error": f"刷新上下文图失败: {str(e)}"},
-            status_code=500
-        )
-
-# 实时代码预览沙盒 API
-@app.post("/api/sandbox/create")
-async def create_sandbox(request: Request):
-    """创建代码预览沙盒"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        component_code = data.get("component_code")
-        component_type = data.get("component_type", "react")
-        dependencies = data.get("dependencies")
-        
-        if not project_name or not component_code:
-            return JSONResponse(
-                content={"error": "项目名称和组件代码不能为空"},
-                status_code=400
-            )
-        
-        sandbox_service = get_sandbox_service()
-        result = await sandbox_service.create_sandbox(
-            project_name,
-            component_code,
-            component_type,
-            dependencies
-        )
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=500)
-        
-        return {
-            "success": True,
-            "sandbox": result
-        }
-    except Exception as e:
-        logger.exception(f"创建沙盒失败: {e}")
-        return JSONResponse(
-            content={"error": f"创建沙盒失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/sandbox/{sandbox_id}/update")
-async def update_sandbox(sandbox_id: str, request: Request):
-    """更新沙盒中的组件代码"""
-    try:
-        data = await request.json()
-        component_code = data.get("component_code")
-        
-        if not component_code:
-            return JSONResponse(
-                content={"error": "组件代码不能为空"},
-                status_code=400
-            )
-        
-        sandbox_service = get_sandbox_service()
-        result = await sandbox_service.update_sandbox_component(sandbox_id, component_code)
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=500)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"更新沙盒失败: {e}")
-        return JSONResponse(
-            content={"error": f"更新沙盒失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/sandbox/{sandbox_id}/status")
-async def get_sandbox_status(sandbox_id: str):
-    """获取沙盒状态"""
-    try:
-        sandbox_service = get_sandbox_service()
-        result = await sandbox_service.get_sandbox_status(sandbox_id)
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=404)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"获取沙盒状态失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取沙盒状态失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.delete("/api/sandbox/{sandbox_id}")
-async def destroy_sandbox(sandbox_id: str):
-    """销毁沙盒"""
-    try:
-        sandbox_service = get_sandbox_service()
-        result = await sandbox_service.destroy_sandbox(sandbox_id)
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=404)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"销毁沙盒失败: {e}")
-        return JSONResponse(
-            content={"error": f"销毁沙盒失败: {str(e)}"},
-            status_code=500
-        )
-
-# 智能代码重构建议 API
-@app.post("/api/refactor/analyze")
-async def analyze_refactor(request: Request):
-    """分析代码并生成重构建议"""
-    try:
-        data = await request.json()
-        file_path = data.get("file_path")
-        content = data.get("content")
-        
-        if not file_path or not content:
-            return JSONResponse(
-                content={"error": "文件路径和内容不能为空"},
-                status_code=400
-            )
-        
-        refactor_suggester = get_refactor_suggester()
-        suggestions = refactor_suggester.analyze_file(file_path, content)
-        
-        return {
-            "success": True,
-            "suggestions": [s.to_dict() for s in suggestions],
-            "total": len(suggestions),
-            "summary": {
-                "critical": len([s for s in suggestions if s.severity == "critical"]),
-                "high": len([s for s in suggestions if s.severity == "high"]),
-                "medium": len([s for s in suggestions if s.severity == "medium"]),
-                "low": len([s for s in suggestions if s.severity == "low"])
-            }
-        }
-    except Exception as e:
-        logger.exception(f"分析重构建议失败: {e}")
-        return JSONResponse(
-            content={"error": f"分析重构建议失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/projects/{project_name}/refactor/analyze-all")
-async def analyze_project_refactor(project_name: str, request: Request):
-    """分析整个项目的重构建议"""
-    try:
-        data = await request.json()
-        file_paths = data.get("file_paths", [])
-        
-        if not file_paths:
-            return JSONResponse(
-                content={"error": "文件列表不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        refactor_suggester = get_refactor_suggester()
-        all_suggestions = []
-        
-        for file_path in file_paths:
-            try:
-                full_path = os.path.join(project_path, file_path)
-                content = file_service.read_file(project_path, file_path)
-                suggestions = refactor_suggester.analyze_file(full_path, content)
-                all_suggestions.extend(suggestions)
-            except Exception as e:
-                logger.warning(f"Failed to analyze {file_path}: {e}")
-        
-        return {
-            "success": True,
-            "suggestions": [s.to_dict() for s in all_suggestions],
-            "total": len(all_suggestions),
-            "summary": {
-                "critical": len([s for s in all_suggestions if s.severity == "critical"]),
-                "high": len([s for s in all_suggestions if s.severity == "high"]),
-                "medium": len([s for s in all_suggestions if s.severity == "medium"]),
-                "low": len([s for s in all_suggestions if s.severity == "low"])
-            }
-        }
-    except Exception as e:
-        logger.exception(f"分析项目重构建议失败: {e}")
-        return JSONResponse(
-            content={"error": f"分析项目重构建议失败: {str(e)}"},
-            status_code=500
-        )
-
-# 自动化测试生成 API
-@app.post("/api/test/generate")
-async def generate_tests(request: Request):
-    """生成单元测试"""
-    try:
-        data = await request.json()
-        file_path = data.get("file_path")
-        content = data.get("content")
-        test_framework = data.get("test_framework", "pytest")
-        
-        if not file_path or not content:
-            return JSONResponse(
-                content={"error": "文件路径和内容不能为空"},
-                status_code=400
-            )
-        
-        test_generator = get_test_generator()
-        result = test_generator.generate_tests(file_path, content, test_framework)
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=500)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"生成测试失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成测试失败: {str(e)}"},
-            status_code=500
-        )
-
-# 项目健康度仪表盘 API
-@app.post("/api/projects/{project_name}/health")
-async def get_project_health(project_name: str, request: Request):
-    """获取项目健康度指标"""
-    try:
-        data = await request.json()
-        file_paths = data.get("file_paths", [])
-        
-        if not file_paths:
-            return JSONResponse(
-                content={"error": "文件列表不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        health_analyzer = get_health_analyzer()
-        metrics = health_analyzer.analyze_project_health(project_path, file_paths)
-        
-        if "error" in metrics:
-            return JSONResponse(content=metrics, status_code=500)
-        
-        return metrics
-    except Exception as e:
-        logger.exception(f"获取项目健康度失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取项目健康度失败: {str(e)}"},
-            status_code=500
-        )
-
-# 智能代码补全 API
-@app.post("/api/completion")
-async def get_code_completions(request: Request):
-    """获取代码补全建议"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_path = data.get("file_path")
-        content = data.get("content")
-        line_number = data.get("line_number", 1)
-        column = data.get("column", 0)
-        trigger_character = data.get("trigger_character")
-        
-        if not project_name or not file_path or not content:
-            return JSONResponse(
-                content={"error": "项目名称、文件路径和内容不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        completion_service = get_code_completion_service()
-        
-        suggestions = await completion_service.get_completions(
-            project_path,
-            file_path,
-            content,
-            line_number,
-            column,
-            trigger_character
-        )
-        
-        return {
-            "success": True,
-            "suggestions": [s.to_dict() for s in suggestions],
-            "total": len(suggestions)
-        }
-    except Exception as e:
-        logger.exception(f"获取代码补全失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取代码补全失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/completion/clear-cache")
-async def clear_completion_cache(request: Request):
-    """清除代码补全缓存"""
-    try:
-        completion_service = get_code_completion_service()
-        completion_service.clear_cache()
-        
-        return {
-            "success": True,
-            "message": "缓存已清除"
-        }
-    except Exception as e:
-        logger.exception(f"清除缓存失败: {e}")
-        return JSONResponse(
-            content={"error": f"清除缓存失败: {str(e)}"},
-            status_code=500
-        )
-
-# 智能文档生成 API
-@app.post("/api/docs/generate-api")
-async def generate_api_docs(request: Request):
-    """生成 API 文档"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_paths = data.get("file_paths", [])
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        doc_generator = get_doc_generator()
-        
-        api_docs = doc_generator.generate_api_docs(project_path, file_paths)
-        
-        return {
-            "success": True,
-            "docs": api_docs
-        }
-    except Exception as e:
-        logger.exception(f"生成 API 文档失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成 API 文档失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/docs/generate-readme")
-async def generate_readme(request: Request):
-    """生成 README 文档"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_paths = data.get("file_paths", [])
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        doc_generator = get_doc_generator()
-        
-        readme = doc_generator.generate_readme(project_path, file_paths)
-        
-        return {
-            "success": True,
-            "readme": readme
-        }
-    except Exception as e:
-        logger.exception(f"生成 README 失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成 README 失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/docs/generate-comments")
-async def generate_code_comments(request: Request):
-    """生成代码注释"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_path = data.get("file_path")
-        
-        if not project_name or not file_path:
-            return JSONResponse(
-                content={"error": "项目名称和文件路径不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        content = file_service.read_file(project_path, file_path)
-        
-        doc_generator = get_doc_generator()
-        comments = doc_generator.generate_code_comments(file_path, content)
-        
-        return {
-            "success": True,
-            "comments": comments
-        }
-    except Exception as e:
-        logger.exception(f"生成代码注释失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成代码注释失败: {str(e)}"},
-            status_code=500
-        )
-
-# AI 代码审查助手 API
-@app.post("/api/review/code")
-async def review_code(request: Request):
-    """审查单个文件代码"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_path = data.get("file_path")
-        check_types = data.get("check_types", ['quality', 'style', 'security', 'performance'])
-        
-        if not project_name or not file_path:
-            return JSONResponse(
-                content={"error": "项目名称和文件路径不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        content = file_service.read_file(project_path, file_path)
-        
-        code_review_service = get_code_review_service()
-        result = code_review_service.review_code(file_path, content, check_types)
-        
-        if "error" in result:
-            return JSONResponse(content=result, status_code=400)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"代码审查失败: {e}")
-        return JSONResponse(
-            content={"error": f"代码审查失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/review/pr")
-async def review_pr(request: Request):
-    """审查 Pull Request"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        changed_files = data.get("changed_files", [])
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        if not changed_files:
-            return JSONResponse(
-                content={"error": "变更文件列表不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        code_review_service = get_code_review_service()
-        
-        # 读取每个文件的内容
-        for file_info in changed_files:
-            file_path = file_info.get("path")
-            if file_info.get("status") != "deleted":
-                try:
-                    content = file_service.read_file(project_path, file_path)
-                    file_info["content"] = content
-                except Exception as e:
-                    logger.warning(f"Failed to read {file_path}: {e}")
-        
-        result = code_review_service.review_pr(project_path, changed_files)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"PR 审查失败: {e}")
-        return JSONResponse(
-            content={"error": f"PR 审查失败: {str(e)}"},
-            status_code=500
-        )
-
-# 性能监控 API
-@app.post("/api/performance/analyze")
-async def analyze_performance(request: Request):
-    """分析项目性能"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_paths = data.get("file_paths", [])
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        performance_monitor = get_performance_monitor()
-        
-        metrics = performance_monitor.analyze_performance(project_path, file_paths)
-        
-        return metrics
-    except Exception as e:
-        logger.exception(f"性能分析失败: {e}")
-        return JSONResponse(
-            content={"error": f"性能分析失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/performance/detect-leaks")
-async def detect_memory_leaks(request: Request):
-    """检测内存泄漏"""
-    try:
-        data = await request.json()
-        project_name = data.get("project_name")
-        file_path = data.get("file_path")
-        
-        if not project_name or not file_path:
-            return JSONResponse(
-                content={"error": "项目名称和文件路径不能为空"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        content = file_service.read_file(project_path, file_path)
-        
-        performance_monitor = get_performance_monitor()
-        leaks = performance_monitor.detect_memory_leaks(file_path, content)
-        
-        return {
-            "success": True,
-            "leaks": leaks,
-            "total": len(leaks)
-        }
-    except Exception as e:
-        logger.exception(f"内存泄漏检测失败: {e}")
-        return JSONResponse(
-            content={"error": f"内存泄漏检测失败: {str(e)}"},
-            status_code=500
-        )
-
-# 项目模板生成器 API
-@app.get("/api/templates")
-async def get_templates():
-    """获取所有可用模板"""
-    try:
-        template_service = get_project_template_service()
-        templates = template_service.get_templates()
-        
-        return {
-            "success": True,
-            "templates": templates,
-            "total": len(templates)
-        }
-    except Exception as e:
-        logger.exception(f"获取模板列表失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取模板列表失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/templates/{template_id}")
-async def get_template(template_id: str):
-    """获取特定模板详情"""
-    try:
-        template_service = get_project_template_service()
-        template = template_service.get_template(template_id)
-        
-        if not template:
-            return JSONResponse(
-                content={"error": f"模板 {template_id} 不存在"},
-                status_code=404
-            )
-        
-        return {
-            "success": True,
-            "template": template
-        }
-    except Exception as e:
-        logger.exception(f"获取模板详情失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取模板详情失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/templates/generate")
-async def generate_project(request: Request):
-    """生成项目"""
-    try:
-        data = await request.json()
-        template_id = data.get("template_id")
-        project_name = data.get("project_name")
-        output_path = data.get("output_path", ".")
-        custom_config = data.get("custom_config", {})
-        
-        if not template_id:
-            return JSONResponse(
-                content={"error": "模板 ID 不能为空"},
-                status_code=400
-            )
-        
-        if not project_name:
-            return JSONResponse(
-                content={"error": "项目名称不能为空"},
-                status_code=400
-            )
-        
-        template_service = get_project_template_service()
-        result = template_service.generate_project(
-            template_id,
-            project_name,
-            output_path,
-            custom_config
-        )
-        
-        if not result.get("success"):
-            return JSONResponse(content=result, status_code=400)
-        
-        return result
-    except Exception as e:
-        logger.exception(f"生成项目失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成项目失败: {str(e)}"},
-            status_code=500
-        )
 
 @app.websocket("/shell")
 async def websocket_shell(websocket: WebSocket, project: str = None):
@@ -3379,531 +2464,6 @@ async def add_files_to_rag(project_name: str, request: Request):
             status_code=500
         )
 
-# ==================== RAG 增强 API ====================
-
-@app.post("/api/rag/delete/{project_name}")
-async def delete_rag_document(project_name: str, request: Request):
-    """删除 RAG 文档"""
-    try:
-        data = await request.json()
-        doc_id = data.get("doc_id")
-        
-        if not doc_id:
-            return JSONResponse(
-                content={"error": "缺少 doc_id 参数"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        result = rag_service.delete_document(doc_id)
-        
-        return result
-    
-    except Exception as e:
-        logger.exception(f"删除 RAG 文档失败: {e}")
-        return JSONResponse(
-            content={"error": f"删除失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/rag/update/{project_name}")
-async def update_rag_document(project_name: str, request: Request):
-    """更新 RAG 文档"""
-    try:
-        data = await request.json()
-        doc_id = data.get("doc_id")
-        new_content = data.get("content")
-        metadata = data.get("metadata")
-        
-        if not doc_id or not new_content:
-            return JSONResponse(
-                content={"error": "缺少 doc_id 或 content 参数"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        result = rag_service.update_document(doc_id, new_content, metadata)
-        
-        return result
-    
-    except Exception as e:
-        logger.exception(f"更新 RAG 文档失败: {e}")
-        return JSONResponse(
-            content={"error": f"更新失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/rag/retrieve-threshold/{project_name}")
-async def retrieve_rag_with_threshold(project_name: str, request: Request):
-    """带相似度阈值的检索"""
-    try:
-        data = await request.json()
-        query = data.get("query", "")
-        n_results = data.get("n_results", 5)
-        similarity_threshold = data.get("similarity_threshold", 0.3)
-        filters = data.get("filters")
-        
-        if not query:
-            return JSONResponse(
-                content={"error": "缺少 query 参数"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        result = rag_service.retrieve_with_threshold(
-            query=query,
-            n_results=n_results,
-            similarity_threshold=similarity_threshold,
-            filters=filters
-        )
-        
-        return result
-    
-    except Exception as e:
-        logger.exception(f"检索失败: {e}")
-        return JSONResponse(
-            content={"error": f"检索失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/rag/documents/{project_name}")
-async def get_all_rag_documents(project_name: str, filters: str = None):
-    """获取所有 RAG 文档"""
-    try:
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        filter_dict = json.loads(filters) if filters else None
-        documents = rag_service.get_all_documents(filter_dict)
-        
-        return {
-            "success": True,
-            "documents": documents,
-            "total": len(documents)
-        }
-    
-    except Exception as e:
-        logger.exception(f"获取文档列表失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/rag/delete-batch/{project_name}")
-async def delete_rag_documents_batch(project_name: str, request: Request):
-    """批量删除 RAG 文档"""
-    try:
-        data = await request.json()
-        doc_ids = data.get("doc_ids", [])
-        
-        if not doc_ids:
-            return JSONResponse(
-                content={"error": "缺少 doc_ids 参数"},
-                status_code=400
-            )
-        
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        result = rag_service.delete_documents_batch(doc_ids)
-        
-        return result
-    
-    except Exception as e:
-        logger.exception(f"批量删除失败: {e}")
-        return JSONResponse(
-            content={"error": f"批量删除失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/rag/export/{project_name}")
-async def export_rag_documents(project_name: str, request: Request):
-    """导出 RAG 文档"""
-    try:
-        data = await request.json()
-        format = data.get("format", "json")
-        filters = data.get("filters")
-        
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        result = rag_service.export_documents(format, filters)
-        
-        return result
-    
-    except Exception as e:
-        logger.exception(f"导出失败: {e}")
-        return JSONResponse(
-            content={"error": f"导出失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/rag/search-history/{project_name}")
-async def get_rag_search_history(project_name: str, limit: int = 20):
-    """获取搜索历史记录"""
-    try:
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        history = rag_service.get_search_history(limit)
-        
-        return {
-            "success": True,
-            "history": history,
-            "total": len(history)
-        }
-    
-    except Exception as e:
-        logger.exception(f"获取搜索历史失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.delete("/api/rag/search-history/{project_name}")
-async def clear_rag_search_history(project_name: str):
-    """清除搜索历史记录"""
-    try:
-        project_path = get_project_path(project_name)
-        rag_service = rag_cache.get(project_path)
-        
-        if not rag_service:
-            rag_service = get_rag_service(project_path)
-            rag_cache[project_path] = rag_service
-        
-        rag_service.clear_search_history()
-        
-        return {
-            "success": True,
-            "message": "搜索历史已清除"
-        }
-    
-    except Exception as e:
-        logger.exception(f"清除搜索历史失败: {e}")
-        return JSONResponse(
-            content={"error": f"清除失败: {str(e)}"},
-            status_code=500
-        )
-
-# ==================== 自动修复 API ====================
-
-@app.post("/api/auto-heal/analyze")
-async def analyze_error(request: Request):
-    """分析错误输出"""
-    try:
-        data = await request.json()
-        error_output = data.get("error_output", "")
-        file_path = data.get("file_path")
-        
-        if not error_output:
-            return JSONResponse(
-                content={"error": "缺少 error_output 参数"},
-                status_code=400
-            )
-        
-        auto_heal_service = get_auto_heal_service()
-        analysis = await auto_heal_service.analyze_error(error_output, file_path)
-        
-        return analysis
-    
-    except Exception as e:
-        logger.exception(f"分析错误失败: {e}")
-        return JSONResponse(
-            content={"error": f"分析失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/auto-heal/fix")
-async def attempt_auto_fix(request: Request):
-    """尝试自动修复错误"""
-    try:
-        data = await request.json()
-        error_analysis = data.get("error_analysis")
-        context = data.get("context", {})
-        
-        if not error_analysis:
-            return JSONResponse(
-                content={"error": "缺少 error_analysis 参数"},
-                status_code=400
-            )
-        
-        async def event_generator():
-            auto_heal_service = get_auto_heal_service()
-            async for update in auto_heal_service.attempt_auto_fix(error_analysis, context):
-                yield f"data: {json.dumps(update)}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    
-    except Exception as e:
-        logger.exception(f"自动修复失败: {e}")
-        return JSONResponse(
-            content={"error": f"自动修复失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/auto-heal/history")
-async def get_auto_heal_history(limit: int = 20):
-    """获取自动修复历史"""
-    try:
-        auto_heal_service = get_auto_heal_service()
-        history = auto_heal_service.get_fix_history(limit)
-        
-        return {
-            "success": True,
-            "history": history,
-            "total": len(history)
-        }
-    
-    except Exception as e:
-        logger.exception(f"获取修复历史失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.delete("/api/auto-heal/history")
-async def clear_auto_heal_history():
-    """清除自动修复历史"""
-    try:
-        auto_heal_service = get_auto_heal_service()
-        auto_heal_service.clear_fix_history()
-        
-        return {
-            "success": True,
-            "message": "修复历史已清除"
-        }
-    
-    except Exception as e:
-        logger.exception(f"清除修复历史失败: {e}")
-        return JSONResponse(
-            content={"error": f"清除失败: {str(e)}"},
-            status_code=500
-        )
-
-# ==================== 智能报告 API ====================
-
-@app.get("/api/reports/daily/{project_name}")
-async def get_daily_report(project_name: str, date: Optional[str] = None):
-    """获取日报"""
-    try:
-        project_path = get_project_path(project_name)
-        report_generator = get_enhanced_report_generator()
-        
-        report = await report_generator.generate_daily_report(project_path, date)
-        
-        return {
-            "success": True,
-            "report": report
-        }
-    
-    except Exception as e:
-        logger.exception(f"生成日报失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/reports/weekly/{project_name}")
-async def get_weekly_report(project_name: str, start_date: Optional[str] = None):
-    """获取周报"""
-    try:
-        project_path = get_project_path(project_name)
-        report_generator = get_enhanced_report_generator()
-        
-        report = await report_generator.generate_weekly_report(project_path, start_date)
-        
-        return {
-            "success": True,
-            "report": report
-        }
-    
-    except Exception as e:
-        logger.exception(f"生成周报失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/reports/format")
-async def format_report(request: Request):
-    """格式化报告为文本"""
-    try:
-        data = await request.json()
-        report = data.get("report")
-        
-        if not report:
-            return JSONResponse(
-                content={"error": "缺少 report 参数"},
-                status_code=400
-            )
-        
-        report_generator = get_enhanced_report_generator()
-        formatted_text = report_generator.format_report_as_text(report)
-        
-        return {
-            "success": True,
-            "text": formatted_text
-        }
-    
-    except Exception as e:
-        logger.exception(f"格式化报告失败: {e}")
-        return JSONResponse(
-            content={"error": f"格式化失败: {str(e)}"},
-            status_code=500
-        )
-
-# ==================== 上下文图 API ====================
-
-@app.get("/api/context-graph/{project_name}")
-async def get_context_graph(project_name: str, max_depth: int = 3):
-    """获取上下文图"""
-    try:
-        project_path = get_project_path(project_name)
-        context_graph_service = get_context_graph_service()
-        
-        graph = context_graph_service.analyze_project_context(project_path, max_depth)
-        
-        return {
-            "success": True,
-            "graph": graph
-        }
-    
-    except Exception as e:
-        logger.exception(f"生成上下文图失败: {e}")
-        return JSONResponse(
-            content={"error": f"生成失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/context-graph/clear-cache")
-async def clear_context_graph_cache():
-    """清除上下文图缓存"""
-    try:
-        context_graph_service = get_context_graph_service()
-        context_graph_service.clear_cache()
-        
-        return {
-            "success": True,
-            "message": "缓存已清除"
-        }
-    
-    except Exception as e:
-        logger.exception(f"清除缓存失败: {e}")
-        return JSONResponse(
-            content={"error": f"清除失败: {str(e)}"},
-            status_code=500
-        )
-
-# ==================== 游戏化系统 API ====================
-
-@app.get("/api/gamification/progress/{user_id}")
-async def get_user_progress(user_id: str):
-    """获取用户进度"""
-    try:
-        gamification_service = get_gamification_service()
-        progress = gamification_service.get_user_progress(user_id)
-        
-        # 获取等级信息
-        level_info = gamification_service.get_level_info(progress["level"])
-        
-        return {
-            "success": True,
-            "progress": progress,
-            "level_info": level_info
-        }
-    
-    except Exception as e:
-        logger.exception(f"获取用户进度失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.get("/api/gamification/achievements/{user_id}")
-async def get_user_achievements(user_id: str):
-    """获取用户成就列表"""
-    try:
-        gamification_service = get_gamification_service()
-        achievements = gamification_service.get_achievements(user_id)
-        
-        return {
-            "success": True,
-            "achievements": achievements
-        }
-    
-    except Exception as e:
-        logger.exception(f"获取成就列表失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取失败: {str(e)}"},
-            status_code=500
-        )
-
-@app.post("/api/gamification/update-stat")
-async def update_user_stat(request: Request):
-    """更新用户统计"""
-    try:
-        data = await request.json()
-        user_id = data.get("user_id")
-        stat_type = data.get("stat_type")
-        value = data.get("value", 1)
-        project_path = data.get("project_path")
-        
-        if not user_id or not stat_type:
-            return JSONResponse(
-                content={"error": "缺少 user_id 或 stat_type 参数"},
-                status_code=400
-            )
-        
-        gamification_service = get_gamification_service()
-        progress = gamification_service.update_stat(user_id, stat_type, value, project_path)
-        
-        return {
-            "success": True,
-            "progress": progress
-        }
-    
-    except Exception as e:
-        logger.exception(f"更新统计失败: {e}")
-        return JSONResponse(
-            content={"error": f"更新失败: {str(e)}"},
-            status_code=500
-        )
-
 # --- Catch-all 路由 ---
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
@@ -4104,557 +2664,1364 @@ async def get_version_statistics(project_name: str):
             status_code=500
         )
 
-# ==================== 项目开发 Agent API ====================
+# ============================================================================
+# 开发者工具 API
+# ============================================================================
 
-@app.get("/api/project-developer/health/{project_name}")
-async def get_project_health(project_name: str):
-    """获取项目健康度报告"""
-    try:
-        project_path = get_project_path(project_name)
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        health_report = await agent.get_project_health()
-        
-        return {
-            "success": True,
-            "health": health_report
-        }
-    except Exception as e:
-        logger.exception(f"获取项目健康度失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取项目健康度失败: {str(e)}"},
-            status_code=500
-        )
+import sqlite3
+import json
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 
-@app.post("/api/project-developer/develop/{project_name}")
-async def develop_feature(project_name: str, request: Request):
-    """开发新功能"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        feature_description = data.get("feature_description", "")
-        create_tests = data.get("create_tests", True)
-        auto_fix = data.get("auto_fix", True)
-        
-        if not feature_description:
-            return JSONResponse(
-                content={"error": "功能描述不能为空"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.develop_feature(
-                    feature_description=feature_description,
-                    create_tests=create_tests,
-                    auto_fix=auto_fix
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"功能开发失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+# 数据库路径
+DB_PATH = os.path.join(os.path.dirname(__file__), "developer_tools.db")
+
+def get_db_connection():
+    """获取数据库连接"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    """初始化数据库表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
-    except Exception as e:
-        logger.exception(f"功能开发请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"功能开发请求失败: {str(e)}"},
-            status_code=500
+    # 代码片段表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS snippets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            code TEXT NOT NULL,
+            language TEXT DEFAULT 'javascript',
+            category TEXT DEFAULT '通用',
+            description TEXT,
+            tags TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_favorite INTEGER DEFAULT 0,
+            usage_count INTEGER DEFAULT 0
         )
-
-@app.post("/api/project-developer/debug/{project_name}")
-async def debug_issue(project_name: str, request: Request):
-    """调试问题"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        error_message = data.get("error_message", "")
-        stack_trace = data.get("stack_trace", "")
-        context = data.get("context", {})
-        
-        if not error_message:
-            return JSONResponse(
-                content={"error": "错误消息不能为空"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.debug_issue(
-                    error_message=error_message,
-                    stack_trace=stack_trace,
-                    context=context
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"调试失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    ''')
     
-    except Exception as e:
-        logger.exception(f"调试请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"调试请求失败: {str(e)}"},
-            status_code=500
+    # 命令快捷方式表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS command_shortcuts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            command TEXT NOT NULL,
+            category TEXT DEFAULT '通用',
+            description TEXT,
+            tags TEXT,
+            working_dir TEXT,
+            timeout INTEGER DEFAULT 60,
+            parameters TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_favorite INTEGER DEFAULT 0,
+            usage_count INTEGER DEFAULT 0
         )
-
-@app.post("/api/project-developer/code-review/{project_name}")
-async def code_review(project_name: str, request: Request):
-    """代码审查"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        file_path = data.get("file_path")
-        code = data.get("code")
-        review_type = data.get("review_type", "comprehensive")
-        
-        if not file_path and not code:
-            return JSONResponse(
-                content={"error": "必须提供文件路径或代码内容"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.code_review(
-                    file_path=file_path,
-                    code=code,
-                    review_type=review_type
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"代码审查失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    ''')
     
-    except Exception as e:
-        logger.exception(f"代码审查请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"代码审查请求失败: {str(e)}"},
-            status_code=500
+    # 提示词表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS prompts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            category TEXT DEFAULT '自定义',
+            description TEXT,
+            tags TEXT,
+            parameters TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_favorite INTEGER DEFAULT 0,
+            usage_count INTEGER DEFAULT 0
         )
-
-@app.post("/api/project-developer/chat/{project_name}")
-async def chat_with_context(project_name: str, request: Request):
-    """带项目上下文的对话"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        user_input = data.get("message", "")
-        use_rag = data.get("use_rag", True)
-        use_context_graph = data.get("use_context_graph", True)
-        n_results = data.get("n_results", 5)
-        
-        if not user_input:
-            return JSONResponse(
-                content={"error": "消息不能为空"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.chat_with_context(
-                    user_input=user_input,
-                    use_rag=use_rag,
-                    use_context_graph=use_context_graph,
-                    n_results=n_results
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"对话失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    ''')
     
-    except Exception as e:
-        logger.exception(f"对话请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"对话请求失败: {str(e)}"},
-            status_code=500
+    # 方案表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS solutions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requirement TEXT NOT NULL,
+            solution TEXT NOT NULL,
+            template_type TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-
-@app.post("/api/project-developer/config/{project_name}")
-async def set_dev_mode_config(project_name: str, request: Request):
-    """设置开发模式配置"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        agent.set_dev_mode(**data)
-        
-        return {
-            "success": True,
-            "message": "开发模式配置已更新"
-        }
-    except Exception as e:
-        logger.exception(f"设置开发模式配置失败: {e}")
-        return JSONResponse(
-            content={"error": f"设置开发模式配置失败: {str(e)}"},
-            status_code=500
-        )
-
-# ==================== 项目开发 Agent 高级功能 API ====================
-
-@app.post("/api/project-developer/refactor/{project_name}")
-async def refactor_code(project_name: str, request: Request):
-    """代码重构"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        file_path = data.get("file_path")
-        refactor_type = data.get("refactor_type", "optimize")
-        target = data.get("target")
-        
-        if not file_path:
-            return JSONResponse(
-                content={"error": "文件路径不能为空"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.refactor_code(
-                    file_path=file_path,
-                    refactor_type=refactor_type,
-                    target=target
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"代码重构失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    ''')
     
-    except Exception as e:
-        logger.exception(f"代码重构请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"代码重构请求失败: {str(e)}"},
-            status_code=500
+    # 执行历史表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS execution_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shortcut_id INTEGER,
+            command TEXT,
+            working_dir TEXT,
+            status TEXT,
+            output TEXT,
+            error TEXT,
+            exit_code INTEGER,
+            duration REAL,
+            executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (shortcut_id) REFERENCES command_shortcuts(id)
         )
-
-@app.post("/api/project-developer/generate-doc/{project_name}")
-async def generate_documentation(project_name: str, request: Request):
-    """生成文档"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        target = data.get("target", "project")
-        format = data.get("format", "markdown")
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.generate_documentation(
-                    target=target,
-                    format=format
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"文档生成失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    ''')
     
-    except Exception as e:
-        logger.exception(f"文档生成请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"文档生成请求失败: {str(e)}"},
-            status_code=500
-        )
+    conn.commit()
+    conn.close()
 
-@app.post("/api/project-developer/analyze-performance/{project_name}")
-async def analyze_performance(project_name: str, request: Request):
-    """性能分析"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        file_path = data.get("file_path")
-        code = data.get("code")
-        
-        if not file_path and not code:
-            return JSONResponse(
-                content={"error": "必须提供文件路径或代码内容"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.analyze_performance(
-                    file_path=file_path,
-                    code=code
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"性能分析失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    
-    except Exception as e:
-        logger.exception(f"性能分析请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"性能分析请求失败: {str(e)}"},
-            status_code=500
-        )
+# 初始化数据库
+try:
+    init_db()
+    logger.info("开发者工具数据库初始化成功")
+except Exception as e:
+    logger.error(f"数据库初始化失败: {e}")
 
-@app.post("/api/project-developer/security-scan/{project_name}")
-async def security_scan(project_name: str, request: Request):
-    """安全扫描"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        file_path = data.get("file_path")
-        code = data.get("code")
-        
-        if not file_path and not code:
-            return JSONResponse(
-                content={"error": "必须提供文件路径或代码内容"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.security_scan(
-                    file_path=file_path,
-                    code=code
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"安全扫描失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    
-    except Exception as e:
-        logger.exception(f"安全扫描请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"安全扫描请求失败: {str(e)}"},
-            status_code=500
-        )
+# ============================================================================
+# 代码片段管理器 API
+# ============================================================================
 
-@app.post("/api/project-developer/intelligent-completion/{project_name}")
-async def intelligent_completion(project_name: str, request: Request):
-    """智能代码补全"""
-    try:
-        project_path = get_project_path(project_name)
-        data = await request.json()
-        
-        file_path = data.get("file_path")
-        line_number = data.get("line_number", 1)
-        context_lines = data.get("context_lines", 10)
-        
-        if not file_path:
-            return JSONResponse(
-                content={"error": "文件路径不能为空"},
-                status_code=400
-            )
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        
-        async def event_generator():
-            try:
-                async for message in agent.intelligent_completion(
-                    file_path=file_path,
-                    line_number=line_number,
-                    context_lines=context_lines
-                ):
-                    yield f"data: {json.dumps(message)}\n\n"
-            except Exception as e:
-                logger.exception(f"智能补全失败: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    
-    except Exception as e:
-        logger.exception(f"智能补全请求失败: {e}")
-        return JSONResponse(
-            content={"error": f"智能补全请求失败: {str(e)}"},
-            status_code=500
-        )
+class SnippetCreate(BaseModel):
+    title: str
+    code: str
+    language: str = "javascript"
+    category: str = "通用"
+    description: str = ""
+    tags: List[str] = []
 
-@app.get("/api/project-developer/smart-suggestions/{project_name}")
-async def get_smart_suggestions(project_name: str, current_context: str = Query(...), task_type: str = Query("general")):
-    """获取智能建议"""
-    try:
-        project_path = get_project_path(project_name)
-        
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
-        
-        agent = project_developer_cache[project_path]
-        suggestions = await agent.get_smart_suggestions(current_context, task_type)
-        
-        return {
-            "success": True,
-            "suggestions": suggestions
-        }
-    except Exception as e:
-        logger.exception(f"获取智能建议失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取智能建议失败: {str(e)}"},
-            status_code=500
-        )
+class SnippetUpdate(BaseModel):
+    title: Optional[str] = None
+    code: Optional[str] = None
+    language: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
 
-@app.get("/api/project-developer/performance-metrics/{project_name}")
-async def get_performance_metrics(project_name: str):
-    """获取性能指标"""
+@app.get("/api/snippets")
+async def get_snippets(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    language: Optional[str] = None,
+    favorite_only: bool = False
+):
+    """获取代码片段列表"""
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM snippets WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (title LIKE ? OR description LIKE ? OR code LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        
+        if language:
+            query += " AND language = ?"
+            params.append(language)
+        
+        if favorite_only:
+            query += " AND is_favorite = 1"
+        
+        query += " ORDER BY updated_at DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        snippets = []
+        for row in rows:
+            snippet = dict(row)
+            snippet['tags'] = json.loads(snippet['tags']) if snippet['tags'] else []
+            snippets.append(snippet)
+        
+        # 获取分类和标签
+        categories = [row[0] for row in cursor.execute("SELECT DISTINCT category FROM snippets ORDER BY category")]
+        tags = set()
+        for snippet in snippets:
+            tags.update(snippet['tags'])
+        
+        conn.close()
+        
+        return JSONResponse({
+            "snippets": snippets,
+            "categories": categories,
+            "tags": list(tags)
+        })
+    except Exception as e:
+        logger.exception(f"获取代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/snippets")
+async def create_snippet(snippet: SnippetCreate):
+    """创建代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO snippets (title, code, language, category, description, tags)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            snippet.title,
+            snippet.code,
+            snippet.language,
+            snippet.category,
+            snippet.description,
+            json.dumps(snippet.tags)
+        ))
+        
+        snippet_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"id": snippet_id, "message": "代码片段创建成功"})
+    except Exception as e:
+        logger.exception(f"创建代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/{snippet_id}")
+async def get_snippet(snippet_id: int):
+    """获取单个代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM snippets WHERE id = ?", (snippet_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return JSONResponse({"error": "代码片段不存在"}, status_code=404)
+        
+        snippet = dict(row)
+        snippet['tags'] = json.loads(snippet['tags']) if snippet['tags'] else []
+        
+        # 增加使用次数
+        cursor.execute("UPDATE snippets SET usage_count = usage_count + 1 WHERE id = ?", (snippet_id,))
+        conn.commit()
+        
+        conn.close()
+        
+        return JSONResponse(snippet)
+    except Exception as e:
+        logger.exception(f"获取代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/snippets/{snippet_id}")
+async def update_snippet(snippet_id: int, snippet: SnippetUpdate):
+    """更新代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 检查是否存在
+        cursor.execute("SELECT id FROM snippets WHERE id = ?", (snippet_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return JSONResponse({"error": "代码片段不存在"}, status_code=404)
+        
+        # 构建更新语句
+        updates = []
+        params = []
+        
+        if snippet.title is not None:
+            updates.append("title = ?")
+            params.append(snippet.title)
+        if snippet.code is not None:
+            updates.append("code = ?")
+            params.append(snippet.code)
+        if snippet.language is not None:
+            updates.append("language = ?")
+            params.append(snippet.language)
+        if snippet.category is not None:
+            updates.append("category = ?")
+            params.append(snippet.category)
+        if snippet.description is not None:
+            updates.append("description = ?")
+            params.append(snippet.description)
+        if snippet.tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(snippet.tags))
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(snippet_id)
+        
+        query = f"UPDATE snippets SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "代码片段更新成功"})
+    except Exception as e:
+        logger.exception(f"更新代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/snippets/{snippet_id}")
+async def delete_snippet(snippet_id: int):
+    """删除代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return JSONResponse({"error": "代码片段不存在"}, status_code=404)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "代码片段删除成功"})
+    except Exception as e:
+        logger.exception(f"删除代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/popular")
+async def get_popular_snippets(limit: int = 10):
+    """获取热门代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM snippets ORDER BY usage_count DESC, updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        snippets = []
+        for row in rows:
+            snippet = dict(row)
+            snippet['tags'] = json.loads(snippet['tags']) if snippet['tags'] else []
+            snippets.append(snippet)
+        
+        conn.close()
+        
+        return JSONResponse({"snippets": snippets})
+    except Exception as e:
+        logger.exception(f"获取热门代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/recent")
+async def get_recent_snippets(limit: int = 10):
+    """获取最近代码片段"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM snippets ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        snippets = []
+        for row in rows:
+            snippet = dict(row)
+            snippet['tags'] = json.loads(snippet['tags']) if snippet['tags'] else []
+            snippets.append(snippet)
+        
+        conn.close()
+        
+        return JSONResponse({"snippets": snippets})
+    except Exception as e:
+        logger.exception(f"获取最近代码片段失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/categories")
+async def get_snippet_categories():
+    """获取代码片段分类"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT category FROM snippets ORDER BY category")
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return JSONResponse({"categories": categories})
+    except Exception as e:
+        logger.exception(f"获取代码片段分类失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/tags")
+async def get_snippet_tags():
+    """获取代码片段标签"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT tags FROM snippets")
+        all_tags = set()
+        for row in cursor.fetchall():
+            if row[0]:
+                tags = json.loads(row[0])
+                all_tags.update(tags)
+        
+        conn.close()
+        
+        return JSONResponse({"tags": list(all_tags)})
+    except Exception as e:
+        logger.exception(f"获取代码片段标签失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/snippets/{snippet_id}/usage")
+async def increment_snippet_usage(snippet_id: int):
+    """增加代码片段使用次数"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("UPDATE snippets SET usage_count = usage_count + 1 WHERE id = ?", (snippet_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return JSONResponse({"error": "代码片段不存在"}, status_code=404)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "使用次数已更新"})
+    except Exception as e:
+        logger.exception(f"更新使用次数失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 命令快捷方式 API
+# ============================================================================
+
+class CommandShortcutCreate(BaseModel):
+    name: str
+    command: str
+    category: str = "通用"
+    description: str = ""
+    tags: List[str] = []
+    working_dir: str = ""
+    timeout: int = 60
+    parameters: List[Dict[str, Any]] = []
+
+class CommandShortcutUpdate(BaseModel):
+    name: Optional[str] = None
+    command: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    working_dir: Optional[str] = None
+    timeout: Optional[int] = None
+    parameters: Optional[List[Dict[str, Any]]] = None
+
+@app.get("/api/command-shortcuts")
+async def get_command_shortcuts(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    favorite_only: bool = False
+):
+    """获取命令快捷方式列表"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM command_shortcuts WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (name LIKE ? OR description LIKE ? OR command LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        
+        if favorite_only:
+            query += " AND is_favorite = 1"
+        
+        query += " ORDER BY usage_count DESC, updated_at DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        shortcuts = []
+        for row in rows:
+            shortcut = dict(row)
+            shortcut['tags'] = json.loads(shortcut['tags']) if shortcut['tags'] else []
+            shortcut['parameters'] = json.loads(shortcut['parameters']) if shortcut['parameters'] else []
+            shortcuts.append(shortcut)
+        
+        # 获取分类和标签
+        categories = [row[0] for row in cursor.execute("SELECT DISTINCT category FROM command_shortcuts ORDER BY category")]
+        tags = set()
+        for shortcut in shortcuts:
+            tags.update(shortcut['tags'])
+        
+        conn.close()
+        
+        return JSONResponse({
+            "shortcuts": shortcuts,
+            "categories": categories,
+            "tags": list(tags)
+        })
+    except Exception as e:
+        logger.exception(f"获取命令快捷方式失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/command-shortcuts")
+async def create_command_shortcut(shortcut: CommandShortcutCreate):
+    """创建命令快捷方式"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO command_shortcuts (name, command, category, description, tags, working_dir, timeout, parameters)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            shortcut.name,
+            shortcut.command,
+            shortcut.category,
+            shortcut.description,
+            json.dumps(shortcut.tags),
+            shortcut.working_dir,
+            shortcut.timeout,
+            json.dumps(shortcut.parameters)
+        ))
+        
+        shortcut_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"id": shortcut_id, "message": "命令快捷方式创建成功"})
+    except Exception as e:
+        logger.exception(f"创建命令快捷方式失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/command-shortcuts/{shortcut_id}")
+async def update_command_shortcut(shortcut_id: int, shortcut: CommandShortcutUpdate):
+    """更新命令快捷方式"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM command_shortcuts WHERE id = ?", (shortcut_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return JSONResponse({"error": "命令快捷方式不存在"}, status_code=404)
+        
+        updates = []
+        params = []
+        
+        if shortcut.name is not None:
+            updates.append("name = ?")
+            params.append(shortcut.name)
+        if shortcut.command is not None:
+            updates.append("command = ?")
+            params.append(shortcut.command)
+        if shortcut.category is not None:
+            updates.append("category = ?")
+            params.append(shortcut.category)
+        if shortcut.description is not None:
+            updates.append("description = ?")
+            params.append(shortcut.description)
+        if shortcut.tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(shortcut.tags))
+        if shortcut.working_dir is not None:
+            updates.append("working_dir = ?")
+            params.append(shortcut.working_dir)
+        if shortcut.timeout is not None:
+            updates.append("timeout = ?")
+            params.append(shortcut.timeout)
+        if shortcut.parameters is not None:
+            updates.append("parameters = ?")
+            params.append(json.dumps(shortcut.parameters))
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(shortcut_id)
+        
+        query = f"UPDATE command_shortcuts SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "命令快捷方式更新成功"})
+    except Exception as e:
+        logger.exception(f"更新命令快捷方式失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/command-shortcuts/{shortcut_id}")
+async def delete_command_shortcut(shortcut_id: int):
+    """删除命令快捷方式"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM command_shortcuts WHERE id = ?", (shortcut_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return JSONResponse({"error": "命令快捷方式不存在"}, status_code=404)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "命令快捷方式删除成功"})
+    except Exception as e:
+        logger.exception(f"删除命令快捷方式失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/command-shortcuts/categories")
+async def get_command_shortcut_categories():
+    """获取命令快捷方式分类"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT category FROM command_shortcuts ORDER BY category")
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return JSONResponse({"categories": categories})
+    except Exception as e:
+        logger.exception(f"获取命令快捷方式分类失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/command-shortcuts/tags")
+async def get_command_shortcut_tags():
+    """获取命令快捷方式标签"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT tags FROM command_shortcuts")
+        all_tags = set()
+        for row in cursor.fetchall():
+            if row[0]:
+                tags = json.loads(row[0])
+                all_tags.update(tags)
+        
+        conn.close()
+        
+        return JSONResponse({"tags": list(all_tags)})
+    except Exception as e:
+        logger.exception(f"获取命令快捷方式标签失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/command-shortcuts/history")
+async def get_execution_history(limit: int = 50):
+    """获取执行历史"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT eh.*, cs.name as shortcut_name
+            FROM execution_history eh
+            LEFT JOIN command_shortcuts cs ON eh.shortcut_id = cs.id
+            ORDER BY eh.executed_at DESC
+            LIMIT ?
+        ''', (limit,))
+        
+        history = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return JSONResponse({"history": history})
+    except Exception as e:
+        logger.exception(f"获取执行历史失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/command-shortcuts/{shortcut_id}/execute")
+async def execute_command_shortcut(shortcut_id: int, params: Optional[Dict[str, Any]] = None):
+    """执行命令快捷方式"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM command_shortcuts WHERE id = ?", (shortcut_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return JSONResponse({"error": "命令快捷方式不存在"}, status_code=404)
+        
+        shortcut = dict(row)
+        command = shortcut['command']
+        working_dir = shortcut['working_dir'] or os.getcwd()
+        timeout = shortcut['timeout']
+        
+        # 替换参数
+        if params:
+            for key, value in params.items():
+                command = command.replace(f"${{{key}}}", str(value))
+        
+        # 增加使用次数
+        cursor.execute("UPDATE command_shortcuts SET usage_count = usage_count + 1 WHERE id = ?", (shortcut_id,))
+        conn.commit()
+        
+        conn.close()
+        
+        # 执行命令
+        import subprocess
+        start_time = time.time()
+        
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=working_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            
+            duration = time.time() - start_time
+            
+            # 保存执行历史
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO execution_history (shortcut_id, command, working_dir, status, output, error, exit_code, duration)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                shortcut_id,
+                command,
+                working_dir,
+                "success" if result.returncode == 0 else "failed",
+                result.stdout,
+                result.stderr,
+                result.returncode,
+                duration
+            ))
+            conn.commit()
+            conn.close()
+            
+            return JSONResponse({
+                "status": "success" if result.returncode == 0 else "failed",
+                "output": result.stdout,
+                "error": result.stderr,
+                "exit_code": result.returncode,
+                "duration": duration
+            })
+        except subprocess.TimeoutExpired:
+            return JSONResponse({
+                "status": "timeout",
+                "error": f"命令执行超时（{timeout}秒）"
+            }, status_code=408)
+        except Exception as e:
+            return JSONResponse({
+                "status": "error",
+                "error": str(e)
+            }, status_code=500)
+            
+    except Exception as e:
+        logger.exception(f"执行命令失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 提示词管理器 API
+# ============================================================================
+
+class PromptCreate(BaseModel):
+    title: str
+    content: str
+    category: str = "自定义"
+    description: str = ""
+    tags: List[str] = []
+    parameters: List[Dict[str, Any]] = []
+
+class PromptUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    parameters: Optional[List[Dict[str, Any]]] = None
+
+@app.get("/api/prompts")
+async def get_prompts(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    favorite_only: bool = False
+):
+    """获取提示词列表"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM prompts WHERE 1=1"
+        params = []
+        
+        if search:
+            query += " AND (title LIKE ? OR description LIKE ? OR content LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        
+        if favorite_only:
+            query += " AND is_favorite = 1"
+        
+        query += " ORDER BY usage_count DESC, updated_at DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        # 获取分类和标签
+        categories = [row[0] for row in cursor.execute("SELECT DISTINCT category FROM prompts ORDER BY category")]
+        tags = set()
+        for prompt in prompts:
+            tags.update(prompt['tags'])
+        
+        conn.close()
+        
+        return JSONResponse({
+            "prompts": prompts,
+            "categories": categories,
+            "tags": list(tags)
+        })
+    except Exception as e:
+        logger.exception(f"获取提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/prompts")
+async def create_prompt(prompt: PromptCreate):
+    """创建提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO prompts (title, content, category, description, tags, parameters)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            prompt.title,
+            prompt.content,
+            prompt.category,
+            prompt.description,
+            json.dumps(prompt.tags),
+            json.dumps(prompt.parameters)
+        ))
+        
+        prompt_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"id": prompt_id, "message": "提示词创建成功"})
+    except Exception as e:
+        logger.exception(f"创建提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/{prompt_id}")
+async def get_prompt(prompt_id: int):
+    """获取单个提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts WHERE id = ?", (prompt_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return JSONResponse({"error": "提示词不存在"}, status_code=404)
+        
+        prompt = dict(row)
+        prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+        prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+        
+        # 增加使用次数
+        cursor.execute("UPDATE prompts SET usage_count = usage_count + 1 WHERE id = ?", (prompt_id,))
+        conn.commit()
+        
+        conn.close()
+        
+        return JSONResponse(prompt)
+    except Exception as e:
+        logger.exception(f"获取提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/prompts/{prompt_id}")
+async def update_prompt(prompt_id: int, prompt: PromptUpdate):
+    """更新提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM prompts WHERE id = ?", (prompt_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return JSONResponse({"error": "提示词不存在"}, status_code=404)
+        
+        updates = []
+        params = []
+        
+        if prompt.title is not None:
+            updates.append("title = ?")
+            params.append(prompt.title)
+        if prompt.content is not None:
+            updates.append("content = ?")
+            params.append(prompt.content)
+        if prompt.category is not None:
+            updates.append("category = ?")
+            params.append(prompt.category)
+        if prompt.description is not None:
+            updates.append("description = ?")
+            params.append(prompt.description)
+        if prompt.tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(prompt.tags))
+        if prompt.parameters is not None:
+            updates.append("parameters = ?")
+            params.append(json.dumps(prompt.parameters))
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(prompt_id)
+        
+        query = f"UPDATE prompts SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "提示词更新成功"})
+    except Exception as e:
+        logger.exception(f"更新提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/prompts/{prompt_id}")
+async def delete_prompt(prompt_id: int):
+    """删除提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return JSONResponse({"error": "提示词不存在"}, status_code=404)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "提示词删除成功"})
+    except Exception as e:
+        logger.exception(f"删除提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/popular")
+async def get_popular_prompts(limit: int = 10):
+    """获取热门提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts ORDER BY usage_count DESC, updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        conn.close()
+        
+        return JSONResponse({"prompts": prompts})
+    except Exception as e:
+        logger.exception(f"获取热门提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/recent")
+async def get_recent_prompts(limit: int = 10):
+    """获取最近提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        conn.close()
+        
+        return JSONResponse({"prompts": prompts})
+    except Exception as e:
+        logger.exception(f"获取最近提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/categories")
+async def get_prompt_categories():
+    """获取提示词分类"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT category FROM prompts ORDER BY category")
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return JSONResponse({"categories": categories})
+    except Exception as e:
+        logger.exception(f"获取提示词分类失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/tags")
+async def get_prompt_tags():
+    """获取提示词标签"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT tags FROM prompts")
+        all_tags = set()
+        for row in cursor.fetchall():
+            if row[0]:
+                tags = json.loads(row[0])
+                all_tags.update(tags)
+        
+        conn.close()
+        
+        return JSONResponse({"tags": list(all_tags)})
+    except Exception as e:
+        logger.exception(f"获取提示词标签失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/prompts/{prompt_id}/usage")
+async def increment_prompt_usage(prompt_id: int):
+    """增加提示词使用次数"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("UPDATE prompts SET usage_count = usage_count + 1 WHERE id = ?", (prompt_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return JSONResponse({"error": "提示词不存在"}, status_code=404)
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"message": "使用次数已更新"})
+    except Exception as e:
+        logger.exception(f"更新使用次数失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 方案生成器 API
+# ============================================================================
+
+class SolutionGenerate(BaseModel):
+    requirement: str
+    template_type: Optional[str] = None
+
+@app.post("/api/solutions/generate")
+async def generate_solution(request: Request, req: SolutionGenerate):
+    """生成方案"""
+    try:
+        project_name = request.query_params.get("project")
+        if not project_name:
+            return JSONResponse({"error": "缺少项目名称"}, status_code=400)
+        
         project_path = get_project_path(project_name)
         
-        if project_path not in project_developer_cache:
-            project_developer_cache[project_path] = get_project_developer_agent(
-                project_path=project_path,
-                mode=global_config.get("mode", "yolo"),
-                model=global_config.get("model"),
-                persona=global_config.get("persona", "senior")
-            )
-            await project_developer_cache[project_path].initialize_services()
+        # 使用 iFlow Agent 生成方案
+        agent = get_agent(project_path)
         
-        agent = project_developer_cache[project_path]
-        metrics = agent.get_performance_metrics()
+        prompt = f"""请根据以下需求，生成一个详细的技术方案：
+
+需求：{req.requirement}
+{f'模板类型：{req.template_type}' if req.template_type else ''}
+
+请提供：
+1. 技术栈选择
+2. 架构设计
+3. 实现步骤
+4. 关键代码示例
+5. 注意事项
+
+请用 Markdown 格式输出。"""
         
-        return {
-            "success": True,
-            "metrics": metrics
-        }
+        solution_content = ""
+        async for msg in agent.chat_stream(prompt):
+            if msg.get("type") == "content":
+                solution_content += msg.get("content", "")
+        
+        # 保存到数据库
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO solutions (requirement, solution, template_type)
+            VALUES (?, ?, ?)
+        ''', (req.requirement, solution_content, req.template_type))
+        solution_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({
+            "id": solution_id,
+            "requirement": req.requirement,
+            "solution": solution_content,
+            "template_type": req.template_type
+        })
     except Exception as e:
-        logger.exception(f"获取性能指标失败: {e}")
-        return JSONResponse(
-            content={"error": f"获取性能指标失败: {str(e)}"},
-            status_code=500
+        logger.exception(f"生成方案失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/solutions")
+async def get_solutions(limit: int = 10):
+    """获取已保存的方案"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM solutions ORDER BY created_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        solutions = [dict(row) for row in rows]
+        conn.close()
+        
+        return JSONResponse({"solutions": solutions})
+    except Exception as e:
+        logger.exception(f"获取方案失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/solutions/{solution_id}")
+async def get_solution(solution_id: int):
+    """获取单个方案"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM solutions WHERE id = ?", (solution_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return JSONResponse({"error": "方案不存在"}, status_code=404)
+        
+        solution = dict(row)
+        conn.close()
+        
+        return JSONResponse(solution)
+    except Exception as e:
+        logger.exception(f"获取方案失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 业务流程总结 API
+# ============================================================================
+
+@app.get("/api/business-flow/summary")
+async def get_business_flow_summary(request: Request, limit: int = 50):
+    """获取业务流程总结"""
+    try:
+        project_name = request.query_params.get("project")
+        if not project_name:
+            return JSONResponse({"error": "缺少项目名称"}, status_code=400)
+        
+        project_path = get_project_path(project_name)
+        
+        # 获取 Git 历史
+        import subprocess
+        result = subprocess.run(
+            ["git", "log", "--pretty=format:%H|%an|%ae|%ad|%s", f"-{limit}", "--date=iso"],
+            cwd=project_path,
+            capture_output=True,
+            text=True
         )
+        
+        if result.returncode != 0:
+            return JSONResponse({"error": "无法获取 Git 历史"}, status_code=500)
+        
+        commits = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                parts = line.split('|', 4)
+                if len(parts) == 5:
+                    commits.append({
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "email": parts[2],
+                        "date": parts[3],
+                        "message": parts[4]
+                    })
+        
+        # 使用 AI 总结业务流程
+        agent = get_agent(project_path)
+        
+        prompt = f"""请分析以下 Git 提交历史，总结项目的业务流程和功能演进：
+
+{json.dumps(commits[:20], ensure_ascii=False, indent=2)}
+
+请提供：
+1. 主要功能模块
+2. 业务流程图
+3. 关键里程碑
+4. 技术演进
+
+请用 Markdown 格式输出。"""
+        
+        summary_content = ""
+        async for msg in agent.chat_stream(prompt):
+            if msg.get("type") == "content":
+                summary_content += msg.get("content", "")
+        
+        return JSONResponse({
+            "business_flow": summary_content,
+            "commits": commits
+        })
+    except Exception as e:
+        logger.exception(f"获取业务流程总结失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/business-flow/timeline")
+async def get_business_flow_timeline(request: Request, limit: int = 100):
+    """获取业务流程时间线"""
+    try:
+        project_name = request.query_params.get("project")
+        if not project_name:
+            return JSONResponse({"error": "缺少项目名称"}, status_code=400)
+        
+        project_path = get_project_path(project_name)
+        
+        # 获取 Git 历史
+        import subprocess
+        result = subprocess.run(
+            ["git", "log", "--pretty=format:%H|%an|%ad|%s", f"-{limit}", "--date=iso"],
+            cwd=project_path,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return JSONResponse({"error": "无法获取 Git 历史"}, status_code=500)
+        
+        timeline = []
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                parts = line.split('|', 3)
+                if len(parts) == 4:
+                    timeline.append({
+                        "hash": parts[0],
+                        "author": parts[1],
+                        "date": parts[2],
+                        "message": parts[3]
+                    })
+        
+        return JSONResponse({"timeline": timeline})
+    except Exception as e:
+        logger.exception(f"获取业务流程时间线失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 代码审查 API
+# ============================================================================
+
+class CodeReviewRequest(BaseModel):
+    project_name: str
+    file_path: str
+    check_types: List[str] = ["quality", "style", "security", "performance"]
+
+@app.post("/api/review/code")
+async def review_code(req: CodeReviewRequest):
+    """审查代码"""
+    try:
+        project_path = get_project_path(req.project_name)
+        file_path = os.path.join(project_path, req.file_path)
+        
+        # 读取文件内容
+        if not os.path.exists(file_path):
+            return JSONResponse({"error": "文件不存在"}, status_code=404)
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 使用 AI 审查代码
+        agent = get_agent(project_path)
+        
+        check_types_str = ", ".join(req.check_types)
+        prompt = f"""请对以下代码进行代码审查，检查以下方面：{check_types_str}
+
+文件路径：{req.file_path}
+
+代码内容：
+```
+{content}
+```
+
+请提供：
+1. 发现的问题（按严重程度分类）
+2. 改进建议
+3. 最佳实践建议
+
+请用 JSON 格式输出，格式如下：
+{{
+  "summary": {{"total_issues": 0, "by_severity": {{"critical": 0, "high": 0, "medium": 0, "low": 0}}}},
+  "issues": [
+    {{
+      "id": "1",
+      "severity": "high",
+      "category": "quality",
+      "message": "问题描述",
+      "line": 10,
+      "suggestion": "改进建议"
+    }}
+  ]
+}}"""
+        
+        review_result = ""
+        async for msg in agent.chat_stream(prompt):
+            if msg.get("type") == "content":
+                review_result += msg.get("content", "")
+        
+        # 尝试解析 JSON
+        try:
+            # 提取 JSON 部分
+            json_start = review_result.find('{')
+            json_end = review_result.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = review_result[json_start:json_end]
+                review_data = json.loads(json_str)
+            else:
+                # 如果无法解析，返回原始文本
+                review_data = {
+                    "summary": {"total_issues": 0, "by_severity": {}},
+                    "issues": [],
+                    "raw_output": review_result
+                }
+        except:
+            review_data = {
+                "summary": {"total_issues": 0, "by_severity": {}},
+                "issues": [],
+                "raw_output": review_result
+            }
+        
+        return JSONResponse(review_data)
+    except Exception as e:
+        logger.exception(f"代码审查失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 if __name__ == "__main__":
     import uvicorn

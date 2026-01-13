@@ -3,7 +3,7 @@
  * 用于调用后端的 RAG (Retrieval-Augmented Generation) 功能
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = ''; // 使用相对路径，由 Vite 代理处理
 
 /**
  * 获取 RAG 统计信息

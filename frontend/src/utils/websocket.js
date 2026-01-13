@@ -96,7 +96,14 @@ export function useWebSocket() {
             return;
           }
 
-          setMessages(prev => [...prev, data]);
+          setMessages(prev => {
+            // 只保留最后 100 条消息，避免内存泄漏
+            const updated = [...prev, data];
+            if (updated.length > 100) {
+              return updated.slice(-100);
+            }
+            return updated;
+          });
         } catch (error) {
           console.warn('Failed to parse WebSocket message:', error);
         }
