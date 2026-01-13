@@ -141,6 +141,8 @@ const SnippetManager = ({ onInsertSnippet, onClose }) => {
 
       const method = isEditing ? 'PUT' : 'POST';
 
+      console.log('[SnippetManager] 正在提交表单...', { url, method, formData });
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -149,16 +151,25 @@ const SnippetManager = ({ onInsertSnippet, onClose }) => {
         body: JSON.stringify(formData)
       });
 
+      console.log('[SnippetManager] API 响应状态:', response.status);
+
       if (response.ok) {
+        const data = await response.json();
+        console.log('[SnippetManager] 保存成功:', data);
         await loadSnippets();
         await loadMetadata();
         setIsEditing(false);
         setIsCreating(false);
         setSelectedSnippet(null);
         resetForm();
+      } else {
+        const errorData = await response.json();
+        console.error('[SnippetManager] 保存失败:', errorData);
+        setError(errorData.error || `保存失败 (${response.status})`);
       }
     } catch (error) {
-      console.error('保存片段失败:', error);
+      console.error('[SnippetManager] 保存片段失败:', error);
+      setError('网络错误：无法连接到服务器');
     }
   };
 

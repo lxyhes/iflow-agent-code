@@ -294,8 +294,8 @@ app.use('/api/user', authenticateToken, userRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
-// Snippets API Routes (protected)
-app.use('/api/snippets', authenticateToken, snippetsRoutes);
+// Snippets API Routes (部分公开，部分需要认证)
+app.use('/api/snippets', snippetsRoutes);
 
 // Command Shortcuts API Routes (protected)
 app.use('/api/command-shortcuts', authenticateToken, commandShortcutsRoutes);

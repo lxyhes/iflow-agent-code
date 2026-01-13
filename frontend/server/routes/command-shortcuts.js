@@ -11,35 +11,33 @@ const router = express.Router();
 // ============================================
 // GET /api/command-shortcuts - 获取快捷方式列表
 // ============================================
-router.get('/', async (req, res) => {
+router.get('/', (req, res) => {
   try {
     const { search, category, limit = 50, offset = 0 } = req.query;
     
     let query = 'SELECT * FROM command_shortcuts WHERE 1=1';
     const params = [];
-    let paramIndex = 1;
 
     if (search) {
-      query += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex} OR command ILIKE $${paramIndex} OR tags::text ILIKE $${paramIndex})`;
-      params.push(`%${search}%`);
-      paramIndex++;
+      query += ` AND (name LIKE ? OR description LIKE ? OR command LIKE ? OR tags LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (category) {
-      query += ` AND category = $${paramIndex}`;
+      query += ` AND category = ?`;
       params.push(category);
-      paramIndex++;
     }
 
-    query += ` ORDER BY updated_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
     params.push(parseInt(limit), parseInt(offset));
 
-    const result = await db.query(query, params);
+    const stmt = db.prepare(query);
+    const result = stmt.all(...params);
     
     res.json({
       success: true,
-      shortcuts: result.rows,
-      total: result.rowCount
+      shortcuts: result,
+      total: result.length
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取快捷方式列表失败:', error);
@@ -53,7 +51,7 @@ router.get('/', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/popular - 获取热门快捷方式
 // ============================================
-router.get('/popular', async (req, res) => {
+router.get('/popular', (req, res) => {
   try {
     const { limit = 10 } = req.query;
     
@@ -63,14 +61,15 @@ router.get('/popular', async (req, res) => {
       LEFT JOIN command_executions e ON s.shortcut_id = e.shortcut_id
       GROUP BY s.shortcut_id
       ORDER BY execution_count DESC, s.created_at DESC
-      LIMIT $1
+      LIMIT ?
     `;
     
-    const result = await db.query(query, [parseInt(limit)]);
+    const stmt = db.prepare(query);
+    const result = stmt.all(parseInt(limit));
     
     res.json({
       success: true,
-      shortcuts: result.rows
+      shortcuts: result
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取热门快捷方式失败:', error);
@@ -84,7 +83,7 @@ router.get('/popular', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/recent - 获取最近快捷方式
 // ============================================
-router.get('/recent', async (req, res) => {
+router.get('/recent', (req, res) => {
   try {
     const { limit = 10 } = req.query;
     
@@ -93,15 +92,16 @@ router.get('/recent', async (req, res) => {
       FROM command_shortcuts s
       LEFT JOIN command_executions e ON s.shortcut_id = e.shortcut_id
       GROUP BY s.shortcut_id
-      ORDER BY last_executed_at DESC NULLS LAST, s.updated_at DESC
-      LIMIT $1
+      ORDER BY last_executed_at DESC, s.updated_at DESC
+      LIMIT ?
     `;
     
-    const result = await db.query(query, [parseInt(limit)]);
+    const stmt = db.prepare(query);
+    const result = stmt.all(parseInt(limit));
     
     res.json({
       success: true,
-      shortcuts: result.rows
+      shortcuts: result
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取最近快捷方式失败:', error);
@@ -115,7 +115,7 @@ router.get('/recent', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/history - 获取执行历史
 // ============================================
-router.get('/history', async (req, res) => {
+router.get('/history', (req, res) => {
   try {
     const { limit = 50, offset = 0 } = req.query;
     
@@ -124,14 +124,15 @@ router.get('/history', async (req, res) => {
       FROM command_executions e
       LEFT JOIN command_shortcuts s ON e.shortcut_id = s.shortcut_id
       ORDER BY e.executed_at DESC
-      LIMIT $1 OFFSET $2
+      LIMIT ? OFFSET ?
     `;
     
-    const result = await db.query(query, [parseInt(limit), parseInt(offset)]);
+    const stmt = db.prepare(query);
+    const result = stmt.all(parseInt(limit), parseInt(offset));
     
     res.json({
       success: true,
-      history: result.rows
+      history: result
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取执行历史失败:', error);
@@ -145,7 +146,7 @@ router.get('/history', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/categories - 获取分类列表
 // ============================================
-router.get('/categories', async (req, res) => {
+router.get('/categories', (req, res) => {
   try {
     const query = `
       SELECT DISTINCT category, COUNT(*) as count
@@ -154,11 +155,12 @@ router.get('/categories', async (req, res) => {
       ORDER BY count DESC, category
     `;
     
-    const result = await db.query(query);
+    const stmt = db.prepare(query);
+    const result = stmt.all();
     
     res.json({
       success: true,
-      categories: result.rows.map(row => row.category)
+      categories: result.map(row => row.category)
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取分类列表失败:', error);
@@ -172,21 +174,22 @@ router.get('/categories', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/tags - 获取标签列表
 // ============================================
-router.get('/tags', async (req, res) => {
+router.get('/tags', (req, res) => {
   try {
     const query = `
-      SELECT DISTINCT unnest(tags) as tag, COUNT(*) as count
-      FROM command_shortcuts
-      WHERE array_length(tags, 1) > 0
+      SELECT DISTINCT json_extract(value, '$') as tag, COUNT(*) as count
+      FROM command_shortcuts, json_each(tags)
+      WHERE json_valid(tags) AND json_array_length(tags) > 0
       GROUP BY tag
       ORDER BY count DESC, tag
     `;
     
-    const result = await db.query(query);
+    const stmt = db.prepare(query);
+    const result = stmt.all();
     
     res.json({
       success: true,
-      tags: result.rows.map(row => row.tag)
+      tags: result.map(row => row.tag)
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取标签列表失败:', error);
@@ -200,14 +203,15 @@ router.get('/tags', async (req, res) => {
 // ============================================
 // GET /api/command-shortcuts/:id - 获取单个快捷方式
 // ============================================
-router.get('/:id', async (req, res) => {
+router.get('/:id', (req, res) => {
   try {
     const { id } = req.params;
     
-    const query = 'SELECT * FROM command_shortcuts WHERE shortcut_id = $1';
-    const result = await db.query(query, [id]);
+    const query = 'SELECT * FROM command_shortcuts WHERE shortcut_id = ?';
+    const stmt = db.prepare(query);
+    const result = stmt.get(id);
     
-    if (result.rowCount === 0) {
+    if (!result) {
       return res.status(404).json({
         success: false,
         error: '快捷方式不存在'
@@ -216,7 +220,7 @@ router.get('/:id', async (req, res) => {
     
     res.json({
       success: true,
-      shortcut: result.rows[0]
+      shortcut: result
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 获取快捷方式失败:', error);
@@ -230,7 +234,7 @@ router.get('/:id', async (req, res) => {
 // ============================================
 // POST /api/command-shortcuts - 创建新快捷方式
 // ============================================
-router.post('/', async (req, res) => {
+router.post('/', (req, res) => {
   try {
     const { name, command, category, description, tags, working_dir, timeout } = req.body;
     
@@ -243,23 +247,26 @@ router.post('/', async (req, res) => {
     
     const query = `
       INSERT INTO command_shortcuts (name, command, category, description, tags, working_dir, timeout, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-      RETURNING *
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `;
     
-    const result = await db.query(query, [
+    const stmt = db.prepare(query);
+    const result = stmt.run(
       name,
       command,
       category || '通用',
       description || '',
-      tags || [],
+      JSON.stringify(tags || []),
       working_dir || '',
       timeout || 60
-    ]);
+    );
+    
+    // 获取插入的记录
+    const inserted = db.prepare('SELECT * FROM command_shortcuts WHERE shortcut_id = ?').get(result.lastInsertRowid);
     
     res.json({
       success: true,
-      shortcut: result.rows[0]
+      shortcut: inserted
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 创建快捷方式失败:', error);
@@ -273,23 +280,22 @@ router.post('/', async (req, res) => {
 // ============================================
 // POST /api/command-shortcuts/:id/execute - 执行命令
 // ============================================
-router.post('/:id/execute', async (req, res) => {
+router.post('/:id/execute', (req, res) => {
   try {
     const { id } = req.params;
     const { params = {} } = req.body;
     
     // 获取快捷方式
-    const shortcutQuery = 'SELECT * FROM command_shortcuts WHERE shortcut_id = $1';
-    const shortcutResult = await db.query(shortcutQuery, [id]);
+    const shortcutQuery = 'SELECT * FROM command_shortcuts WHERE shortcut_id = ?';
+    const stmt = db.prepare(shortcutQuery);
+    const shortcut = stmt.get(id);
     
-    if (shortcutResult.rowCount === 0) {
+    if (!shortcut) {
       return res.status(404).json({
         success: false,
         error: '快捷方式不存在'
       });
     }
-    
-    const shortcut = shortcutResult.rows[0];
     
     // 替换参数
     let command = shortcut.command;
@@ -324,39 +330,42 @@ router.post('/:id/execute', async (req, res) => {
 // ============================================
 // PUT /api/command-shortcuts/:id - 更新快捷方式
 // ============================================
-router.put('/:id', async (req, res) => {
+router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
     const { name, command, category, description, tags, working_dir, timeout } = req.body;
     
     const query = `
       UPDATE command_shortcuts
-      SET name = $1, command = $2, category = $3, description = $4, tags = $5, working_dir = $6, timeout = $7, updated_at = NOW()
-      WHERE shortcut_id = $8
-      RETURNING *
+      SET name = ?, command = ?, category = ?, description = ?, tags = ?, working_dir = ?, timeout = ?, updated_at = datetime('now')
+      WHERE shortcut_id = ?
     `;
     
-    const result = await db.query(query, [
+    const stmt = db.prepare(query);
+    const result = stmt.run(
       name,
       command,
       category,
       description,
-      tags,
+      JSON.stringify(tags),
       working_dir,
       timeout,
       id
-    ]);
+    );
     
-    if (result.rowCount === 0) {
+    if (result.changes === 0) {
       return res.status(404).json({
         success: false,
         error: '快捷方式不存在'
       });
     }
     
+    // 获取更新后的记录
+    const updated = db.prepare('SELECT * FROM command_shortcuts WHERE shortcut_id = ?').get(id);
+    
     res.json({
       success: true,
-      shortcut: result.rows[0]
+      shortcut: updated
     });
   } catch (error) {
     console.error('[CommandShortcuts API] 更新快捷方式失败:', error);
@@ -370,14 +379,15 @@ router.put('/:id', async (req, res) => {
 // ============================================
 // DELETE /api/command-shortcuts/:id - 删除快捷方式
 // ============================================
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params;
     
-    const query = 'DELETE FROM command_shortcuts WHERE shortcut_id = $1 RETURNING *';
-    const result = await db.query(query, [id]);
+    const query = 'DELETE FROM command_shortcuts WHERE shortcut_id = ?';
+    const stmt = db.prepare(query);
+    const result = stmt.run(id);
     
-    if (result.rowCount === 0) {
+    if (result.changes === 0) {
       return res.status(404).json({
         success: false,
         error: '快捷方式不存在'

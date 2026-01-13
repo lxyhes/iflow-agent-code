@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 /**
  * 快速方案生成组件
@@ -12,6 +13,7 @@ const SolutionGenerator = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [savedSolutions, setSavedSolutions] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 加载已保存的方案
   const loadSavedSolutions = async () => {
@@ -37,9 +39,10 @@ const SolutionGenerator = ({ onClose }) => {
 
     setIsLoading(true);
     setError('');
+    setSolution(''); // 清空当前方案
 
     try {
-      const response = await fetch('/api/solutions/generate', {
+      const response = await fetch('/api/solutions/generate-stream?project=default', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -51,8 +54,34 @@ const SolutionGenerator = ({ onClose }) => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setSolution(data.solution);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.substring(6));
+              
+              if (data.type === 'content') {
+                // 追加内容
+                setSolution(prev => prev + data.content);
+              } else if (data.type === 'done') {
+                // 生成完成
+                console.log('方案生成完成，ID:', data.solution_id);
+                // 刷新已保存方案列表
+                await loadSavedSolutions();
+              } else if (data.type === 'error') {
+                setError(data.error);
+              }
+            }
+          }
+        }
       } else {
         setError('生成方案失败，请重试');
       }
@@ -92,7 +121,8 @@ const SolutionGenerator = ({ onClose }) => {
       const response = await fetch(`/api/solutions/${solutionId}`);
       if (response.ok) {
         const data = await response.json();
-        setSolution(data.solution);
+        // 后端返回的是整个方案对象，包含 solution 字段
+        setSolution(data.solution || data);
       }
     } catch (err) {
       console.error('加载方案失败:', err);
@@ -137,6 +167,44 @@ const SolutionGenerator = ({ onClose }) => {
               </svg>
             </button>
           )}
+        </div>
+
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">📊</span>
+              <div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">总方案数</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{savedSolutions.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">📈</span>
+              <div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">本周新增</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">
+                  {savedSolutions.filter(s => {
+                    const date = new Date(s.generated_at);
+                    const now = new Date();
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return date >= weekAgo;
+                  }).length}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🎯</span>
+              <div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">常用模板</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{Object.keys(templates).length}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 需求输入表单 */}
@@ -189,7 +257,7 @@ const SolutionGenerator = ({ onClose }) => {
       {/* 内容区域 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：已保存的方案 */}
-        <div className="w-1/4 border-r border-gray-200 dark:border-gray-700 overflow-y-auto p-4">
+        <div className="w-1/5 min-w-[200px] border-r border-gray-200 dark:border-gray-700 overflow-y-auto p-4">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
             已保存的方案
           </h3>
@@ -223,6 +291,41 @@ const SolutionGenerator = ({ onClose }) => {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* 如果 solution 是字符串，直接渲染 Markdown */}
+              {typeof solution === 'string' ? (
+                <div className="prose dark:prose-invert max-w-none prose-sm sm:prose-base">
+                  <ReactMarkdown
+                    components={{
+                      h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-6 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700" {...props} />,
+                      h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-gray-900 dark:text-white mt-5 mb-3" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-lg font-medium text-gray-900 dark:text-white mt-4 mb-2" {...props} />,
+                      h4: ({node, ...props}) => <h4 className="text-base font-medium text-gray-900 dark:text-white mt-3 mb-2" {...props} />,
+                      p: ({node, ...props}) => <p className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed" {...props} />,
+                      ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-gray-700 dark:text-gray-300" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-4 space-y-2 text-gray-700 dark:text-gray-300" {...props} />,
+                      li: ({node, ...props}) => <li className="ml-2" {...props} />,
+                      code: ({node, inline, ...props}) => 
+                        inline 
+                          ? <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-pink-600 dark:text-pink-400 rounded text-sm font-mono" {...props} />
+                          : <code className="block p-4 bg-gray-900 dark:bg-gray-950 text-gray-100 dark:text-gray-300 rounded-lg overflow-x-auto text-sm font-mono" {...props} />,
+                      pre: ({node, ...props}) => <pre className="bg-gray-900 dark:bg-gray-950 p-4 rounded-lg overflow-x-auto mb-4" {...props} />,
+                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-blue-500 pl-4 my-4 text-gray-600 dark:text-gray-400 italic" {...props} />,
+                      a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 hover:underline" {...props} />,
+                      strong: ({node, ...props}) => <strong className="font-semibold text-gray-900 dark:text-white" {...props} />,
+                      table: ({node, ...props}) => <div className="overflow-x-auto mb-4"><table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" {...props} /></div>,
+                      thead: ({node, ...props}) => <thead className="bg-gray-50 dark:bg-gray-800" {...props} />,
+                      tbody: ({node, ...props}) => <tbody className="divide-y divide-gray-200 dark:divide-gray-700" {...props} />,
+                      tr: ({node, ...props}) => <tr className="hover:bg-gray-50 dark:hover:bg-gray-800" {...props} />,
+                      th: ({node, ...props}) => <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" {...props} />,
+                      td: ({node, ...props}) => <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300" {...props} />,
+                      hr: ({node, ...props}) => <hr className="my-6 border-gray-200 dark:border-gray-700" {...props} />,
+                    }}
+                  >
+                    {solution}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <>
               {/* 方案概览 */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
@@ -365,7 +468,7 @@ const SolutionGenerator = ({ onClose }) => {
                 </button>
                 <button
                   onClick={() => {
-                    const text = JSON.stringify(solution, null, 2);
+                    const text = typeof solution === 'string' ? solution : JSON.stringify(solution, null, 2);
                     navigator.clipboard.writeText(text);
                     alert('方案已复制到剪贴板');
                   }}
@@ -373,11 +476,107 @@ const SolutionGenerator = ({ onClose }) => {
                 >
                   复制方案
                 </button>
+                <button
+                  onClick={() => setIsFullscreen(true)}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  title="全屏查看"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l4 4m4 0h4m-4 0l4-4m4 4v4m0 0h-4m-4 0l-4-4" />
+                  </svg>
+                </button>
               </div>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* 全屏查看模态框 */}
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            {/* 模态框头部 */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                方案详情（全屏模式）
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const text = typeof solution === 'string' ? solution : JSON.stringify(solution, null, 2);
+                    navigator.clipboard.writeText(text);
+                    alert('方案已复制到剪贴板');
+                  }}
+                  className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors"
+                >
+                  复制
+                </button>
+                <button
+                  onClick={() => setIsFullscreen(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* 模态框内容 */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {typeof solution === 'string' ? (
+                <div className="prose dark:prose-invert max-w-none prose-lg">
+                  <ReactMarkdown
+                    components={{
+                      h1: ({node, ...props}) => <h1 className="text-3xl font-bold text-gray-900 dark:text-white mt-6 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700" {...props} />,
+                      h2: ({node, ...props}) => <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mt-5 mb-3" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-xl font-medium text-gray-900 dark:text-white mt-4 mb-2" {...props} />,
+                      h4: ({node, ...props}) => <h4 className="text-lg font-medium text-gray-900 dark:text-white mt-3 mb-2" {...props} />,
+                      p: ({node, ...props}) => <p className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed text-base" {...props} />,
+                      ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-gray-700 dark:text-gray-300" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-4 space-y-2 text-gray-700 dark:text-gray-300" {...props} />,
+                      li: ({node, ...props}) => <li className="ml-2" {...props} />,
+                      code: ({node, inline, ...props}) => 
+                        inline 
+                          ? <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-pink-600 dark:text-pink-400 rounded text-sm font-mono" {...props} />
+                          : <code className="block p-4 bg-gray-900 dark:bg-gray-950 text-gray-100 dark:text-gray-300 rounded-lg overflow-x-auto text-base font-mono" {...props} />,
+                      pre: ({node, ...props}) => <pre className="bg-gray-900 dark:bg-gray-950 p-4 rounded-lg overflow-x-auto mb-4" {...props} />,
+                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-blue-500 pl-4 my-4 text-gray-600 dark:text-gray-400 italic text-base" {...props} />,
+                      a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 hover:underline text-base" {...props} />,
+                      strong: ({node, ...props}) => <strong className="font-semibold text-gray-900 dark:text-white" {...props} />,
+                      table: ({node, ...props}) => <div className="overflow-x-auto mb-4"><table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700" {...props} /></div>,
+                      thead: ({node, ...props}) => <thead className="bg-gray-50 dark:bg-gray-800" {...props} />,
+                      tbody: ({node, ...props}) => <tbody className="divide-y divide-gray-200 dark:divide-gray-700" {...props} />,
+                      tr: ({node, ...props}) => <tr className="hover:bg-gray-50 dark:hover:bg-gray-800" {...props} />,
+                      th: ({node, ...props}) => <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" {...props} />,
+                      td: ({node, ...props}) => <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300" {...props} />,
+                      hr: ({node, ...props}) => <hr className="my-6 border-gray-200 dark:border-gray-700" {...props} />,
+                    }}
+                  >
+                    {solution}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="text-gray-500 dark:text-gray-400">
+                  此方案不支持全屏查看
+                </div>
+              )}
+            </div>
+
+            {/* 模态框底部 */}
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

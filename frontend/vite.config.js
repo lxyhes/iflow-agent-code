@@ -12,8 +12,34 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       proxy: {
-        // Proxy API requests to FastAPI
-        '/api': {
+        // 前端服务器 API 路由（认证、项目、Git、设置、用户）
+        '^/api/auth(/|$)': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
+        '^/api/projects(/|$)': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
+        '^/api/git(/|$)': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
+        '^/api/settings(/|$)': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
+        '^/api/user(/|$)': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        },
+        // 后端 Python FastAPI 路由（其他所有 /api 请求，包括 snippets、command-shortcuts、review、solutions、business-flow）
+        '^/api(/|$)': {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: false

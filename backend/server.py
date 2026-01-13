@@ -2464,24 +2464,6 @@ async def add_files_to_rag(project_name: str, request: Request):
             status_code=500
         )
 
-# --- Catch-all 路由 ---
-
-@app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def catch_all(path_name: str, request: Request):
-    """Catch-all 路由 - 处理未实现的 API 端点"""
-    logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
-
-    # MCP 相关的 API
-    if path_name.startswith("mcp-utils/"):
-        return JSONResponse(content={
-            "status": "not-implemented",
-            "message": f"MCP endpoint '{path_name}' is not implemented"
-        }, status_code=200)
-
-    # 默认响应
-    return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
-
-
 # ==================== 文档版本管理 API ====================
 
 @app.get("/api/document-versions/{project_name}/{file_path:path}")
@@ -2886,6 +2868,44 @@ async def create_snippet(snippet: SnippetCreate):
         logger.exception(f"创建代码片段失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.get("/api/snippets/categories")
+async def get_snippet_categories():
+    """获取代码片段分类"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT category FROM snippets ORDER BY category")
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return JSONResponse({"categories": categories})
+    except Exception as e:
+        logger.exception(f"获取代码片段分类失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/snippets/tags")
+async def get_snippet_tags():
+    """获取代码片段标签"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT tags FROM snippets")
+        all_tags = set()
+        for row in cursor.fetchall():
+            if row[0]:
+                tags = json.loads(row[0])
+                all_tags.update(tags)
+        
+        conn.close()
+        
+        return JSONResponse({"tags": list(all_tags)})
+    except Exception as e:
+        logger.exception(f"获取代码片段标签失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/api/snippets/{snippet_id}")
 async def get_snippet(snippet_id: int):
     """获取单个代码片段"""
@@ -3029,44 +3049,6 @@ async def get_recent_snippets(limit: int = 10):
         return JSONResponse({"snippets": snippets})
     except Exception as e:
         logger.exception(f"获取最近代码片段失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/api/snippets/categories")
-async def get_snippet_categories():
-    """获取代码片段分类"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT DISTINCT category FROM snippets ORDER BY category")
-        categories = [row[0] for row in cursor.fetchall()]
-        
-        conn.close()
-        
-        return JSONResponse({"categories": categories})
-    except Exception as e:
-        logger.exception(f"获取代码片段分类失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/api/snippets/tags")
-async def get_snippet_tags():
-    """获取代码片段标签"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT tags FROM snippets")
-        all_tags = set()
-        for row in cursor.fetchall():
-            if row[0]:
-                tags = json.loads(row[0])
-                all_tags.update(tags)
-        
-        conn.close()
-        
-        return JSONResponse({"tags": list(all_tags)})
-    except Exception as e:
-        logger.exception(f"获取代码片段标签失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/api/snippets/{snippet_id}/usage")
@@ -3523,6 +3505,116 @@ async def create_prompt(prompt: PromptCreate):
         logger.exception(f"创建提示词失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.get("/api/prompts/categories")
+async def get_prompt_categories():
+    """获取提示词分类"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT category FROM prompts ORDER BY category")
+        categories = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return JSONResponse({"categories": categories})
+    except Exception as e:
+        logger.exception(f"获取提示词分类失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/tags")
+async def get_prompt_tags():
+    """获取提示词标签"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT tags FROM prompts")
+        all_tags = set()
+        for row in cursor.fetchall():
+            if row[0]:
+                tags = json.loads(row[0])
+                all_tags.update(tags)
+        
+        conn.close()
+        
+        return JSONResponse({"tags": list(all_tags)})
+    except Exception as e:
+        logger.exception(f"获取提示词标签失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/popular")
+async def get_popular_prompts(limit: int = 10):
+    """获取热门提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts ORDER BY usage_count DESC, updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        conn.close()
+        
+        return JSONResponse({"prompts": prompts})
+    except Exception as e:
+        logger.exception(f"获取热门提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/recent")
+async def get_recent_prompts(limit: int = 10):
+    """获取最近提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        conn.close()
+        
+        return JSONResponse({"prompts": prompts})
+    except Exception as e:
+        logger.exception(f"获取最近提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/prompts/favorite")
+async def get_favorite_prompts(limit: int = 10):
+    """获取收藏的提示词"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM prompts WHERE is_favorite = 1 ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        
+        prompts = []
+        for row in rows:
+            prompt = dict(row)
+            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
+            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
+            prompts.append(prompt)
+        
+        conn.close()
+        
+        return JSONResponse({"prompts": prompts})
+    except Exception as e:
+        logger.exception(f"获取收藏提示词失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/api/prompts/{prompt_id}")
 async def get_prompt(prompt_id: int):
     """获取单个提示词"""
@@ -3645,68 +3737,6 @@ async def get_popular_prompts(limit: int = 10):
         logger.exception(f"获取热门提示词失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-@app.get("/api/prompts/recent")
-async def get_recent_prompts(limit: int = 10):
-    """获取最近提示词"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM prompts ORDER BY updated_at DESC LIMIT ?", (limit,))
-        rows = cursor.fetchall()
-        
-        prompts = []
-        for row in rows:
-            prompt = dict(row)
-            prompt['tags'] = json.loads(prompt['tags']) if prompt['tags'] else []
-            prompt['parameters'] = json.loads(prompt['parameters']) if prompt['parameters'] else []
-            prompts.append(prompt)
-        
-        conn.close()
-        
-        return JSONResponse({"prompts": prompts})
-    except Exception as e:
-        logger.exception(f"获取最近提示词失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/api/prompts/categories")
-async def get_prompt_categories():
-    """获取提示词分类"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT DISTINCT category FROM prompts ORDER BY category")
-        categories = [row[0] for row in cursor.fetchall()]
-        
-        conn.close()
-        
-        return JSONResponse({"categories": categories})
-    except Exception as e:
-        logger.exception(f"获取提示词分类失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.get("/api/prompts/tags")
-async def get_prompt_tags():
-    """获取提示词标签"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT tags FROM prompts")
-        all_tags = set()
-        for row in cursor.fetchall():
-            if row[0]:
-                tags = json.loads(row[0])
-                all_tags.update(tags)
-        
-        conn.close()
-        
-        return JSONResponse({"tags": list(all_tags)})
-    except Exception as e:
-        logger.exception(f"获取提示词标签失败: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
 @app.post("/api/prompts/{prompt_id}/usage")
 async def increment_prompt_usage(prompt_id: int):
     """增加提示词使用次数"""
@@ -3745,9 +3775,11 @@ async def generate_solution(request: Request, req: SolutionGenerate):
             return JSONResponse({"error": "缺少项目名称"}, status_code=400)
         
         project_path = get_project_path(project_name)
+        logger.info(f"[generate_solution] 项目路径: {project_path}")
         
         # 使用 iFlow Agent 生成方案
         agent = get_agent(project_path)
+        logger.info(f"[generate_solution] Agent 创建成功")
         
         prompt = f"""请根据以下需求，生成一个详细的技术方案：
 
@@ -3763,10 +3795,42 @@ async def generate_solution(request: Request, req: SolutionGenerate):
 
 请用 Markdown 格式输出。"""
         
+        logger.info(f"[generate_solution] 开始生成方案，需求: {req.requirement}")
+        
         solution_content = ""
+        message_count = 0
         async for msg in agent.chat_stream(prompt):
-            if msg.get("type") == "content":
-                solution_content += msg.get("content", "")
+            message_count += 1
+            msg_type = msg.get("type")
+            logger.debug(f"[generate_solution] 收到消息 {message_count}: {msg_type}, 完整消息: {msg}")
+            
+            # 处理不同类型的消息
+            if msg_type == "content":
+                content = msg.get("content", "")
+                solution_content += content
+                logger.debug(f"[generate_solution] 累计内容长度: {len(solution_content)}")
+            elif msg_type == "text":
+                content = msg.get("text", "")
+                solution_content += content
+                logger.debug(f"[generate_solution] 累计内容长度: {len(solution_content)}")
+            elif msg_type == "assistant":
+                # assistant 消息可能包含内容
+                if "content" in msg:
+                    content = msg["content"]
+                    if isinstance(content, str):
+                        solution_content += content
+                    elif isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict) and "text" in item:
+                                solution_content += item["text"]
+                    logger.debug(f"[generate_solution] 累计内容长度: {len(solution_content)}")
+            elif msg_type == "message":
+                # message 类型
+                content = msg.get("message", "")
+                solution_content += content
+                logger.debug(f"[generate_solution] 累计内容长度: {len(solution_content)}")
+        
+        logger.info(f"[generate_solution] 生成完成，共 {message_count} 条消息，内容长度: {len(solution_content)}")
         
         # 保存到数据库
         conn = get_db_connection()
@@ -3779,6 +3843,8 @@ async def generate_solution(request: Request, req: SolutionGenerate):
         conn.commit()
         conn.close()
         
+        logger.info(f"[generate_solution] 方案已保存，ID: {solution_id}")
+        
         return JSONResponse({
             "id": solution_id,
             "requirement": req.requirement,
@@ -3788,6 +3854,98 @@ async def generate_solution(request: Request, req: SolutionGenerate):
     except Exception as e:
         logger.exception(f"生成方案失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/solutions/generate-stream")
+async def generate_solution_stream(request: Request, req: SolutionGenerate):
+    """流式生成方案"""
+    async def event_generator():
+        try:
+            project_name = request.query_params.get("project")
+            if not project_name:
+                yield f"data: {json.dumps({'error': '缺少项目名称'})}\n\n"
+                return
+            
+            project_path = get_project_path(project_name)
+            logger.info(f"[generate_solution_stream] 项目路径: {project_path}")
+            
+            agent = get_agent(project_path)
+            logger.info(f"[generate_solution_stream] Agent 创建成功")
+            
+            prompt = f"""请根据以下需求，生成一个详细的技术方案：
+
+需求：{req.requirement}
+{f'模板类型：{req.template_type}' if req.template_type else ''}
+
+请提供：
+1. 技术栈选择
+2. 架构设计
+3. 实现步骤
+4. 关键代码示例
+5. 注意事项
+
+请用 Markdown 格式输出。"""
+            
+            logger.info(f"[generate_solution_stream] 开始生成方案，需求: {req.requirement}")
+            
+            solution_content = ""
+            message_count = 0
+            async for msg in agent.chat_stream(prompt):
+                message_count += 1
+                msg_type = msg.get("type")
+                logger.debug(f"[generate_solution_stream] 收到消息 {message_count}: {msg_type}")
+                
+                # 处理不同类型的消息
+                if msg_type == "content":
+                    content = msg.get("content", "")
+                    solution_content += content
+                    # 流式发送内容
+                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                elif msg_type == "text":
+                    content = msg.get("text", "")
+                    solution_content += content
+                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                elif msg_type == "assistant":
+                    if "content" in msg:
+                        content = msg["content"]
+                        if isinstance(content, str):
+                            solution_content += content
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                        elif isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, dict) and "text" in item:
+                                    solution_content += item["text"]
+                                    yield f"data: {json.dumps({'type': 'content', 'content': item['text']})}\n\n"
+            
+            logger.info(f"[generate_solution_stream] 生成完成，共 {message_count} 条消息，内容长度: {len(solution_content)}")
+            
+            # 保存到数据库
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO solutions (requirement, solution, template_type)
+                VALUES (?, ?, ?)
+            ''', (req.requirement, solution_content, req.template_type))
+            solution_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"[generate_solution_stream] 方案已保存，ID: {solution_id}")
+            
+            # 发送完成事件
+            yield f"data: {json.dumps({'type': 'done', 'solution_id': solution_id, 'solution': solution_content})}\n\n"
+            
+        except Exception as e:
+            logger.exception(f"[generate_solution_stream] 生成方案失败: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 @app.get("/api/solutions")
 async def get_solutions(limit: int = 10):
@@ -3805,6 +3963,48 @@ async def get_solutions(limit: int = 10):
         return JSONResponse({"solutions": solutions})
     except Exception as e:
         logger.exception(f"获取方案失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/solutions/templates")
+async def get_solution_templates():
+    """获取方案模板列表"""
+    try:
+        templates = [
+            {
+                "id": "web-app",
+                "name": "Web 应用开发",
+                "description": "适用于 Web 应用开发的技术方案模板",
+                "icon": "🌐"
+            },
+            {
+                "id": "mobile-app",
+                "name": "移动应用开发",
+                "description": "适用于移动应用开发的技术方案模板",
+                "icon": "📱"
+            },
+            {
+                "id": "api-service",
+                "name": "API 服务开发",
+                "description": "适用于 API 服务开发的技术方案模板",
+                "icon": "🔌"
+            },
+            {
+                "id": "data-analysis",
+                "name": "数据分析平台",
+                "description": "适用于数据分析平台的技术方案模板",
+                "icon": "📊"
+            },
+            {
+                "id": "microservices",
+                "name": "微服务架构",
+                "description": "适用于微服务架构的技术方案模板",
+                "icon": "🔗"
+            }
+        ]
+        
+        return JSONResponse({"templates": templates})
+    except Exception as e:
+        logger.exception(f"获取方案模板失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/api/solutions/{solution_id}")
@@ -4022,6 +4222,24 @@ async def review_code(req: CodeReviewRequest):
     except Exception as e:
         logger.exception(f"代码审查失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# --- Catch-all 路由 ---
+
+@app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def catch_all(path_name: str, request: Request):
+    """Catch-all 路由 - 处理未实现的 API 端点"""
+    logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
+
+    # MCP 相关的 API
+    if path_name.startswith("mcp-utils/"):
+        return JSONResponse(content={
+            "status": "not-implemented",
+            "message": f"MCP endpoint '{path_name}' is not implemented"
+        }, status_code=200)
+
+    # 默认响应
+    return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -20,6 +20,17 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
+  // Development mode: skip all authentication
+  if (process.env.NODE_ENV !== 'production') {
+    // Create a mock user for development
+    req.user = {
+      id: 1,
+      username: 'dev-user',
+      is_active: true
+    };
+    return next();
+  }
+
   // Platform mode:  use single database user
   if (process.env.VITE_IS_PLATFORM === 'true') {
     try {
