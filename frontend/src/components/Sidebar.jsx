@@ -182,7 +182,7 @@ function Sidebar({
   useEffect(() => {
     const loadSortOrder = () => {
       try {
-        const savedSettings = localStorage.getItem('claude-settings');
+        const savedSettings = localStorage.getItem('iflow-settings');
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
           setProjectSortOrder(settings.projectSortOrder || 'name');
@@ -197,7 +197,7 @@ function Sidebar({
 
     // Listen for storage changes
     const handleStorageChange = (e) => {
-      if (e.key === 'claude-settings') {
+      if (e.key === 'iflow-settings') {
         loadSortOrder();
       }
     };
@@ -748,9 +748,18 @@ function Sidebar({
                   <Folder className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-4">
                   Run IFlow CLI in a project directory to get started
                 </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => setShowNewProject(true)}
+                >
+                  <FolderPlus className="w-4 h-4 mr-2" />
+                  Add Project
+                </Button>
               </div>
             ) : filteredProjects.length === 0 ? (
               <div className="text-center py-12 md:py-8 px-4">
@@ -758,9 +767,16 @@ function Sidebar({
                   <Search className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-4">
                   Try adjusting your search term
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchFilter('')}
+                >
+                  Clear Search
+                </Button>
               </div>
             ) : (
               filteredProjects.map((project) => {

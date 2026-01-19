@@ -11,26 +11,27 @@
  * No session protection logic is implemented here - it's purely a props bridge.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import ChatInterface from './ChatInterfaceMinimal';
-import FileTree from './FileTree';
-import CodeEditor from './CodeEditor';
-import StandaloneShell from './StandaloneShell';
-import GitPanel from './GitPanel';
 import ErrorBoundary from './ErrorBoundary';
 import IFlowLogo from './IFlowLogo';
 import CursorLogo from './CursorLogo';
 import TaskList from './TaskList';
-import TaskDetail from './TaskDetail';
-import PRDEditor from './PRDEditor';
 import Tooltip from './Tooltip';
 import IFlowModeSelector from './IFlowModeSelector';
 import IFlowModelSelector from './IFlowModelSelector';
-import RAGPanel from './RAGPanel';
-import SmartRequirementAnalysis from './SmartRequirementAnalysis';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
+
+const ProjectFileExplorer = lazy(() => import('./ProjectFileExplorer'));
+const CodeEditor = lazy(() => import('./CodeEditor'));
+const StandaloneShell = lazy(() => import('./StandaloneShell'));
+const GitPanel = lazy(() => import('./GitPanel'));
+const RAGPanel = lazy(() => import('./RAGPanel'));
+const SmartRequirementAnalysis = lazy(() => import('./SmartRequirementAnalysis'));
+const TaskDetail = lazy(() => import('./TaskDetail'));
+const PRDEditor = lazy(() => import('./PRDEditor'));
 
 function MainContent({
   selectedProject,
@@ -539,26 +540,30 @@ function MainContent({
           </div>
           {activeTab === 'files' && (
             <div className="h-full overflow-hidden">
-              <FileTree selectedProject={selectedProject} />
+              <Suspense fallback={null}>
+                <ProjectFileExplorer project={selectedProject} />
+              </Suspense>
             </div>
           )}
           {activeTab === 'shell' && (
             <div className="h-full w-full overflow-hidden">
-              <StandaloneShell
-                project={selectedProject}
-                session={selectedSession}
-                showHeader={false}
-                onErrorDetected={(error) => {
-                  // 传递错误到 ChatInterface
-                  // 这里可以通过事件总线或状态管理来实现
-                  console.log('Shell error detected:', error);
-                }}
-              />
+              <Suspense fallback={null}>
+                <StandaloneShell
+                  project={selectedProject}
+                  session={selectedSession}
+                  showHeader={false}
+                  onErrorDetected={(error) => {
+                    console.log('Shell error detected:', error);
+                  }}
+                />
+              </Suspense>
             </div>
           )}
           {activeTab === 'git' && (
             <div className="h-full overflow-hidden">
-              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+              <Suspense fallback={null}>
+                <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+              </Suspense>
             </div>
           )}
           {shouldShowTasksTab && (
@@ -597,18 +602,22 @@ function MainContent({
           )}
           <div className={`h-full ${activeTab === 'rag' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails={true}>
-              <RAGPanel
-                projectName={selectedProject?.name}
-                projectPath={selectedProject?.fullPath}
-                visible={activeTab === 'rag'}
-              />
+              <Suspense fallback={null}>
+                <RAGPanel
+                  projectName={selectedProject?.name}
+                  projectPath={selectedProject?.fullPath}
+                  visible={activeTab === 'rag'}
+                />
+              </Suspense>
             </ErrorBoundary>
           </div>
           <div className={`h-full ${activeTab === 'smart-req' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails={true}>
-              <SmartRequirementAnalysis
-                project={selectedProject}
-              />
+              <Suspense fallback={null}>
+                <SmartRequirementAnalysis
+                  project={selectedProject}
+                />
+              </Suspense>
             </ErrorBoundary>
           </div>
           <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
@@ -660,14 +669,16 @@ function MainContent({
               className={`flex-shrink-0 border-l border-gray-200 dark:border-gray-700 h-full overflow-hidden ${editorExpanded ? 'flex-1' : ''}`}
               style={editorExpanded ? {} : { width: `${editorWidth}px` }}
             >
-              <CodeEditor
-                file={editingFile}
-                onClose={handleCloseEditor}
-                projectPath={selectedProject?.path}
-                isSidebar={true}
-                isExpanded={editorExpanded}
-                onToggleExpand={handleToggleEditorExpand}
-              />
+              <Suspense fallback={null}>
+                <CodeEditor
+                  file={editingFile}
+                  onClose={handleCloseEditor}
+                  projectPath={selectedProject?.path}
+                  isSidebar={true}
+                  isExpanded={editorExpanded}
+                  onToggleExpand={handleToggleEditorExpand}
+                />
+              </Suspense>
             </div>
           </>
         )}
@@ -675,60 +686,64 @@ function MainContent({
 
       {/* Code Editor Modal for Mobile */}
       {editingFile && isMobile && (
-        <CodeEditor
-          file={editingFile}
-          onClose={handleCloseEditor}
-          projectPath={selectedProject?.path}
-          isSidebar={false}
-        />
+        <Suspense fallback={null}>
+          <CodeEditor
+            file={editingFile}
+            onClose={handleCloseEditor}
+            projectPath={selectedProject?.path}
+            isSidebar={false}
+          />
+        </Suspense>
       )}
 
       {/* Task Detail Modal */}
       {shouldShowTasksTab && showTaskDetail && selectedTask && (
-        <TaskDetail
-          task={selectedTask}
-          isOpen={showTaskDetail}
-          onClose={handleTaskDetailClose}
-          onStatusChange={handleTaskStatusChange}
-          onTaskClick={handleTaskClick}
-        />
+        <Suspense fallback={null}>
+          <TaskDetail
+            task={selectedTask}
+            isOpen={showTaskDetail}
+            onClose={handleTaskDetailClose}
+            onStatusChange={handleTaskStatusChange}
+            onTaskClick={handleTaskClick}
+          />
+        </Suspense>
       )}
       {/* PRD Editor Modal */}
       {showPRDEditor && (
-        <PRDEditor
-          project={currentProject}
-          projectPath={currentProject?.fullPath || currentProject?.path}
-          onClose={() => {
-            setShowPRDEditor(false);
-            setSelectedPRD(null);
-          }}
-          isNewFile={!selectedPRD?.isExisting}
-          file={{
-            name: selectedPRD?.name || 'prd.txt',
-            content: selectedPRD?.content || ''
-          }}
-          onSave={async () => {
-            // Reload existing PRDs with notification
-            try {
-              const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
-              if (response.ok) {
-                const data = await response.json();
-                setExistingPRDs(data.prdFiles || []);
-                setPRDNotification('PRD saved successfully!');
-                setTimeout(() => setPRDNotification(null), 3000);
+        <Suspense fallback={null}>
+          <PRDEditor
+            project={currentProject}
+            projectPath={currentProject?.fullPath || currentProject?.path}
+            onClose={() => {
+              setShowPRDEditor(false);
+              setSelectedPRD(null);
+            }}
+            isNewFile={!selectedPRD?.isExisting}
+            file={{
+              name: selectedPRD?.name || 'prd.txt',
+              content: selectedPRD?.content || ''
+            }}
+            onSave={async () => {
+              try {
+                const response = await api.get(`/taskmaster/prd/${encodeURIComponent(currentProject.name)}`);
+                if (response.ok) {
+                  const data = await response.json();
+                  setExistingPRDs(data.prdFiles || []);
+                  setPRDNotification('PRD saved successfully!');
+                  setTimeout(() => setPRDNotification(null), 3000);
 
-                // Open the saved PRD file in editor
-                const fileName = selectedPRD?.name || 'prd.txt';
-                const filePath = `${currentProject.path}/${fileName}`;
-                handleFileOpen(filePath);
+                  const fileName = selectedPRD?.name || 'prd.txt';
+                  const filePath = `${currentProject.path}/${fileName}`;
+                  handleFileOpen(filePath);
+                }
+              } catch (error) {
+                console.error('Failed to refresh PRDs:', error);
               }
-            } catch (error) {
-              console.error('Failed to refresh PRDs:', error);
-            }
 
-            refreshTasks?.();
-          }}
-        />
+              refreshTasks?.();
+            }}
+          />
+        </Suspense>
       )}
       {/* PRD Notification */}
       {prdNotification && (

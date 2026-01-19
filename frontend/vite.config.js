@@ -12,18 +12,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       proxy: {
-        // 前端服务器 API 路由（认证、项目、Git、设置、用户）
+        // 前端服务器 API 路由（认证、项目、设置、用户）
         '^/api/auth(/|$)': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-          secure: false
-        },
-        '^/api/projects(/|$)': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-          secure: false
-        },
-        '^/api/git(/|$)': {
           target: 'http://localhost:3001',
           changeOrigin: true,
           secure: false
@@ -52,7 +42,7 @@ export default defineConfig(({ command, mode }) => {
         },
         // Proxy WebSocket for shell
         '/shell': {
-          target: 'http://localhost:8000',
+          target: 'http://localhost:3001',
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path

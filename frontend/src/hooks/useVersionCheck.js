@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 
-const CACHE_KEY = 'claude_ui_version_check';
+const CACHE_KEY = 'iflow_agent_version_check';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
 export const useVersionCheck = (owner, repo) => {
@@ -25,8 +25,13 @@ export const useVersionCheck = (owner, repo) => {
                const latest = data.tag_name.replace(/^v/, '');
                setLatestVersion(latest);
                setUpdateAvailable(version !== latest);
+               
+               let title = data.name || data.tag_name;
+               // Rebrand: Replace "Claude Code UI" with "IFlow Agent"
+               title = title.replace(/Claude Code UI/g, 'IFlow Agent');
+
                setReleaseInfo({
-                 title: data.name || data.tag_name,
+                 title: title,
                  body: data.body || '',
                  htmlUrl: data.html_url || `https://github.com/${owner}/${repo}/releases/latest`,
                  publishedAt: data.published_at

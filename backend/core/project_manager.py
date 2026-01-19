@@ -1,11 +1,20 @@
 import json
 import os
 import time
+import shutil
+import logging
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 PROJECTS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_FILE = os.path.join(PROJECTS_DIR, "projects.json")
+BACKUP_DIR = os.path.join(PROJECTS_DIR, "storage", "backups")
 STORAGE_DIR = os.path.join(PROJECTS_DIR, "storage")
+
+logger = logging.getLogger("ProjectManager")
+
+# 备份配置
+MAX_BACKUPS = 10  # 最多保留 10 个备份
 
 class ProjectManager:
     def __init__(self):
@@ -30,8 +39,121 @@ class ProjectManager:
             return []
 
     def save_projects(self):
-        with open(PROJECTS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.projects, f, indent=2, ensure_ascii=False)
+        """保存项目列表，并在保存前创建备份"""
+        try:
+            # 如果文件存在，先创建备份
+            if os.path.exists(PROJECTS_FILE):
+                self._create_backup()
+
+            # 保存新文件
+            with open(PROJECTS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.projects, f, indent=2, ensure_ascii=False)
+
+            logger.info(f"项目列表已保存: {len(self.projects)} 个项目")
+        except Exception as e:
+            logger.error(f"保存项目列表失败: {e}")
+            raise
+
+    def _create_backup(self):
+        """创建 projects.json 的备份"""
+        try:
+            # 确保备份目录存在
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+
+            # 生成备份文件名（带时间戳）
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"projects_backup_{timestamp}.json"
+            backup_path = os.path.join(BACKUP_DIR, backup_filename)
+
+            # 复制文件到备份目录
+            shutil.copy2(PROJECTS_FILE, backup_path)
+            logger.info(f"已创建备份: {backup_filename}")
+
+            # 清理旧备份（保留最近 MAX_BACKUPS 个）
+            self._cleanup_old_backups()
+
+        except Exception as e:
+            logger.error(f"创建备份失败: {e}")
+            # 备份失败不应该阻止主操作，所以这里只记录错误
+
+    def _cleanup_old_backups(self):
+        """清理旧的备份文件，只保留最近的 MAX_BACKUPS 个"""
+        try:
+            if not os.path.exists(BACKUP_DIR):
+                return
+
+            # 获取所有备份文件
+            backup_files = []
+            for filename in os.listdir(BACKUP_DIR):
+                if filename.startswith("projects_backup_") and filename.endswith(".json"):
+                    filepath = os.path.join(BACKUP_DIR, filename)
+                    backup_files.append((filepath, os.path.getmtime(filepath)))
+
+            # 按修改时间排序（最新的在前）
+            backup_files.sort(key=lambda x: x[1], reverse=True)
+
+            # 删除超出限制的旧备份
+            if len(backup_files) > MAX_BACKUPS:
+                for filepath, _ in backup_files[MAX_BACKUPS:]:
+                    os.remove(filepath)
+                    logger.info(f"已删除旧备份: {os.path.basename(filepath)}")
+
+        except Exception as e:
+            logger.error(f"清理旧备份失败: {e}")
+
+    def restore_from_backup(self, backup_filename: str):
+        """从备份恢复 projects.json"""
+        try:
+            backup_path = os.path.join(BACKUP_DIR, backup_filename)
+
+            if not os.path.exists(backup_path):
+                raise FileNotFoundError(f"备份文件不存在: {backup_filename}")
+
+            # 创建当前文件的备份（以防恢复失败）
+            if os.path.exists(PROJECTS_FILE):
+                self._create_backup()
+
+            # 恢复备份文件
+            shutil.copy2(backup_path, PROJECTS_FILE)
+
+            # 重新加载项目
+            self.projects = self._load_projects()
+
+            logger.info(f"已从备份恢复: {backup_filename}")
+            return True
+
+        except Exception as e:
+            logger.error(f"从备份恢复失败: {e}")
+            raise
+
+    def list_backups(self) -> List[Dict[str, Any]]:
+        """列出所有可用的备份"""
+        try:
+            if not os.path.exists(BACKUP_DIR):
+                return []
+
+            backups = []
+            for filename in os.listdir(BACKUP_DIR):
+                if filename.startswith("projects_backup_") and filename.endswith(".json"):
+                    filepath = os.path.join(BACKUP_DIR, filename)
+                    mtime = os.path.getmtime(filepath)
+                    size = os.path.getsize(filepath)
+
+                    backups.append({
+                        "filename": filename,
+                        "path": filepath,
+                        "created_at": datetime.fromtimestamp(mtime).isoformat(),
+                        "size": size
+                    })
+
+            # 按创建时间排序（最新的在前）
+            backups.sort(key=lambda x: x["created_at"], reverse=True)
+
+            return backups
+
+        except Exception as e:
+            logger.error(f"列出备份失败: {e}")
+            return []
 
     def get_projects(self) -> List[Dict[str, Any]]:
         # 更新每个项目的会话列表（从磁盘实时扫描）

@@ -1,5 +1,6 @@
 import sys
 import os
+import mimetypes
 import asyncio
 import json
 import platform
@@ -14,15 +15,22 @@ if platform.system() == 'Windows':
 from fastapi import FastAPI, HTTPException, Request, Query, Body, WebSocket
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
-# 配置日志
+# 配置日志 - 支持环境变量
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+if log_level not in valid_levels:
+    logger.warning(f"Invalid LOG_LEVEL: {log_level}, using INFO")
+    log_level = "INFO"
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, log_level),
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger("Server")
+logger.info(f"日志级别设置为: {log_level}")
 
 # Add backend to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
@@ -58,18 +66,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- CACHE MANAGER ---
+class CacheManager:
+    """缓存管理器，支持自动清理和大小限制"""
+
+    def __init__(self, max_size=100, name="Cache"):
+        self.cache = {}
+        self.max_size = max_size
+        self.name = name
+        self.access_times = {}
+        self._total_accesses = 0
+        self._hits = 0
+
+    def get(self, key):
+        """获取缓存项"""
+        if key in self.cache:
+            self.access_times[key] = datetime.now().timestamp()
+            self._total_accesses += 1
+            self._hits += 1
+            return self.cache[key]
+        self._total_accesses += 1
+        return None
+
+    def set(self, key, value):
+        """设置缓存项，如果超出大小限制则清理最旧的项"""
+        if len(self.cache) >= self.max_size and key not in self.cache:
+            self._cleanup_oldest()
+        self.cache[key] = value
+        self.access_times[key] = datetime.now().timestamp()
+
+    def _cleanup_oldest(self):
+        """清理最旧的缓存项"""
+        if not self.access_times:
+            return
+
+        oldest_key = min(self.access_times, key=self.access_times.get)
+        del self.cache[oldest_key]
+        del self.access_times[oldest_key]
+        logger.debug(f"[{self.name}] Cleaned up oldest cache entry: {oldest_key}")
+
+    def clear(self):
+        """清空所有缓存"""
+        count = len(self.cache)
+        self.cache.clear()
+        self.access_times.clear()
+        logger.info(f"[{self.name}] Cleared {count} cache entries")
+
+    def get_stats(self):
+        """获取缓存统计信息"""
+        hit_rate = (self._hits / self._total_accesses * 100) if self._total_accesses > 0 else 0
+        return {
+            "name": self.name,
+            "size": len(self.cache),
+            "max_size": self.max_size,
+            "total_accesses": self._total_accesses,
+            "hits": self._hits,
+            "hit_rate": f"{hit_rate:.2f}%"
+        }
+
+    def __contains__(self, key):
+        return key in self.cache
+
+    def __len__(self):
+        return len(self.cache)
+
 # --- MODELS ---
 class CreateProjectRequest(BaseModel): path: str
-class SaveFileRequest(BaseModel): filePath: str; content: str
-class CheckoutRequest(BaseModel): project: str; branch: str
-class CommitRequest(BaseModel): project: str; message: str; files: list
 
 class CreateWorkspaceRequest(BaseModel):
-    workspaceType: str  # 'existing' | 'new'
+    workspaceType: str
     path: str
     githubUrl: str = None
     githubTokenId: int = None
     newGithubToken: str = None
+class SaveFileRequest(BaseModel): filePath: str; content: str
+class CheckoutRequest(BaseModel): project: str; branch: str
+class CommitRequest(BaseModel): project: str; message: str; files: list
 
 # --- GLOBAL CONFIG ---
 global_config = {
@@ -162,8 +234,16 @@ def get_project_path(project_name: str) -> str:
     logger.warning(f"[get_project_path] 未找到项目: {project_name}, 返回当前工作目录: {os.getcwd()}")
     return os.getcwd()
 
-agent_cache = {}
-rag_cache = {}
+# 从环境变量读取缓存配置
+agent_cache_max_size = int(os.getenv("AGENT_CACHE_MAX_SIZE", "100"))
+rag_cache_max_size = int(os.getenv("RAG_CACHE_MAX_SIZE", "50"))
+
+logger.info(f"Agent 缓存最大大小: {agent_cache_max_size}")
+logger.info(f"RAG 缓存最大大小: {rag_cache_max_size}")
+
+# 使用缓存管理器
+agent_cache = CacheManager(max_size=agent_cache_max_size, name="AgentCache")
+rag_cache = CacheManager(max_size=rag_cache_max_size, name="RAGCache")
 
 # AI Persona System Prompts
 PERSONA_PROMPTS = {
@@ -531,6 +611,36 @@ async def read_project_file(project_name: str, filePath: str):
     try: return {"content": file_service.read_file(get_project_path(project_name), filePath)}
     except: raise HTTPException(status_code=404)
 
+@app.get("/api/projects/{project_name}/files/content")
+async def read_project_file_content(project_name: str, filePath: str):
+    try:
+        root_path = get_project_path(project_name)
+
+        if '..' in filePath.replace('\\', '/').split('/'):
+            raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
+
+        full_path = os.path.normpath(os.path.join(root_path, filePath))
+        real_root = os.path.realpath(root_path)
+        real_full = os.path.realpath(full_path) if os.path.exists(full_path) else full_path
+
+        if not real_full.startswith(real_root + os.sep) and real_full != real_root:
+            raise HTTPException(status_code=403, detail="Access denied: path outside project directory")
+
+        if not os.path.exists(full_path) or not os.path.isfile(full_path):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        file_size = os.path.getsize(full_path)
+        if file_size > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large to preview")
+
+        media_type = mimetypes.guess_type(full_path)[0] or "application/octet-stream"
+        return FileResponse(full_path, media_type=media_type)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error serving file content: {e}")
+        raise HTTPException(status_code=500, detail="Error reading file")
+
 @app.put("/api/projects/{project_name}/file")
 async def save_project_file(project_name: str, req: SaveFileRequest):
     try:
@@ -603,8 +713,26 @@ async def get_file_with_diff(project: str = Query(None), file: str = Query(None)
 
 @app.websocket("/shell")
 async def websocket_shell(websocket: WebSocket, project: str = None):
-    session = ShellSession(cwd=get_project_path(project) if project else os.getcwd())
-    await session.start(websocket)
+    """WebSocket Shell 端点"""
+    try:
+        # 获取项目路径
+        project_path = None
+        if project:
+            project_path = get_project_path(project)
+            logger.info(f"[Shell] 项目路径: {project_path}")
+        else:
+            project_path = os.getcwd()
+            logger.info(f"[Shell] 使用当前目录: {project_path}")
+
+        # 创建 Shell 会话
+        session = ShellSession(cwd=project_path)
+        await session.start(websocket)
+    except Exception as e:
+        logger.exception(f"[Shell] WebSocket 端点错误: {e}")
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except:
+            pass
 
 @app.get("/api/user/onboarding-status")
 async def onboarding_status(): return {"hasCompletedOnboarding": True}
@@ -711,7 +839,7 @@ async def validate_path(path: str = Query(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.post("/api/projects/create-workspace")
+@app.post("/api/create-workspace")
 async def create_workspace(req: CreateWorkspaceRequest):
     """创建或添加工作空间"""
     logger.info(f"=== 创建工作空间请求 ===")
@@ -869,7 +997,7 @@ async def create_workspace(req: CreateWorkspaceRequest):
 
 
 @app.get("/api/browse-filesystem")
-async def browse_filesystem(path: str = Query(None)):
+async def browse_filesystem(path: str = Query(None), include_files: bool = Query(False), limit: int = Query(100)):
     """浏览文件系统，提供路径自动补全建议"""
     try:
         suggestions = []
@@ -936,20 +1064,24 @@ async def browse_filesystem(path: str = Query(None)):
                 continue
             
             full_path = os.path.join(browse_dir, entry)
+            is_dir = os.path.isdir(full_path)
             
-            # 只返回目录（工作空间必须是目录）
-            if os.path.isdir(full_path):
-                suggestions.append({
-                    "name": entry,
-                    "path": full_path,
-                    "type": "directory"
-                })
+            # Filter based on include_files
+            if not include_files and not is_dir:
+                continue
+            
+            suggestions.append({
+                "name": entry,
+                "path": full_path,
+                "type": "directory" if is_dir else "file"
+            })
         
-        # 按名称排序
-        suggestions.sort(key=lambda x: x["name"].lower())
+        # Sort: directories first, then alphabetical
+        suggestions.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
         
-        # 限制返回数量
-        suggestions = suggestions[:20]
+        # Limit results
+        if limit > 0:
+            suggestions = suggestions[:limit]
         
         return {
             "suggestions": suggestions,
@@ -962,6 +1094,48 @@ async def browse_filesystem(path: str = Query(None)):
             content={"error": f"浏览文件系统失败: {str(e)}"},
             status_code=500
         )
+
+
+@app.get("/api/search-filesystem")
+async def search_filesystem(q: str = Query(...), path: str = Query(None), limit: int = Query(50)):
+    """Search for directories matching query"""
+    start_dir = os.path.expanduser(path or "~")
+    
+    def _search():
+        results = []
+        if not os.path.exists(start_dir):
+            return results
+        
+        try:
+            count = 0
+            # Limit depth effectively by not following hidden/large dirs
+            exclude_dirs = {'node_modules', 'Library', 'venv', '__pycache__', '.git', '.idea', '.vscode'}
+            
+            for root, dirs, files in os.walk(start_dir):
+                # Filter in-place to prevent recursion
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in exclude_dirs]
+                
+                for d in dirs:
+                    if q.lower() in d.lower():
+                        full_path = os.path.join(root, d)
+                        results.append({
+                            "name": d,
+                            "path": full_path,
+                            "type": "directory"
+                        })
+                        count += 1
+                        if count >= limit:
+                            return results
+                
+                if len(results) >= limit:
+                    break
+        except Exception as e:
+            logger.error(f"Search error: {e}")
+            pass
+        return results
+
+    results = await asyncio.to_thread(_search)
+    return {"results": results}
 
 
 @app.post("/api/projects/create")
@@ -1007,6 +1181,82 @@ async def create_project(req: CreateProjectRequest):
             content={"error": f"创建项目失败: {str(e)}"},
             status_code=500
         )
+
+
+@app.post("/api/projects/create-workspace")
+async def create_workspace(req: CreateWorkspaceRequest):
+    """创建工作空间（完整流程）"""
+    try:
+        workspace_path = os.path.expanduser(req.path.strip())
+        workspace_path = os.path.abspath(workspace_path)
+        
+        # 1. 验证或创建目录
+        if req.workspaceType == 'new':
+            if os.path.exists(workspace_path):
+                if not os.path.isdir(workspace_path):
+                    return JSONResponse(content={"error": "路径存在且不是目录"}, status_code=400)
+                # 允许在空目录中创建（或非空目录但用户已确认）
+            else:
+                try:
+                    os.makedirs(workspace_path, exist_ok=True)
+                except Exception as e:
+                    return JSONResponse(content={"error": f"无法创建目录: {str(e)}"}, status_code=500)
+                
+            # 2. 处理 GitHub 克隆
+            if req.githubUrl:
+                repo_url = req.githubUrl
+                if req.newGithubToken:
+                    # 插入 token: https://TOKEN@github.com/...
+                    if repo_url.startswith("https://"):
+                        repo_url = repo_url.replace("https://", f"https://{req.newGithubToken}@")
+                
+                try:
+                    # 检查目录是否为空
+                    if os.path.exists(workspace_path) and any(os.scandir(workspace_path)):
+                         return JSONResponse(content={"error": "目标目录非空，无法克隆仓库"}, status_code=400)
+
+                    process = await asyncio.create_subprocess_exec(
+                        "git", "clone", repo_url, ".",
+                        cwd=workspace_path,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+                    if process.returncode != 0:
+                        err_msg = stderr.decode()
+                        # 简单隐藏 token
+                        if req.newGithubToken:
+                            err_msg = err_msg.replace(req.newGithubToken, "***")
+                        return JSONResponse(content={"error": f"克隆失败: {err_msg}"}, status_code=400)
+                except Exception as e:
+                    return JSONResponse(content={"error": f"Git操作失败: {str(e)}"}, status_code=500)
+
+        elif req.workspaceType == 'existing':
+            if not os.path.isdir(workspace_path):
+                return JSONResponse(content={"error": "路径不存在"}, status_code=400)
+
+        # 3. 注册项目
+        # 使用 project_manager 添加
+        project = project_manager.add_project(workspace_path)
+        
+        # 注册到 registry (为了允许访问)
+        is_registered, error = project_registry.register_project(project["name"], workspace_path)
+        
+        if not is_registered:
+             if "不在允许的根目录范围内" in error:
+                logger.info(f"路径不在允许列表中，动态添加: {workspace_path}")
+                PathValidator.add_allowed_root(workspace_path)
+                PathValidator.add_allowed_root(os.path.dirname(workspace_path))
+                is_registered, error = project_registry.register_project(project["name"], workspace_path)
+        
+        if not is_registered:
+             return JSONResponse(content={"error": f"注册项目失败: {error}"}, status_code=400)
+
+        return {"success": True, "project": project}
+
+    except Exception as e:
+        logger.exception(f"创建工作空间失败: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @app.post("/api/error-analyze")
@@ -1743,21 +1993,77 @@ async def get_taskmaster_installation_status():
 @app.get("/api/taskmaster/tasks/{project_name}")
 async def get_taskmaster_tasks(project_name: str):
     """获取项目的任务列表"""
-    # TODO: 实现从存储中读取任务列表
-    return {
-        "tasks": [],
-        "total": 0,
-        "completed": 0
-    }
+    try:
+        project_path = get_project_path(project_name)
+
+        # 从 task_master_service 获取任务列表
+        tasks = task_master_service.get_tasks(project_name)
+
+        # 统计任务状态
+        total = len(tasks)
+        completed = sum(1 for task in tasks if task.get("status") == "completed")
+
+        return {
+            "success": True,
+            "tasks": tasks,
+            "total": total,
+            "completed": completed
+        }
+    except Exception as e:
+        logger.exception(f"获取任务列表失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "tasks": [],
+            "total": 0,
+            "completed": 0
+        }
 
 @app.get("/api/taskmaster/prd/{project_name}")
 async def get_taskmaster_prd(project_name: str):
     """获取项目的 PRD 文档"""
-    # TODO: 实现从存储中读取 PRD 文档
-    return {
-        "prd": None,
-        "exists": False
-    }
+    try:
+        project_path = get_project_path(project_name)
+
+        # 尝试查找 PRD 文件（常见的 PRD 文件名）
+        prd_filenames = [
+            "PRD.md",
+            "prd.md",
+            "PRODUCT_REQUIREMENTS.md",
+            "product_requirements.md",
+            "REQUIREMENTS.md",
+            "requirements.md"
+        ]
+
+        prd_content = None
+        prd_file = None
+
+        for filename in prd_filenames:
+            prd_file_path = os.path.join(project_path, filename)
+            if os.path.exists(prd_file_path) and os.path.isfile(prd_file_path):
+                try:
+                    with open(prd_file_path, 'r', encoding='utf-8') as f:
+                        prd_content = f.read()
+                    prd_file = filename
+                    break
+                except Exception as e:
+                    logger.warning(f"读取 PRD 文件 {filename} 失败: {e}")
+                    continue
+
+        return {
+            "success": True,
+            "prd": prd_content,
+            "exists": prd_content is not None,
+            "file": prd_file
+        }
+    except Exception as e:
+        logger.exception(f"获取 PRD 文档失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "prd": None,
+            "exists": False
+        }
 
 # --- Cursor Sessions API 端点 ---
 

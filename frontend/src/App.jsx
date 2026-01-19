@@ -28,11 +28,14 @@ import Settings from './components/Settings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 import FocusModeToggle from './components/FocusModeToggle';
 import AIPersonaSelector from './components/AIPersonaSelector';
+import GlobalStatusBar from './components/GlobalStatusBar';
+import CommandPalette from './components/CommandPalette';
 
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
@@ -87,6 +90,20 @@ function AppContent() {
   const lastProcessedMessageRef = useRef(null);
 
   const { ws, sendMessage, messages } = useWebSocketContext();
+  const { isDarkMode, toggleDarkMode } = useTheme();
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+
+  // Command Palette Shortcut
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Detect if running as PWA
   const [isPWA, setIsPWA] = useState(false);
@@ -944,36 +961,47 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''}`}>
-        <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          messages={messages}
-          isMobile={isMobile}
-          isPWA={isPWA}
-          onMenuClick={() => setSidebarOpen(true)}
-          isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={markSessionAsInactive}
-          onSessionProcessing={markSessionAsProcessing}
-          onSessionNotProcessing={markSessionAsNotProcessing}
-          processingSessions={processingSessions}
-          onReplaceTemporarySession={replaceTemporarySession}
-          onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
-          onShowSettings={() => setShowSettings(true)}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          autoScrollToBottom={autoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
-          externalMessageUpdate={externalMessageUpdate}
-          aiPersona={aiPersona}
-        />
+      <div className={`flex-1 flex flex-col ${isMobile && !isInputFocused ? 'pb-mobile-nav' : ''} overflow-hidden`}>
+        <div className="flex-1 min-h-0 relative">
+          <MainContent
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            ws={ws}
+            sendMessage={sendMessage}
+            messages={messages}
+            isMobile={isMobile}
+            isPWA={isPWA}
+            onMenuClick={() => setSidebarOpen(true)}
+            isLoading={isLoadingProjects}
+            onInputFocusChange={setIsInputFocused}
+            onSessionActive={markSessionAsActive}
+            onSessionInactive={markSessionAsInactive}
+            onSessionProcessing={markSessionAsProcessing}
+            onSessionNotProcessing={markSessionAsNotProcessing}
+            processingSessions={processingSessions}
+            onReplaceTemporarySession={replaceTemporarySession}
+            onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
+            onShowSettings={() => setShowSettings(true)}
+            autoExpandTools={autoExpandTools}
+            showRawParameters={showRawParameters}
+            showThinking={showThinking}
+            autoScrollToBottom={autoScrollToBottom}
+            sendByCtrlEnter={sendByCtrlEnter}
+            externalMessageUpdate={externalMessageUpdate}
+            aiPersona={aiPersona}
+          />
+        </div>
+        
+        {/* Global Status Bar - Hidden on mobile if needed, or compact */}
+        {!isMobile && (
+          <GlobalStatusBar 
+            selectedProject={selectedProject} 
+            isConnected={ws && ws.readyState === 1}
+            activeTab={activeTab}
+          />
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -1011,6 +1039,17 @@ function AppContent() {
         initialTab={settingsInitialTab}
       />
 
+      {/* Command Palette */}
+      <CommandPalette 
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        projects={projects}
+        selectedProject={selectedProject}
+        onSelectProject={handleProjectSelect}
+        onToggleTheme={toggleDarkMode}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Version Upgrade Modal */}
       <VersionUpgradeModal />
 
@@ -1031,14 +1070,16 @@ function App() {
         <WebSocketProvider>
           <TasksSettingsProvider>
             <TaskMasterProvider>
-              <ProtectedRoute>
-                <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                  <Routes>
-                    <Route path="/" element={<AppContent />} />
-                    <Route path="/session/:sessionId" element={<AppContent />} />
-                  </Routes>
-                </Router>
-              </ProtectedRoute>
+              <ToastProvider>
+                <ProtectedRoute>
+                  <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <Routes>
+                      <Route path="/" element={<AppContent />} />
+                      <Route path="/session/:sessionId" element={<AppContent />} />
+                    </Routes>
+                  </Router>
+                </ProtectedRoute>
+              </ToastProvider>
             </TaskMasterProvider>
           </TasksSettingsProvider>
         </WebSocketProvider>

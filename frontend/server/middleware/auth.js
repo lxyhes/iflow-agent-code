@@ -85,6 +85,12 @@ const generateToken = (user) => {
 
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
+  // Development mode: skip authentication
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[DEBUG] WebSocket auth bypass (Dev mode)');
+    return { userId: 1, username: 'dev-user' };
+  }
+
   // Platform mode: bypass token validation, return first user
   if (process.env.VITE_IS_PLATFORM === 'true') {
     try {

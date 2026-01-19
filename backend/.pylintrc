@@ -1,0 +1,90 @@
+[MASTER]
+# 使用多个进程进行并行检查
+jobs=1
+
+# 指定初始化钩子
+init-hook='import sys; sys.path.append(".")'
+
+# Python 解释器路径
+python-version=3.10
+
+# 加载的插件
+load-plugins=
+
+[MESSAGES CONTROL]
+# 禁用的警告
+disable=
+    C0111,  # missing-docstring
+    R0913,  # too-many-arguments
+    C0103,  # invalid-name
+    W0613,  # unused-argument
+    R0903,  # too-few-public-methods
+    R0914,  # too-many-locals
+    R0915,  # too-many-statements
+    C0301,  # line-too-long (由 Black 处理)
+
+[FORMAT]
+# 最大行长度
+max-line-length=100
+
+# 缩进字符串
+indent-string='    '
+
+[DESIGN]
+# 最大参数数量
+max-args=7
+
+# 最大局部变量数量
+max-locals=15
+
+# 最大返回数量
+max-returns=6
+
+# 最大分支数量
+max-branches=12
+
+# 最大语句数量
+max-statements=50
+
+[BASIC]
+# 好的变量名
+good-names=i,j,k,ex,id,e,f,x,y,_,db,logger
+
+# 坏的变量名
+bad-names=foo,bar,baz,toto,tutu,tata
+
+[SIMILARITIES]
+# 最小相似行数
+min-similarity-lines=4
+
+# 忽略的导入
+ignore-imports=yes
+
+[IMPORTS]
+# 禁止的模块
+deprecated-modules=regsub,
+                      TERMIOS,
+                      Bastion,
+                      rexec
+
+[VARIABLES]
+# 初始化的变量
+init-import=no
+
+# 虚拟变量
+dummy-variables-rgx=_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_
+
+# 常量
+const-rgx=(_?[A-Z][A-Z0-9_]+|__[a-z0-9_]+__|___[a-z0-9_]+___)$
+
+# 类属性
+class-attribute-rgx=(_?[A-Z][A-Z0-9_]+|__[a-z0-9_]+__|___[a-z0-9_]+___)$
+
+# 类常量
+class-const-rgx=(_?[A-Z][A-Z0-9_]+|__[a-z0-9_]+__|___[a-z0-9_]+___)$
+
+# 变量
+variable-rgx=[a-z_][a-z0-9_]{0,30}$
+
+# 内联变量
+inlinevar-rgx=[A-Za-z_][A-Za-z0-9_]*$

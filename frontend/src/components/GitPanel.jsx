@@ -88,6 +88,7 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       if (data.error) {
         console.log('Git status info:', data.error);
         setGitStatus({ error: data.error, details: data.details });
+        // Don't toast for "not a git repo" as it's a valid state shown in UI
       } else {
         setGitStatus(data);
         setCurrentBranch(data.branch || 'main');
@@ -169,11 +170,14 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
         setCurrentBranch(branchName);
         setShowBranchDropdown(false);
         fetchGitStatus(); // Refresh status after branch switch
+        toastSuccess(`Switched to branch ${branchName}`);
       } else {
         console.error('Failed to switch branch:', data.error);
+        toastError(data.error || 'Failed to switch branch');
       }
     } catch (error) {
       console.error('Error switching branch:', error);
+      toastError('Error switching branch');
     }
   };
 
@@ -253,7 +257,11 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
         fetchRemoteStatus();
       } else {
         console.error('Pull failed:', data.error);
-        // TODO: Show user-friendly error message
+        showToast({
+          type: 'error',
+          title: '拉取失败',
+          message: data.error || '无法从远程仓库拉取更改，请检查网络连接和权限'
+        });
       }
     } catch (error) {
       console.error('Error pulling from remote:', error);
@@ -280,7 +288,11 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
         fetchRemoteStatus();
       } else {
         console.error('Push failed:', data.error);
-        // TODO: Show user-friendly error message
+        showToast({
+          type: 'error',
+          title: '推送失败',
+          message: data.error || '无法推送到远程仓库，请检查网络连接和权限'
+        });
       }
     } catch (error) {
       console.error('Error pushing to remote:', error);
@@ -574,16 +586,19 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
 
       const data = await response.json();
       if (data.success) {
-        // Reset state after successful commit
+        // Refresh status after successful commit
         setCommitMessage('');
         setSelectedFiles(new Set());
         fetchGitStatus();
         fetchRemoteStatus();
+        toastSuccess('Changes committed successfully');
       } else {
         console.error('Commit failed:', data.error);
+        toastError(data.error || 'Commit failed');
       }
     } catch (error) {
       console.error('Error committing changes:', error);
+      toastError('Error committing changes');
     } finally {
       setIsCommitting(false);
     }
@@ -604,13 +619,14 @@ function GitPanel({ selectedProject, isMobile, onFileOpen }) {
       if (data.success) {
         fetchGitStatus();
         fetchRemoteStatus();
+        toastSuccess('Initial commit created successfully');
       } else {
         console.error('Initial commit failed:', data.error);
-        alert(data.error || 'Failed to create initial commit');
+        toastError(data.error || 'Failed to create initial commit');
       }
     } catch (error) {
       console.error('Error creating initial commit:', error);
-      alert('Failed to create initial commit');
+      toastError('Failed to create initial commit');
     } finally {
       setIsCreatingInitialCommit(false);
     }

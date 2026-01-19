@@ -13,13 +13,13 @@
     "dist/",
     "README.md"
   ],
-  "homepage": "https://claudecodeui.siteboon.ai",
+  "homepage": "https://github.com/hb/iflow-agent",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/hb/iflow-agent.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/hb/iflow-agent/issues"
   },
   "scripts": {
     "dev": "vite --host",
@@ -79,6 +79,7 @@
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
     "node-fetch": "^2.7.0",
+    "node-pty": "^1.1.0",
     "react": "^18.2.0",
     "react-codemirror-merge": "^4.25.4",
     "react-dom": "^18.2.0",

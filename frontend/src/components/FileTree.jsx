@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye, Search, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
 
-function FileTree({ selectedProject }) {
+function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState(new Set());
@@ -151,21 +151,40 @@ function FileTree({ selectedProject }) {
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
-              // Open image in viewer
-              setSelectedImage({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onImageSelect) {
+                onImageSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              } else {
+                // Open image in viewer
+                setSelectedImage({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             } else {
-              // Open file in editor
-              setSelectedFile({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onFileSelect) {
+                onFileSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name,
+                  size: item.size
+                });
+              } else {
+                // Open file in editor
+                setSelectedFile({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             }
           }}
         >
@@ -234,19 +253,38 @@ function FileTree({ selectedProject }) {
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
-              setSelectedImage({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onImageSelect) {
+                onImageSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              } else {
+                setSelectedImage({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             } else {
-              setSelectedFile({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onFileSelect) {
+                onFileSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name,
+                  size: item.size
+                });
+              } else {
+                setSelectedFile({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             }
           }}
         >
@@ -296,19 +334,38 @@ function FileTree({ selectedProject }) {
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
-              setSelectedImage({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onImageSelect) {
+                onImageSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              } else {
+                setSelectedImage({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             } else {
-              setSelectedFile({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
+              if (onFileSelect) {
+                onFileSelect({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name,
+                  size: item.size
+                });
+              } else {
+                setSelectedFile({
+                  name: item.name,
+                  path: item.path,
+                  projectPath: selectedProject.path,
+                  projectName: selectedProject.name
+                });
+              }
             }
           }}
         >
@@ -361,6 +418,16 @@ function FileTree({ selectedProject }) {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-foreground">Files</h3>
           <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={fetchFiles}
+              title="Refresh files"
+              disabled={loading}
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </Button>
             <Button
               variant={viewMode === 'simple' ? 'default' : 'ghost'}
               size="sm"

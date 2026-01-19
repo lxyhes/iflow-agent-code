@@ -78,12 +78,14 @@ export const api = {
       body: JSON.stringify({ path }),
     }),
   createWorkspace: (workspaceData) =>
-    authenticatedFetch('/api/projects/create-workspace', {
+    authenticatedFetch('/api/create-workspace', {
       method: 'POST',
       body: JSON.stringify(workspaceData),
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+  readFileRaw: (projectName, filePath) =>
+    authenticatedFetch(`/api/projects/${projectName}/files/content?filePath=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
     authenticatedFetch(`/api/projects/${projectName}/file`, {
       method: 'PUT',
@@ -140,11 +142,21 @@ export const api = {
   },
 
   // Browse filesystem for project suggestions
-  browseFilesystem: (dirPath = null) => {
+  browseFilesystem: (dirPath = null, options = {}) => {
     const params = new URLSearchParams();
     if (dirPath) params.append('path', dirPath);
+    if (options.includeFiles) params.append('include_files', 'true');
+    if (options.limit) params.append('limit', options.limit);
 
     return authenticatedFetch(`/api/browse-filesystem?${params}`);
+  },
+
+  searchFilesystem: (query, path = null, limit = 50) => {
+    const params = new URLSearchParams();
+    params.append('q', query);
+    if (path) params.append('path', path);
+    params.append('limit', limit);
+    return authenticatedFetch(`/api/search-filesystem?${params}`);
   },
 
   // Validate path for real-time feedback

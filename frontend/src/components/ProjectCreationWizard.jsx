@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, Folder, Settings, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, FolderPlus, GitBranch, Key, ChevronRight, ChevronLeft, Check, Loader2, AlertCircle, Folder, Settings, Search, CheckCircle2, AlertTriangle, Eye, FileText, Lock, LayoutList, TextCursorInput } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { api } from '../utils/api';
+import FileBrowser from './FileBrowser';
 
 // Simple debounce utility hook
 function useDebounce(value, delay) {
@@ -35,6 +36,11 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [pathSuggestions, setPathSuggestions] = useState([]);
   const [showPathDropdown, setShowPathDropdown] = useState(false);
+  
+  // New UI state for directory selection
+  const [selectionMode, setSelectionMode] = useState('browser'); // 'browser' | 'input'
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Path validation state
   const debouncedPath = useDebounce(workspacePath, 500);
@@ -70,13 +76,13 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
 
   // Load path suggestions
   useEffect(() => {
-    if (workspacePath.length > 2) {
+    if (workspacePath.length > 2 && selectionMode === 'input') {
       loadPathSuggestions(workspacePath);
     } else {
       setPathSuggestions([]);
       setShowPathDropdown(false);
     }
-  }, [workspacePath]);
+  }, [workspacePath, selectionMode]);
 
   // Real-time path validation
   useEffect(() => {
@@ -84,6 +90,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
       setPathStatus('idle');
       setPathMessage('');
       setPathMetadata(null);
+      setPreviewData(null);
       return;
     }
 
@@ -100,9 +107,11 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
           if (!data.exists) {
             setPathStatus('error');
             setPathMessage('Path does not exist');
+            setPreviewData(null);
           } else if (!data.isDirectory) {
             setPathStatus('error');
             setPathMessage('Path is not a directory');
+            setPreviewData(null);
           } else {
             setPathStatus('valid');
             const details = [];
@@ -111,6 +120,9 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
             if (data.isEmpty) details.push('Empty folder');
             else details.push(`${details.length ? ', ' : ''}Contains files`);
             setPathMessage(`Valid workspace found (${details.join(', ')})`);
+            
+            // Load preview if valid
+            loadPreview(debouncedPath);
           }
         } else {
           // New workspace: Should not exist, or be empty
@@ -118,20 +130,25 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
             if (!data.isDirectory) {
               setPathStatus('error');
               setPathMessage('A file already exists at this path');
+              setPreviewData(null);
             } else if (!data.isEmpty) {
               setPathStatus('warning');
               setPathMessage('Directory exists and is not empty. Contents might be overwritten.');
+              loadPreview(debouncedPath);
             } else {
               setPathStatus('valid');
               setPathMessage('Directory exists and is empty');
+              setPreviewData({ empty: true });
             }
           } else {
             if (data.parentExists) {
               setPathStatus('valid');
               setPathMessage('Path is available (will be created)');
+              setPreviewData(null);
             } else {
               setPathStatus('warning');
               setPathMessage('Parent directory does not exist (will verify on creation)');
+              setPreviewData(null);
             }
           }
         }
@@ -139,11 +156,32 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
         console.error('Validation error:', error);
         setPathStatus('error');
         setPathMessage('Failed to validate path');
+        setPreviewData(null);
       }
     };
 
     validatePath();
   }, [debouncedPath, workspaceType]);
+
+  const loadPreview = async (path) => {
+    setPreviewLoading(true);
+    try {
+      const res = await api.browseFilesystem(path, { includeFiles: true, limit: 20 });
+      const data = await res.json();
+      if (data.suggestions) {
+        setPreviewData({
+          files: data.suggestions.slice(0, 5),
+          total: data.suggestions.length,
+          path: data.currentPath
+        });
+      }
+    } catch (e) {
+      console.error("Failed to load preview:", e);
+      setPreviewData(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   // GitHub URL Smart Logic
   const handleGithubUrlChange = (e) => {
@@ -167,6 +205,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
             if (userHome) {
               const sep = userHome.includes('\\') ? '\\' : '/';
               setWorkspacePath(`${userHome}${sep}Projects${sep}${repoName}`);
+              setSelectionMode('input'); // Switch to input for auto-filled path
             }
           }
         }
@@ -205,7 +244,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
 
       const dirPath = slashIndex > 0 ? inputPath.substring(0, slashIndex) : '~';
 
-      const response = await api.browseFilesystem(dirPath);
+      const response = await api.browseFilesystem(dirPath, { limit: 1000 });
       const data = await response.json();
 
       if (data.suggestions) {
@@ -420,64 +459,159 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {workspaceType === 'existing' ? 'Project Location' : 'Where to create the project?'}
-                </label>
-                <div className="relative group z-20">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Folder className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <Input
-                    type="text"
-                    value={workspacePath}
-                    onChange={(e) => setWorkspacePath(e.target.value)}
-                    placeholder={userHome ? `${userHome}/MyProject` : "/path/to/project"}
-                    className={`pl-10 w-full transition-all ${pathStatus === 'error' ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
-                        pathStatus === 'valid' ? 'border-green-300 focus:border-green-500 focus:ring-green-200' :
-                          pathStatus === 'warning' ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-200' : ''
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {workspaceType === 'existing' ? 'Project Location' : 'Where to create the project?'}
+                  </label>
+                  
+                  {/* Selection Mode Toggle */}
+                  <div className="flex p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <button
+                      onClick={() => setSelectionMode('browser')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        selectionMode === 'browser' 
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                       }`}
-                    onFocus={() => setShowPathDropdown(true)}
-                  />
-
-                  {/* Validation Icon */}
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    {pathStatus === 'checking' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
-                    {pathStatus === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                    {pathStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
-                    {pathStatus === 'warning' && <AlertTriangle className="w-4 h-4 text-yellow-500" />}
+                    >
+                      <LayoutList className="w-3.5 h-3.5" />
+                      Browse
+                    </button>
+                    <button
+                      onClick={() => setSelectionMode('input')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        selectionMode === 'input' 
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <TextCursorInput className="w-3.5 h-3.5" />
+                      Input
+                    </button>
                   </div>
-
-                  {/* Suggestions Dropdown */}
-                  {showPathDropdown && pathSuggestions.length > 0 && (
-                    <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
-                      {pathSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => selectPathSuggestion(suggestion)}
-                          className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2 transition-colors"
-                        >
-                          <Folder className="w-4 h-4 text-gray-400" />
-                          <div className="min-w-0">
-                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{suggestion.name}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate opacity-70">{suggestion.path}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Validation Message */}
-                <div className="min-h-[20px]">
+                {selectionMode === 'input' ? (
+                  <div className="relative group z-20">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Folder className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                    </div>
+                    <Input
+                      type="text"
+                      value={workspacePath}
+                      onChange={(e) => setWorkspacePath(e.target.value)}
+                      placeholder={userHome ? `${userHome}/MyProject` : "/path/to/project"}
+                      className={`pl-10 w-full transition-all ${pathStatus === 'error' ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
+                          pathStatus === 'valid' ? 'border-green-300 focus:border-green-500 focus:ring-green-200' :
+                            pathStatus === 'warning' ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-200' : ''
+                        }`}
+                      onFocus={() => setShowPathDropdown(true)}
+                    />
+
+                    {/* Validation Icon */}
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      {pathStatus === 'checking' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+                      {pathStatus === 'valid' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                      {pathStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                      {pathStatus === 'warning' && <AlertTriangle className="w-4 h-4 text-yellow-500" />}
+                    </div>
+
+                    {/* Suggestions Dropdown */}
+                    {showPathDropdown && pathSuggestions.length > 0 && (
+                      <div className="absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                        {pathSuggestions.map((suggestion, index) => (
+                          <button
+                            key={index}
+                            onClick={() => selectPathSuggestion(suggestion)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2 transition-colors"
+                          >
+                            <Folder className="w-4 h-4 text-gray-400" />
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{suggestion.name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate opacity-70">{suggestion.path}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <FileBrowser 
+                    initialPath={workspacePath || userHome}
+                    onPathSelect={(path) => setWorkspacePath(path)}
+                    selectedPath={workspacePath}
+                    className="h-64"
+                  />
+                )}
+
+                {/* Validation Message & Preview */}
+                <div className="space-y-3">
                   {pathMessage && (
-                    <p className={`text-xs flex items-center gap-1.5 transition-all duration-300 ${pathStatus === 'error' ? 'text-red-600 dark:text-red-400' :
-                        pathStatus === 'valid' ? 'text-green-600 dark:text-green-400' :
-                          pathStatus === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
-                            'text-gray-500'
+                    <div className={`text-xs flex items-center gap-1.5 p-2 rounded-md ${pathStatus === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-900/10 dark:text-red-400' :
+                        pathStatus === 'valid' ? 'bg-green-50 text-green-600 dark:bg-green-900/10 dark:text-green-400' :
+                          pathStatus === 'warning' ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/10 dark:text-yellow-400' :
+                            'bg-gray-50 text-gray-500 dark:bg-gray-900/50'
                       }`}>
+                      {pathStatus === 'checking' && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {pathStatus === 'valid' && <CheckCircle2 className="w-3 h-3" />}
+                      {pathStatus === 'error' && <AlertCircle className="w-3 h-3" />}
+                      {pathStatus === 'warning' && <AlertTriangle className="w-3 h-3" />}
                       {pathMessage}
-                    </p>
+                    </div>
+                  )}
+
+                  {/* Directory Preview */}
+                  {pathStatus !== 'error' && pathStatus !== 'idle' && (
+                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden animate-in fade-in slide-in-from-top-1">
+                       <div className="bg-gray-50 dark:bg-gray-800/50 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                         <div className="flex items-center gap-2">
+                           <Eye className="w-3.5 h-3.5 text-gray-500" />
+                           <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Directory Preview</span>
+                         </div>
+                         <div className="flex items-center gap-1.5">
+                            {pathStatus === 'valid' ? (
+                              <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded border border-green-200 dark:border-green-800">
+                                <Check className="w-3 h-3" />
+                                Writable
+                              </span>
+                            ) : (
+                               <span className="flex items-center gap-1 text-[10px] text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded border border-yellow-200 dark:border-yellow-800">
+                                <Lock className="w-3 h-3" />
+                                Verify
+                              </span>
+                            )}
+                         </div>
+                       </div>
+                       <div className="p-3 bg-white dark:bg-gray-900/30">
+                         {previewLoading ? (
+                           <div className="flex items-center gap-2 text-xs text-gray-500">
+                             <Loader2 className="w-3 h-3 animate-spin" />
+                             Loading contents...
+                           </div>
+                         ) : previewData?.empty ? (
+                            <div className="text-xs text-gray-400 italic pl-1">Directory is empty</div>
+                         ) : previewData?.files?.length > 0 ? (
+                           <div className="space-y-1">
+                             {previewData.files.map((file, i) => (
+                               <div key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                 <FileText className="w-3 h-3 opacity-70" />
+                                 <span className="truncate">{file.name}</span>
+                               </div>
+                             ))}
+                             {previewData.total > 5 && (
+                               <div className="text-[10px] text-gray-400 pl-5 pt-1">
+                                 + {previewData.total - 5} more items
+                               </div>
+                             )}
+                           </div>
+                         ) : (
+                           <div className="text-xs text-gray-400 italic pl-1">
+                             {pathStatus === 'valid' ? 'No readable files found' : 'Select a valid path to view contents'}
+                           </div>
+                         )}
+                       </div>
+                     </div>
                   )}
                 </div>
               </div>
@@ -604,6 +738,24 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {
                     <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700 font-mono text-xs text-gray-800 dark:text-gray-200 break-all">
                       {workspacePath}
                     </div>
+                    {/* Final Preview for Confirmation */}
+                     <div className="mt-3 border-t border-gray-100 dark:border-gray-800 pt-2">
+                       <p className="text-[10px] text-gray-400 uppercase mb-1">Preview</p>
+                       <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          {pathMetadata?.exists ? (
+                             <>
+                                <Folder className="w-3 h-3" />
+                                <span>{pathMetadata.isEmpty ? 'Empty Directory' : 'Directory with files'}</span>
+                                {pathMetadata.isGit && <span className="text-[10px] bg-gray-100 px-1 rounded ml-1">GIT</span>}
+                             </>
+                          ) : (
+                             <>
+                                <FolderPlus className="w-3 h-3" />
+                                <span>Will create new directory</span>
+                             </>
+                          )}
+                       </div>
+                     </div>
                   </div>
                 </div>
               </div>

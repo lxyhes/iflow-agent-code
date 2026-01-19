@@ -1,7 +1,7 @@
 {
-  "name": "Claude Code UI",
-  "short_name": "Claude UI",
-  "description": "Claude Code UI web application",
+  "name": "IFlow Agent",
+  "short_name": "IFlow",
+  "description": "IFlow Agent web application",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

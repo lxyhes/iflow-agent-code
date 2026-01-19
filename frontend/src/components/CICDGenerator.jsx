@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitBranch, Download, Copy, Check, Settings, Play, Code, Server, Zap, FileText } from 'lucide-react';
+import { GitBranch, Download, Copy, Check, Settings, Play, Code, Server, Zap, FileText, X } from 'lucide-react';
 
 const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
   const [platforms, setPlatforms] = useState([]);
@@ -180,18 +180,18 @@ const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
               <div className="grid grid-cols-3 gap-3">
                 {platforms.map((platform) => (
                   <button
-                    key={platform}
-                    onClick={() => setSelectedPlatform(platform)}
+                    key={platform.id}
+                    onClick={() => setSelectedPlatform(platform.id)}
                     className={`p-4 rounded-lg border-2 transition-all ${
-                      selectedPlatform === platform
+                      selectedPlatform === platform.id
                         ? 'border-blue-500 bg-blue-600/10'
                         : 'border-gray-700 hover:border-gray-600'
                     }`}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      {getPlatformIcon(platform)}
+                      {getPlatformIcon(platform.id)}
                       <span className="text-sm font-medium text-gray-300 capitalize">
-                        {platform}
+                        {platform.name}
                       </span>
                     </div>
                   </button>
@@ -210,8 +210,8 @@ const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-blue-500"
               >
                 {projectTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  <option key={type.id} value={type.id}>
+                    {type.name}
                   </option>
                 ))}
               </select>

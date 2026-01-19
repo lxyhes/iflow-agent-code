@@ -75,9 +75,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         wsUrl = `${protocol}//${window.location.host}/shell`;
       } else {
-        // 本地开发模式：直接连接后端 8000 端口
+        // 本地开发模式：通过 Vite 代理连接 (会转发到 3001)
         const token = localStorage.getItem('auth-token') || 'mock-token';
-        wsUrl = `ws://localhost:8000/shell?token=${encodeURIComponent(token)}`;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}`;
       }
 
       console.log('[Shell] Connecting to:', wsUrl);

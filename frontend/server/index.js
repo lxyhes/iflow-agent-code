@@ -55,35 +55,44 @@ import { promises as fsPromises } from 'fs';
 import { spawn } from 'child_process';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 
-// Mock pty since node-pty isn't installed/built
-console.warn('WARNING: Using mock PTY - terminal functionality will not work');
-console.warn('Install Visual Studio Build Tools and run: npm install node-pty');
-const pty = {
-  spawn: (shell, shellArgs, options) => {
-    console.warn('Mock PTY spawn called');
-    const mockProcess = {
-      pid: 9999,
-      on: (event, callback) => {
-        if (event === 'data') {
-          // Simulate shell prompt
-          setTimeout(() => callback('$ '), 100);
-        }
-        return mockProcess;
-      },
-      write: (data) => {
+let pty;
+try {
+  pty = require('node-pty');
+} catch (e) {
+  console.warn('WARNING: node-pty not found, falling back to mock:', e.message);
+  // Mock pty implementation
+  pty = {
+    spawn: (shell, shellArgs, options) => {
+      console.warn('Mock PTY spawn called');
+      const EventEmitter = require('events');
+      const mockProcess = new EventEmitter();
+      mockProcess.pid = 9999;
+      mockProcess.write = (data) => {
         console.log('Mock PTY write:', data.toString().trim());
-      },
-      kill: () => {
-        console.log('Mock PTY killed');
-      },
-      resize: (cols, rows) => {
+        // Echo back
+        mockProcess.emit('data', data);
+      };
+      mockProcess.resize = (cols, rows) => {
         console.log('Mock PTY resize:', cols, rows);
-      }
-    };
-    return mockProcess;
-  }
-};
+      };
+      mockProcess.kill = () => {
+        console.log('Mock PTY killed');
+        mockProcess.emit('exit', { exitCode: 0, signal: 0 });
+      };
+      // Alias onData/onExit to on('data')/on('exit') to match node-pty API
+      mockProcess.onData = (fn) => mockProcess.on('data', fn);
+      mockProcess.onExit = (fn) => mockProcess.on('exit', fn);
+      
+      // Simulate prompt after delay
+      setTimeout(() => mockProcess.emit('data', '$ '), 100);
+      
+      return mockProcess;
+    }
+  };
+}
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
@@ -976,7 +985,8 @@ function handleShellConnection(ws) {
                         }
                     } else {
                         // Use claude command (default) or initialCommand if provided
-                        const command = initialCommand || 'claude';
+                        // If no command provided, default to a welcome message instead of failing on 'claude'
+                        const command = initialCommand || 'echo "Welcome to IFlow Shell"';
                         if (os.platform() === 'win32') {
                             if (hasSession && sessionId) {
                                 // Try to resume session, but with fallback to new session if it fails
@@ -986,7 +996,7 @@ function handleShellConnection(ws) {
                             }
                         } else {
                             if (hasSession && sessionId) {
-                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || claude`;
+                                shellCommand = `cd "${projectPath}" && claude --resume ${sessionId} || echo "Failed to resume session"`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && ${command}`;
                             }
@@ -996,7 +1006,23 @@ function handleShellConnection(ws) {
                     console.log('🔧 Executing shell command:', shellCommand);
 
                     // Use appropriate shell based on platform
-                    const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+                    // On macOS/Linux, prefer /bin/zsh or /bin/bash explicitly to avoid path issues
+                    let shell;
+                    if (os.platform() === 'win32') {
+                        shell = 'powershell.exe';
+                    } else {
+                        // Check for common shells
+                        const fs = require('fs');
+                        if (fs.existsSync('/bin/zsh')) {
+                            shell = '/bin/zsh';
+                        } else if (fs.existsSync('/bin/bash')) {
+                            shell = '/bin/bash';
+                        } else {
+                            shell = 'sh';
+                        }
+                    }
+                    
+                    console.log(`[DEBUG] Spawning shell: ${shell}`);
                     const shellArgs = os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
 
                     // Use terminal dimensions from client if provided, otherwise use defaults
@@ -1607,8 +1633,8 @@ async function startServer() {
         const distIndexPath = path.join(__dirname, '../dist/index.html');
         const isProduction = fs.existsSync(distIndexPath);
 
-        // Log Claude implementation mode
-        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+        // Log IFlow implementation mode
+        console.log(`${c.info('[INFO]')} Using Agents SDK for integration`);
         console.log(`${c.info('[INFO]')} Running in ${c.bright(isProduction ? 'PRODUCTION' : 'DEVELOPMENT')} mode`);
 
         if (!isProduction) {
@@ -1620,12 +1646,12 @@ async function startServer() {
 
             console.log('');
             console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('Claude Code UI Server - Ready')}`);
+            console.log(`  ${c.bright('IFlow Agent Server - Ready')}`);
             console.log(c.dim('═'.repeat(63)));
             console.log('');
             console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://0.0.0.0:' + PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+            console.log(`${c.tip('[TIP]')}  Run "iflow status" for full configuration details`);
             console.log('');
 
             // Start watching the projects folder for changes
