@@ -30,6 +30,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from backend.impl.reviewer import create_code_review_agent
 from backend.core.project_manager import project_manager
 from backend.core.agent import Agent
+from backend.core.smart_requirement_service import smart_requirement_service
+from backend.core.cicd_generator import cicd_generator
+from backend.core.project_template_service import get_project_template_service
+from backend.core.task_master_service import task_master_service, Task as TaskModel
 from backend.core.file_service import file_service
 from backend.core.git_service import git_service
 from backend.core.shell_service import ShellSession
@@ -2758,6 +2762,7 @@ def init_db():
 # 初始化数据库
 try:
     init_db()
+    task_master_service.init_tables()
     logger.info("开发者工具数据库初始化成功")
 except Exception as e:
     logger.error(f"数据库初始化失败: {e}")
@@ -4222,6 +4227,344 @@ async def review_code(req: CodeReviewRequest):
     except Exception as e:
         logger.exception(f"代码审查失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# 智能需求分析 API
+# ============================================================================
+
+class RequirementAnalysisRequest(BaseModel):
+    text: str
+    image_path: Optional[str] = None
+    project_name: Optional[str] = None
+
+class MatchModulesRequest(BaseModel):
+    keywords: List[str]
+    project_name: Optional[str] = None
+
+class GenerateSolutionRequest(BaseModel):
+    analysis: Dict[str, Any]
+    matched_modules: List[Dict[str, Any]]
+    project_root: str = "."
+
+class OptimizeRequirementRequest(BaseModel):
+    text: str
+    project_name: str = ""
+
+class ProjectOptimizationRequest(BaseModel):
+    focus: str = ""
+    project_name: str
+
+@app.post("/api/smart-requirement/optimize-project")
+async def optimize_project(req: ProjectOptimizationRequest):
+    try:
+        project_path = get_project_path(req.project_name)
+        result = await smart_requirement_service.analyze_project_optimization(req.focus, project_path)
+        return {"success": True, "result": result}
+    except Exception as e:
+        logger.exception(f"Project Optimization failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/optimize")
+async def optimize_requirement(req: OptimizeRequirementRequest):
+    try:
+        result = await smart_requirement_service.optimize_requirement(req.text, req.project_name)
+        return {"success": True, "result": result}
+    except Exception as e:
+        logger.exception(f"Optimization failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/step1-analyze")
+async def analyze_requirement_step1(req: RequirementAnalysisRequest):
+    try:
+        project_path = get_project_path(req.project_name)
+        analysis = await smart_requirement_service.analyze_requirement(req.text, req.image_path, project_path)
+        return {"success": True, "analysis": analysis}
+    except Exception as e:
+        logger.exception(f"Step 1 failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/step2-match")
+async def match_modules_step2(req: MatchModulesRequest):
+    try:
+        project_path = get_project_path(req.project_name)
+        matched_modules = await smart_requirement_service.match_modules(req.keywords, project_path)
+        return {"success": True, "matched_modules": matched_modules}
+    except Exception as e:
+        logger.exception(f"Step 2 failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+class RefineSolutionRequest(BaseModel):
+    previous_solution: Dict[str, Any]
+    feedback: str
+
+@app.post("/api/smart-requirement/refine")
+async def refine_solution(req: RefineSolutionRequest):
+    try:
+        updated_solution = await smart_requirement_service.refine_solution(req.previous_solution, req.feedback)
+        return {"success": True, "updated_solution": updated_solution}
+    except Exception as e:
+        logger.exception(f"Refinement failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/step2-5-context")
+async def generate_business_context(req: GenerateSolutionRequest):
+    try:
+        # We reuse GenerateSolutionRequest but only need matched_modules
+        # Assuming project_root is accessible or passed. Here we use "."
+        project_root = "." 
+        context_data = await smart_requirement_service.generate_business_context(req.matched_modules, project_root)
+        return {
+            "success": True, 
+            "context": context_data
+        }
+    except Exception as e:
+        logger.exception(f"Step 2.5 failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/step3-solution")
+async def generate_solution_step3(req: GenerateSolutionRequest):
+    try:
+        solution_data = await smart_requirement_service.generate_solution(req.analysis, req.matched_modules)
+        return {
+            "success": True, 
+            "solution_doc": solution_data.get("solution_doc", ""),
+            "execution_plan": solution_data.get("execution_plan", {}),
+            "api_design": solution_data.get("api_design", [])
+        }
+    except Exception as e:
+        logger.exception(f"Step 3 failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/project/file-content")
+async def get_project_file_content(path: str, project_name: Optional[str] = None):
+    """Securely read a file from the project directory"""
+    try:
+        # Determine root
+        if project_name:
+            root = get_project_path(project_name)
+        else:
+            root = os.getcwd() # Fallback to current working dir if no project specified
+        
+        # Sanitize path to prevent directory traversal
+        safe_path = os.path.normpath(os.path.join(root, path))
+        if not safe_path.startswith(os.path.abspath(root)):
+             return JSONResponse({"error": "Access denied: Path outside project root"}, status_code=403)
+             
+        if not os.path.exists(safe_path) or not os.path.isfile(safe_path):
+             return JSONResponse({"error": "File not found"}, status_code=404)
+             
+        # Read content (limit size)
+        file_size = os.path.getsize(safe_path)
+        if file_size > 1024 * 1024: # 1MB limit
+             return JSONResponse({"error": "File too large to preview"}, status_code=400)
+             
+        with open(safe_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+            
+        return {"content": content, "path": path, "size": file_size}
+    except Exception as e:
+        logger.error(f"Error reading file {path}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+class SaveAnalysisRequest(BaseModel):
+    project_name: str
+    title: str
+    content: str
+    folder: str = "docs/requirements"
+
+@app.post("/api/smart-requirement/save")
+async def save_analysis_doc(req: SaveAnalysisRequest):
+    """Save analysis result as a markdown file"""
+    try:
+        root = get_project_path(req.project_name)
+        target_dir = os.path.join(root, req.folder)
+        os.makedirs(target_dir, exist_ok=True)
+        
+        # Sanitize filename
+        safe_title = "".join([c for c in req.title if c.isalnum() or c in (' ', '-', '_')]).strip()
+        safe_title = safe_title.replace(' ', '_')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{safe_title}_{timestamp}.md"
+        
+        file_path = os.path.join(target_dir, filename)
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(req.content)
+            
+        return {"success": True, "path": f"{req.folder}/{filename}"}
+    except Exception as e:
+        logger.exception(f"Failed to save analysis: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/smart-requirement/analyze")
+async def analyze_smart_requirement(req: RequirementAnalysisRequest):
+    """智能分析需求"""
+    try:
+        project_path = get_project_path(req.project_name)
+        
+        # 1. Analyze Requirement
+        analysis = await smart_requirement_service.analyze_requirement(req.text, req.image_path, project_path)
+        
+        # 2. Match Modules
+        keywords = analysis.get("keywords", [])
+        matched_modules = await smart_requirement_service.match_modules(keywords, project_path)
+        
+        # 3. Generate Solution
+        solution_data = await smart_requirement_service.generate_solution(analysis, matched_modules)
+        
+        return {
+            "success": True,
+            "analysis": analysis,
+            "matched_modules": matched_modules,
+            "solution_doc": solution_data.get("solution_doc", ""),
+            "execution_plan": solution_data.get("execution_plan", {})
+        }
+    except Exception as e:
+        logger.exception(f"智能需求分析失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ============================================================================
+# CI/CD Generator API
+# ============================================================================
+
+@app.get("/api/cicd/platforms")
+async def get_cicd_platforms():
+    """Get supported CI/CD platforms"""
+    return {
+        "success": True,
+        "platforms": [
+            {"id": "github", "name": "GitHub Actions", "icon": "github"},
+            {"id": "gitlab", "name": "GitLab CI", "icon": "gitlab"},
+            {"id": "jenkins", "name": "Jenkins", "icon": "jenkins"}
+        ]
+    }
+
+class CICDGenerateRequest(BaseModel):
+    platform: str
+    projectType: str
+    projectName: str
+    config: Optional[Dict[str, Any]] = None
+
+@app.post("/api/cicd/generate")
+async def generate_cicd_config(req: CICDGenerateRequest):
+    """Generate CI/CD configuration files"""
+    try:
+        result = cicd_generator.generate(
+            req.platform, 
+            req.projectType, 
+            req.projectName, 
+            req.config
+        )
+        return result
+    except Exception as e:
+        logger.exception(f"CI/CD generation failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ============================================================================
+# Project Template API
+# ============================================================================
+
+@app.get("/api/templates")
+async def get_project_templates():
+    """Get available project templates"""
+    service = get_project_template_service()
+    return service.get_templates()
+
+class TemplateGenerateRequest(BaseModel):
+    templateId: str
+    projectName: str
+    path: str
+    config: Optional[Dict[str, Any]] = None
+
+@app.post("/api/templates/generate")
+async def generate_project_from_template(req: TemplateGenerateRequest):
+    """Generate a new project from a template"""
+    try:
+        service = get_project_template_service()
+        # Verify path exists
+        if not os.path.exists(req.path):
+            return JSONResponse({"error": "Target path does not exist"}, status_code=400)
+            
+        result = service.generate_project(
+            req.templateId,
+            req.projectName,
+            req.path,
+            req.config
+        )
+        return result
+    except Exception as e:
+        logger.exception(f"Template generation failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ============================================================================
+# TaskMaster API (Real Implementation)
+# ============================================================================
+
+@app.get("/api/taskmaster/tasks/{project_name}")
+async def get_project_tasks(project_name: str):
+    """Get tasks for a project"""
+    tasks = task_master_service.get_tasks(project_name)
+    return {"tasks": tasks}
+
+@app.post("/api/taskmaster/tasks/{project_name}")
+async def create_project_task(project_name: str, task: TaskModel):
+    """Create a new task"""
+    try:
+        # Ensure project name matches
+        task.project_name = project_name 
+        created_task = task_master_service.create_task(task)
+        return {"success": True, "task": created_task}
+    except Exception as e:
+        logger.error(f"Error creating task: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.put("/api/taskmaster/tasks/{project_name}/{task_id}")
+async def update_project_task(project_name: str, task_id: str, updates: Dict[str, Any]):
+    """Update a task"""
+    try:
+        updated_task = task_master_service.update_task(task_id, updates)
+        if not updated_task:
+             return JSONResponse({"error": "Task not found"}, status_code=404)
+        return {"success": True, "task": updated_task}
+    except Exception as e:
+        logger.error(f"Error updating task: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/taskmaster/tasks/{project_name}/{task_id}")
+async def delete_project_task(project_name: str, task_id: str):
+    """Delete a task"""
+    success = task_master_service.delete_task(task_id)
+    return {"success": success}
+
+@app.get("/api/taskmaster/prd/{project_name}")
+async def get_project_prds(project_name: str):
+    """Get list of PRDs for a project"""
+    prds = task_master_service.get_prds(project_name)
+    return prds
+
+@app.get("/api/taskmaster/prd/{project_name}/{prd_name}")
+async def get_prd_details(project_name: str, prd_name: str):
+    """Get PRD content"""
+    prd = task_master_service.get_prd_content(project_name, prd_name)
+    if not prd:
+        return JSONResponse({"error": "PRD not found"}, status_code=404)
+    return prd
+
+class PRDSaveRequest(BaseModel):
+    title: str
+    content: str
+
+@app.post("/api/taskmaster/prd/{project_name}")
+async def save_project_prd(project_name: str, req: PRDSaveRequest):
+    """Save/Update a PRD"""
+    try:
+        saved_prd = task_master_service.save_prd(project_name, req.title, req.content)
+        return {"success": True, "prd": saved_prd}
+    except Exception as e:
+         logger.error(f"Error saving PRD: {e}")
+         return JSONResponse({"error": str(e)}, status_code=500)
 
 # --- Catch-all 路由 ---
 

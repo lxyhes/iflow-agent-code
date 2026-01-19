@@ -1,0 +1,66 @@
+[
+  {
+    "name": "default",
+    "displayName": "Default Project",
+    "path": "E:\\zhihui-soft\\agent_project",
+    "fullPath": "E:\\zhihui-soft\\agent_project",
+    "sessions": [
+      {
+        "id": "session-1767945713842",
+        "summary": "Session session-",
+        "updated_at": "Fri Jan  9 16:56:44 2026",
+        "__provider": "claude"
+      },
+      {
+        "id": "session-1767945998776",
+        "summary": "测试测试",
+        "updated_at": "Fri Jan  9 16:43:47 2026",
+        "__provider": "claude"
+      },
+      {
+        "id": "session-1767946115648",
+        "summary": "测试2",
+        "updated_at": "Fri Jan  9 16:10:28 2026",
+        "__provider": "claude"
+      },
+      {
+        "id": "session-1767945813129",
+        "summary": "Session session-",
+        "updated_at": "Fri Jan  9 16:03:59 2026",
+        "__provider": "claude"
+      },
+      {
+        "id": "session-1767945602898",
+        "summary": "Session session-",
+        "updated_at": "Fri Jan  9 16:00:24 2026",
+        "__provider": "claude"
+      },
+      {
+        "id": "session-1767945453332",
+        "summary": "Session session-",
+        "updated_at": "Fri Jan  9 15:57:33 2026",
+        "__provider": "claude"
+      }
+    ],
+    "sessionMeta": {
+      "total": 6
+    }
+  },
+  {
+    "name": "test_",
+    "displayName": "test_",
+    "path": "E:\\test_",
+    "fullPath": "E:\\test_",
+    "sessions": [],
+    "sessionMeta": {
+      "total": 0
+    }
+  },
+  {
+    "name": "test_1",
+    "displayName": "test_1",
+    "path": "E:\\test_1",
+    "fullPath": "E:\\test_1",
+    "sessions": []
+  }
+]
