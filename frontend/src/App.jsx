@@ -96,9 +96,30 @@ function AppContent() {
   // Command Palette Shortcut
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Ctrl+K / Cmd+K - Open Command Palette
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setShowCommandPalette(prev => !prev);
+      }
+      // Ctrl+L / Cmd+L - Clear Chat
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('clear-chat'));
+      }
+      // Ctrl+/ / Cmd+/ - Open Command Palette (alternative)
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+      // Ctrl+B / Cmd+B - Toggle Sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setSidebarVisible(prev => !prev);
+      }
+      // Ctrl+, / Cmd+, - Open Settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettings(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -307,8 +328,11 @@ function AppContent() {
   const fetchProjects = async () => {
     try {
       setIsLoadingProjects(true);
+      console.log('[App] Fetching projects...');
       const response = await api.projects();
       const data = await response.json();
+      console.log('[App] Projects fetched:', data);
+      console.log('[App] Number of projects:', data.length);
 
       // Always fetch Cursor sessions for each project so we can combine views
       for (let project of data) {
@@ -335,6 +359,7 @@ function AppContent() {
       setProjects(prevProjects => {
         // If no previous projects, just set the new data
         if (prevProjects.length === 0) {
+          console.log('[App] Setting initial projects:', data);
           return data;
         }
 
@@ -355,12 +380,18 @@ function AppContent() {
         }) || data.length !== prevProjects.length;
 
         // Only update if there are actual changes
-        return hasChanges ? data : prevProjects;
+        if (hasChanges) {
+          console.log('[App] Projects updated:', data);
+          return data;
+        } else {
+          console.log('[App] No changes in projects, keeping previous');
+          return prevProjects;
+        }
       });
 
       // Don't auto-select any project - user should choose manually
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('[App] Error fetching projects:', error);
     } finally {
       setIsLoadingProjects(false);
     }
@@ -422,8 +453,31 @@ function AppContent() {
     }
   }, [sessionId, projects, navigate]);
 
+  useEffect(() => {
+    // Restore selected project from localStorage if available
+    if (projects.length > 0 && !selectedProject) {
+      try {
+        const savedProjectName = localStorage.getItem('lastSelectedProject');
+        if (savedProjectName) {
+          const project = projects.find(p => p.name === savedProjectName);
+          if (project) {
+            console.log('[App] Restoring last selected project:', project.name);
+            setSelectedProject(project);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to restore last selected project:', e);
+      }
+    }
+  }, [projects]); // Only run when projects change (initially loaded)
+
   const handleProjectSelect = (project) => {
     setSelectedProject(project);
+    try {
+      localStorage.setItem('lastSelectedProject', project.name);
+    } catch (e) {
+      console.error('Failed to save last selected project:', e);
+    }
     setSelectedSession(null);
     navigate('/');
     if (isMobile) {
@@ -568,6 +622,7 @@ function AppContent() {
     if (selectedProject?.name === projectName) {
       setSelectedProject(null);
       setSelectedSession(null);
+      localStorage.removeItem('lastSelectedProject');
       navigate('/');
     }
 

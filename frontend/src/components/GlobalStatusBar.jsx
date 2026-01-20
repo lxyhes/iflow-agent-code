@@ -85,7 +85,7 @@ const GlobalStatusBar = ({ selectedProject, isConnected, activeTab }) => {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5 opacity-80">
           <FileCode className="w-3 h-3" />
-          <span>{activeTab === 'chat' ? 'Chat Mode' : activeTab === 'files' ? 'File Explorer' : activeTab}</span>
+          <span>{activeTab === 'chat' ? 'Chat Mode' : activeTab === 'files' ? 'File Explorer' : activeTab === 'shell' ? 'Terminal' : activeTab === 'git' ? 'Git' : activeTab === 'rag' ? 'RAG' : activeTab === 'workflow' ? 'Workflow' : activeTab === 'database' ? 'Database' : activeTab}</span>
         </div>
 
         <div className="flex items-center gap-1.5 pl-2 border-l border-blue-500/50 opacity-90">

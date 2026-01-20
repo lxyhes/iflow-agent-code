@@ -64,30 +64,55 @@ cd ..
 
 #### 方式一：使用启动脚本（推荐）
 
-**Linux/macOS:**
-```bash
-./start.sh
-```
-
 **Windows:**
 ```bash
 launch_all_fixed.bat
 ```
 
+**Linux/macOS:**
+```bash
+./start.sh
+```
+
 这将自动：
-1. 清理现有进程
-2. 启动后端服务器（端口 8000）
-3. 启动前端开发服务器（端口 5173）
+1. 清理现有进程（端口 8090, 8000, 3001, 5173）
+2. 启动 iFlow CLI（端口 8090）
+3. 启动 Python 后端（端口 8000，热重载）
+4. 启动 Node.js 服务器（端口 3001）
+5. 启动前端开发服务器（端口 5173）
+
+#### 停止服务
+
+**Windows:**
+```bash
+stop_all.bat
+```
+
+**Linux/macOS:**
+```bash
+./stop_all.sh
+```
 
 #### 方式二：手动启动
 
-**启动后端：**
+**1. 启动 iFlow CLI:**
 ```bash
-export PYTHONPATH="$PWD"
-python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+iflow --experimental-acp --port 8090
 ```
 
-**启动前端（新终端）：**
+**2. 启动 Python 后端:**
+```bash
+export PYTHONPATH="$PWD"
+python3 -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**3. 启动 Node.js 服务器（新终端）:**
+```bash
+cd frontend
+npm run server
+```
+
+**4. 启动前端（新终端）:**
 ```bash
 cd frontend
 npm run dev

@@ -55,6 +55,9 @@ from backend.core.code_dependency_analyzer import CodeDependencyAnalyzer, get_de
 from backend.core.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
 from backend.core.rag_service import RAGService, get_rag_service
 from backend.core.document_version_manager import get_version_manager
+from backend.core.database_query_service import database_query_service
+from backend.core.workflow_service import workflow_service
+from backend.core.workflow_executor import workflow_executor
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -432,7 +435,7 @@ async def sync_iflow_mcp_servers():
 
 @app.get("/api/projects")
 async def get_projects():
-    """获取项目列表 - 增强安全性版本"""
+    """获取项目列表 - 增强安全版本"""
     projects = project_manager.get_projects()
     
     # 验证并过滤每个项目的路径
@@ -440,25 +443,36 @@ async def get_projects():
     for p in projects:
         is_valid, error, normalized = PathValidator.validate_project_path(p.get("fullPath", ""), must_exist=False)
         if is_valid:
-            # 注册到安全注册表
+            # 注册到全局注册表
             project_registry.register_project(p["name"], normalized)
             safe_projects.append(p)
         else:
-            logger.warning(f"跳过不安全的项目: {p.get('name')} - {error}")
+            logger.warning(f"路径不安全的项目: {p.get('name')} - {error}")
+            # 自动将该路径添加到允许的根目录列表
+            project_path = p.get("fullPath", "")
+            if project_path:
+                PathValidator.add_allowed_root(project_path)
+                PathValidator.add_allowed_root(os.path.dirname(project_path))
+                logger.info(f"已将路径添加到允许列表: {project_path}")
+                # 重新验证
+                is_valid, error, normalized = PathValidator.validate_project_path(p.get("fullPath", ""), must_exist=False)
+                if is_valid:
+                    project_registry.register_project(p["name"], normalized)
+                    safe_projects.append(p)
     
-    # 可选：扫描根目录下的其他项目（但需要验证）
+    # 自动扫描项目根目录下的其他项目（但需要验证）
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    PathValidator.add_allowed_root(root_dir)  # 允许根目录
+    PathValidator.add_allowed_root(root_dir)  # 允许项目根目录
     
     try:
         for item in os.listdir(root_dir):
-            # 跳过隐藏文件和已知目录
+            # 跳过隐藏文件和已处理的项目
             if item.startswith('.') or item in ['agent_project', 'node_modules', '__pycache__', 'storage']:
                 continue
             
             full_path = os.path.join(root_dir, item)
             
-            # 验证路径安全性
+            # 验证路径是否安全
             is_valid, error, normalized = PathValidator.validate_project_path(full_path)
             if not is_valid:
                 continue
@@ -468,14 +482,13 @@ async def get_projects():
                 safe_projects.append({
                     "name": item,
                     "displayName": item,
-                    "path": normalized,
-                    "fullPath": normalized,
+                    "path": full_path,
+                    "fullPath": full_path,
                     "sessions": [],
                     "sessionMeta": {"total": 0}
                 })
-                project_registry.register_project(item, normalized)
     except Exception as e:
-        logger.error(f"扫描项目目录失败: {e}")
+        logger.error(f"扫描项目根目录失败: {e}")
     
     return safe_projects
 
@@ -1002,37 +1015,63 @@ async def browse_filesystem(path: str = Query(None), include_files: bool = Query
     try:
         suggestions = []
         
-        # 如果没有提供路径，返回用户主目录和一些常用目录
+        # 处理虚拟根路径请求
+        if path == "__ROOT__":
+            base_dirs = []
+            
+            # 1. 始终添加用户主目录
+            home_dir = os.path.expanduser("~")
+            base_dirs.append({
+                "name": "Home 🏠", 
+                "path": home_dir, 
+                "type": "directory"
+            })
+            
+            # 2. 根据系统添加根节点
+            if platform.system() == "Windows":
+                # Windows: 添加所有逻辑驱动器
+                import string
+                try:
+                    # 尝试使用 ctypes 获取驱动器（更准确）
+                    from ctypes import windll
+                    drives = []
+                    bitmask = windll.kernel32.GetLogicalDrives()
+                    for letter in string.ascii_uppercase:
+                        if bitmask & 1:
+                            drives.append(f"{letter}:\\")
+                        bitmask >>= 1
+                except:
+                    # 回退到简单的存在性检查
+                    drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")]
+                
+                for drive in drives:
+                    base_dirs.append({
+                        "name": f"Local Disk ({drive})",
+                        "path": drive,
+                        "type": "directory"
+                    })
+            else:
+                # Unix/Mac: 添加系统根目录
+                base_dirs.append({
+                    "name": "System Root (/)",
+                    "path": "/",
+                    "type": "directory"
+                })
+                
+                # Mac 特有: /Volumes
+                if platform.system() == "Darwin" and os.path.exists("/Volumes"):
+                     base_dirs.append({
+                        "name": "Volumes",
+                        "path": "/Volumes",
+                        "type": "directory"
+                    })
+
+            return {"suggestions": base_dirs, "currentPath": "__ROOT__"}
+
+        # 如果没有提供路径，默认返回用户主目录信息（保持兼容性）
         if not path or path == "~":
             home_dir = os.path.expanduser("~")
-            base_dirs = [
-                {"name": "Home", "path": home_dir, "type": "directory"},
-            ]
-            
-            # Windows 特有目录
-            if platform.system() == "Windows":
-                # 添加所有驱动器
-                import string
-                for drive in string.ascii_uppercase:
-                    drive_path = f"{drive}:\\"
-                    if os.path.exists(drive_path):
-                        base_dirs.append({
-                            "name": f"驱动器 {drive}:",
-                            "path": drive_path,
-                            "type": "directory"
-                        })
-            else:
-                # Unix/Mac 常用目录
-                common_dirs = ["/home", "/Users", "/var/www", "/opt"]
-                for d in common_dirs:
-                    if os.path.isdir(d):
-                        base_dirs.append({
-                            "name": os.path.basename(d) or d,
-                            "path": d,
-                            "type": "directory"
-                        })
-            
-            return {"suggestions": base_dirs, "currentPath": home_dir}
+            return {"suggestions": [], "currentPath": home_dir} # 简化，不再在此处返回驱动器列表，由 __ROOT__ 接管
         
         # 展开 ~ 符号
         expanded_path = os.path.expanduser(path)
@@ -4534,6 +4573,40 @@ async def review_code(req: CodeReviewRequest):
         logger.exception(f"代码审查失败: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+from backend.core.business_flow_summarizer import business_flow_summarizer
+
+# ============================================================================
+# 业务流程总结 API
+# ============================================================================
+
+@app.get("/api/business-flow/summary")
+async def get_business_flow_summary(limit: int = 50):
+    """获取业务流程总结"""
+    try:
+        # 确保 limit 是合理的整数
+        if limit < 1:
+            limit = 50
+        if limit > 500:
+            limit = 500
+            
+        result = business_flow_summarizer.generate_business_flow(limit)
+        return {"success": True, "business_flow": result}
+    except Exception as e:
+        logger.exception(f"获取业务流程总结失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/business-flow/stats")
+async def get_business_flow_stats():
+    """获取业务流程统计"""
+    try:
+        # 复用 generate_business_flow 的结果，或者实现专门的 stats 方法
+        # 这里为了简单，直接复用 summary 的 summary 部分
+        result = business_flow_summarizer.generate_business_flow(limit=1)
+        return {"success": True, "stats": result.get("summary", {})}
+    except Exception as e:
+        logger.exception(f"获取业务流程统计失败: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 # ============================================================================
 # 智能需求分析 API
 # ============================================================================
@@ -4872,6 +4945,690 @@ async def save_project_prd(project_name: str, req: PRDSaveRequest):
          logger.error(f"Error saving PRD: {e}")
          return JSONResponse({"error": str(e)}, status_code=500)
 
+# --- Database Query API ---
+  
+class DatabaseConnectRequest(BaseModel):
+    db_type: str = "sqlite"  # sqlite, mysql, postgresql, sqlserver, oracle
+    db_path: Optional[str] = None  # SQLite 专用
+    host: Optional[str] = None
+    port: Optional[int] = None
+    database: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    connection_name: Optional[str] = None
+
+@app.post("/api/database/connect")
+async def connect_database(req: DatabaseConnectRequest):
+    """连接数据库（支持多种类型）"""
+    try:
+        success = False
+        
+        if req.db_type == "sqlite":
+            if not req.db_path:
+                return JSONResponse({"error": "db_path is required for SQLite"}, status_code=400)
+            success = database_query_service.connect_sqlite(req.db_path, req.connection_name)
+        elif req.db_type == "mysql":
+            if not all([req.host, req.port, req.database, req.username, req.password]):
+                return JSONResponse({"error": "host, port, database, username, password are required for MySQL"}, status_code=400)
+            success = database_query_service.connect_mysql(
+                req.host, req.port, req.database, req.username, req.password, req.connection_name
+            )
+        elif req.db_type == "postgresql":
+            if not all([req.host, req.port, req.database, req.username, req.password]):
+                return JSONResponse({"error": "host, port, database, username, password are required for PostgreSQL"}, status_code=400)
+            success = database_query_service.connect_postgresql(
+                req.host, req.port, req.database, req.username, req.password, req.connection_name
+            )
+        elif req.db_type == "sqlserver":
+            if not all([req.host, req.port, req.database, req.username, req.password]):
+                return JSONResponse({"error": "host, port, database, username, password are required for SQL Server"}, status_code=400)
+            success = database_query_service.connect_sqlserver(
+                req.host, req.port, req.database, req.username, req.password, req.connection_name
+            )
+        elif req.db_type == "oracle":
+            if not all([req.host, req.port, req.database, req.username, req.password]):
+                return JSONResponse({"error": "host, port, database, username, password are required for Oracle"}, status_code=400)
+            success = database_query_service.connect_oracle(
+                req.host, req.port, req.database, req.username, req.password, req.connection_name
+            )
+        else:
+            return JSONResponse({"error": f"Unsupported database type: {req.db_type}"}, status_code=400)
+        
+        if success:
+            return {"success": True, "message": "Database connected successfully"}
+        else:
+            return JSONResponse({"error": "Failed to connect to database"}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error connecting to database: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+@app.post("/api/database/disconnect/{connection_name}")
+async def disconnect_database(connection_name: str):
+    """断开数据库连接"""
+    try:
+        success = database_query_service.disconnect(connection_name)
+        if success:
+            return {"success": True, "message": "Database disconnected successfully"}
+        else:
+            return JSONResponse({"error": "Connection not found"}, status_code=404)
+    except Exception as e:
+        logger.error(f"Error disconnecting database: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/connections")
+async def get_database_connections():
+    """获取所有数据库连接"""
+    try:
+        connections = database_query_service.get_connections()
+        return {"connections": connections}
+    except Exception as e:
+        logger.error(f"Error getting connections: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/tables/{connection_name}")
+async def get_database_tables(connection_name: str):
+    """获取数据库中的所有表"""
+    try:
+        tables = database_query_service.get_tables(connection_name)
+        return {"tables": tables}
+    except Exception as e:
+        logger.error(f"Error getting tables: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/table/{connection_name}/{table_name}")
+async def get_table_info(connection_name: str, table_name: str):
+      """获取表的详细信息"""
+      try:
+          logger.info(f"Getting table info - connection: {connection_name}, table: {table_name}")
+          table_info = database_query_service.get_table_info(connection_name, table_name)
+          if table_info:
+              return {
+                  "name": table_info.name,
+                  "type": table_info.type,
+                  "row_count": table_info.row_count,
+                  "columns": table_info.columns,
+                  "indexes": table_info.indexes
+              }
+          else:
+              logger.warning(f"Table not found: {table_name}")
+              return JSONResponse({"error": "Table not found"}, status_code=404)
+      except Exception as e:
+          logger.error(f"Error getting table info: {e}")
+          return JSONResponse({"error": str(e)}, status_code=500)
+class DatabaseQueryRequest(BaseModel):
+    connection_name: str
+    sql: str
+    params: Optional[Dict[str, Any]] = None
+
+@app.post("/api/database/query")
+async def execute_database_query(req: DatabaseQueryRequest):
+    """执行 SQL 查询"""
+    try:
+        result = database_query_service.execute_query(req.connection_name, req.sql, req.params)
+        if result.success:
+            return {
+                "success": True,
+                "columns": result.columns,
+                "rows": result.rows,
+                "row_count": result.row_count,
+                "execution_time": result.execution_time
+            }
+        else:
+            return JSONResponse({"error": result.error}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error executing query: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/export/{connection_name}/{format}")
+async def export_query_result(connection_name: str, format: str, sql: str, params: Optional[str] = None):
+    """导出查询结果"""
+    try:
+        params_dict = json.loads(params) if params else None
+        
+        if format == "csv":
+            data = database_query_service.export_to_csv(connection_name, sql, params_dict)
+            return Response(content=data, media_type="text/csv", headers={
+                "Content-Disposition": f"attachment; filename=query_result.csv"
+            })
+        elif format == "json":
+            data = database_query_service.export_to_json(connection_name, sql, params_dict)
+            return Response(content=data, media_type="application/json", headers={
+                "Content-Disposition": f"attachment; filename=query_result.json"
+            })
+        elif format == "excel":
+            data = database_query_service.export_to_excel(connection_name, sql, params_dict)
+            return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={
+                "Content-Disposition": f"attachment; filename=query_result.xlsx"
+            })
+        else:
+            return JSONResponse({"error": "Unsupported format. Use csv, json, or excel"}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error exporting query result: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/templates")
+async def get_query_templates():
+    """获取查询模板"""
+    try:
+        templates = database_query_service.get_query_templates()
+        return {"templates": templates}
+    except Exception as e:
+        logger.error(f"Error getting templates: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+class AddTemplateRequest(BaseModel):
+    name: str
+    sql: str
+    description: Optional[str] = ""
+    category: Optional[str] = "自定义"
+    params: Optional[List[str]] = None
+
+@app.post("/api/database/templates")
+async def add_query_template(req: AddTemplateRequest):
+    """添加查询模板"""
+    try:
+        template = database_query_service.add_query_template(
+            req.name, req.sql, req.description, req.category, req.params
+        )
+        return {"success": True, "template": template}
+    except Exception as e:
+        logger.error(f"Error adding template: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/history")
+async def get_query_history(limit: int = 50):
+    """获取查询历史"""
+    try:
+        history = database_query_service.get_query_history(limit)
+        return {"history": history}
+    except Exception as e:
+        logger.error(f"Error getting query history: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+class DatabaseConfigRequest(BaseModel):
+    project_name: str
+    config_name: str
+    db_type: str
+    config: Dict[str, Any]
+
+@app.post("/api/database/save-config")
+async def save_database_config(req: DatabaseConfigRequest):
+    """保存数据库配置到项目"""
+    try:
+        import os
+        import json
+        
+        project_path = get_project_path(req.project_name)
+        if not project_path:
+            return JSONResponse({"error": "Project not found"}, status_code=404)
+        
+        # 创建数据库配置目录
+        config_dir = os.path.join(project_path, ".database")
+        os.makedirs(config_dir, exist_ok=True)
+        
+        # 保存配置
+        config_file = os.path.join(config_dir, f"{req.config_name}.json")
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                "name": req.config_name,
+                "db_type": req.db_type,
+                "config": req.config,
+                "created_at": datetime.now().isoformat()
+            }, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Saved database config: {req.config_name} for project: {req.project_name}")
+        return {"success": True, "message": "Database config saved successfully"}
+    except Exception as e:
+        logger.error(f"Error saving database config: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/database/configs/{project_name}")
+async def get_database_configs(project_name: str):
+    """获取项目的数据库配置列表"""
+    try:
+        import os
+        import json
+        
+        project_path = get_project_path(project_name)
+        if not project_path:
+            return JSONResponse({"error": "Project not found"}, status_code=404)
+        
+        config_dir = os.path.join(project_path, ".database")
+        configs = []
+        
+        if os.path.exists(config_dir):
+            for filename in os.listdir(config_dir):
+                if filename.endswith('.json'):
+                    config_file = os.path.join(config_dir, filename)
+                    try:
+                        with open(config_file, 'r', encoding='utf-8') as f:
+                            config = json.load(f)
+                            configs.append(config)
+                    except Exception as e:
+                        logger.error(f"Error loading config {filename}: {e}")
+        
+        return {"configs": configs}
+    except Exception as e:
+        logger.error(f"Error getting database configs: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/database/config/{project_name}/{config_name}")
+async def delete_database_config(project_name: str, config_name: str):
+    """删除数据库配置"""
+    try:
+        import os
+        
+        project_path = get_project_path(project_name)
+        if not project_path:
+            return JSONResponse({"error": "Project not found"}, status_code=404)
+        
+        config_file = os.path.join(project_path, ".database", f"{config_name}.json")
+        
+        if os.path.exists(config_file):
+            os.remove(config_file)
+            logger.info(f"Deleted database config: {config_name} for project: {project_name}")
+            return {"success": True, "message": "Database config deleted successfully"}
+        else:
+            return JSONResponse({"error": "Config not found"}, status_code=404)
+    except Exception as e:
+        logger.error(f"Error deleting database config: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+def parse_gorm_dsn(dsn: str) -> dict:
+    """解析 GORM DSN 格式的连接字符串
+    
+    支持格式:
+    - mysql:user:password@tcp(host:port)/database
+    - postgresql://user:password@host:port/database
+    """
+    import re
+    
+    result = {
+        'type': 'unknown',
+        'host': '',
+        'port': '',
+        'user': '',
+        'password': '',
+        'database': ''
+    }
+    
+    try:
+        # MySQL 格式: mysql:user:password@tcp(host:port)/database
+        if dsn.startswith('mysql:'):
+            result['type'] = 'mysql'
+            # 移除 mysql: 前缀
+            dsn = dsn[6:]
+            
+            # 解析 user:password@tcp(host:port)/database
+            match = re.match(r'([^:]*):([^@]*)@tcp\(([^:]+):(\d+)\)/(.+)', dsn)
+            if match:
+                result['user'] = match.group(1)
+                result['password'] = match.group(2)
+                result['host'] = match.group(3)
+                result['port'] = int(match.group(4))
+                result['database'] = match.group(5)
+                logger.info(f"解析 MySQL DSN 成功: {result}")
+        
+        # PostgreSQL 格式: postgresql://user:password@host:port/database
+        elif dsn.startswith('postgresql://'):
+            result['type'] = 'postgresql'
+            # 移除 postgresql:// 前缀
+            dsn = dsn[11:]
+            
+            # 解析 user:password@host:port/database
+            match = re.match(r'([^:]*):([^@]*)@([^:]+):(\d+)/(.+)', dsn)
+            if match:
+                result['user'] = match.group(1)
+                result['password'] = match.group(2)
+                result['host'] = match.group(3)
+                result['port'] = int(match.group(4))
+                result['database'] = match.group(5)
+                logger.info(f"解析 PostgreSQL DSN 成功: {result}")
+        
+        # 简单格式: user:password@host:port/database
+        elif '@' in dsn and '/' in dsn:
+            match = re.match(r'([^:]*):([^@]*)@([^:]+):(\d+)/(.+)', dsn)
+            if match:
+                result['user'] = match.group(1)
+                result['password'] = match.group(2)
+                result['host'] = match.group(3)
+                result['port'] = int(match.group(4))
+                result['database'] = match.group(5)
+                logger.info(f"解析简单 DSN 成功: {result}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"解析 DSN 失败: {e}")
+        return result
+
+
+def parse_database_config(config_data: dict, config_type: str) -> list:
+    """从配置数据中解析数据库连接信息"""
+    db_connections = []
+    
+    try:
+        logger.info(f"开始解析配置数据，类型: {config_type}")
+        logger.info(f"配置数据键: {list(config_data.keys())}")
+        
+        # 常见的数据库配置键名
+        db_keys = ['database', 'db', 'sql', 'mysql', 'postgres', 'postgresql', 'mongodb', 'redis']
+        
+        def extract_db_info(data, prefix=''):
+            """递归提取数据库信息"""
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    key_lower = key.lower()
+                    
+                    # 检查是否是数据库配置
+                    if any(db_key in key_lower for db_key in db_keys):
+                        if isinstance(value, dict):
+                            db_info = {
+                                'name': key,
+                                'type': 'unknown',
+                                'config': {}
+                            }
+                            
+                            logger.info(f"找到数据库配置: {key}, 值: {value}")
+                            
+                            # 尝试识别数据库类型
+                            for db_type in ['mysql', 'postgres', 'postgresql', 'mongodb', 'redis', 'sqlite']:
+                                if db_type in key_lower:
+                                    db_info['type'] = db_type
+                                    break
+                            
+                            # 提取连接参数
+                            for param in ['host', 'port', 'user', 'username', 'password', 'database', 'dbname', 'name', 'path', 'dsn', 'url', 'address']:
+                                if param in value:
+                                    db_info['config'][param] = value[param]
+                                    logger.info(f"提取参数 {param}: {value[param]}")
+                            
+                            # 如果配置为空但有数据，尝试从整个对象中提取
+                            if not db_info['config']:
+                                db_info['config'] = value
+                                logger.info(f"使用完整配置: {value}")
+                            
+                            if db_info['config']:
+                                db_connections.append(db_info)
+                                logger.info(f"添加数据库连接: {db_info}")
+                    else:
+                        extract_db_info(value, f'{prefix}.{key}' if prefix else key)
+            elif isinstance(data, list):
+                for item in data:
+                    extract_db_info(item, prefix)
+        
+        # 先进行特殊处理（避免重复）
+        if config_type in ['yaml', 'toml']:
+            # 查找 datasource 配置
+            if 'datasource' in config_data:
+                datasource = config_data['datasource']
+                if isinstance(datasource, dict):
+                    for ds_name, ds_config in datasource.items():
+                        if isinstance(ds_config, dict):
+                            db_info = {
+                                'name': ds_name,
+                                'type': 'unknown',
+                                'config': {}
+                            }
+                            for param in ['host', 'port', 'user', 'password', 'database', 'dbname', 'driver']:
+                                if param in ds_config:
+                                    db_info['config'][param] = ds_config[param]
+                            
+                            # 尝试解析 GORM DSN 格式的 link 字段
+                            if 'link' in ds_config:
+                                dsn_info = parse_gorm_dsn(ds_config['link'])
+                                if dsn_info:
+                                    db_info['config'].update(dsn_info)
+                                    db_info['type'] = dsn_info.get('type', 'unknown')
+                            
+                            if db_info['config']:
+                                db_connections.append(db_info)
+                                logger.info(f"添加 datasource 配置: {db_info}")
+            
+            # 查找 database 配置（Go 项目常见结构）
+            if 'database' in config_data:
+                database = config_data['database']
+                if isinstance(database, dict):
+                    # 检查是否有嵌套的数据库配置（如 defaultRead, backup, sysolin）
+                    for db_name, db_config in database.items():
+                        if db_name in ['logger', 'cacheKey']:
+                            continue  # 跳过非数据库配置
+                        
+                        if isinstance(db_config, dict) and 'link' in db_config:
+                            # 这是一个数据库配置
+                            db_info = {
+                                'name': db_name,
+                                'type': 'unknown',
+                                'config': {}
+                            }
+                            
+                            # 解析 GORM DSN 格式的 link 字段
+                            dsn_info = parse_gorm_dsn(db_config['link'])
+                            if dsn_info:
+                                db_info['config'].update(dsn_info)
+                                db_info['type'] = dsn_info.get('type', 'unknown')
+                            
+                            if db_info['config']:
+                                db_connections.append(db_info)
+                                logger.info(f"添加数据库配置 {db_name}: {db_info}")
+                        
+                        elif isinstance(db_config, list):
+                            # 处理数组类型的配置（如 default: [{role: 'master', link: '...'}, {role: 'slave', link: '...'}]）
+                            for idx, item in enumerate(db_config):
+                                if isinstance(item, dict) and 'link' in item:
+                                    db_info = {
+                                        'name': f"{db_name}_{item.get('role', idx)}",
+                                        'type': 'unknown',
+                                        'config': {}
+                                    }
+                                    
+                                    # 解析 GORM DSN 格式的 link 字段
+                                    dsn_info = parse_gorm_dsn(item['link'])
+                                    if dsn_info:
+                                        db_info['config'].update(dsn_info)
+                                        db_info['type'] = dsn_info.get('type', 'unknown')
+                                    
+                                    if db_info['config']:
+                                        db_connections.append(db_info)
+                                        logger.info(f"添加数据库配置 {db_info['name']}: {db_info}")
+                    
+                    # 如果没有找到任何嵌套配置，尝试直接解析 database 对象
+                    if not db_connections:
+                        db_info = {
+                            'name': 'database',
+                            'type': database.get('type', 'unknown'),
+                            'config': {}
+                        }
+                        
+                        # 提取所有可能的配置参数
+                        for param in ['host', 'port', 'user', 'username', 'password', 'database', 'dbname', 'name', 'address', 'dsn', 'url', 'charset', 'link']:
+                            if param in database:
+                                if param == 'link':
+                                    # 尝试解析 GORM DSN 格式
+                                    dsn_info = parse_gorm_dsn(database[param])
+                                    if dsn_info:
+                                        db_info['config'].update(dsn_info)
+                                        db_info['type'] = dsn_info.get('type', 'unknown')
+                                else:
+                                    db_info['config'][param] = database[param]
+                        
+                        # 如果配置为空但有数据，使用整个对象
+                        if not db_info['config']:
+                            db_info['config'] = database
+                        
+                        if db_info['config']:
+                            db_connections.append(db_info)
+                            logger.info(f"添加 database 配置: {db_info}")
+            
+            # 查找 mysql, postgres 等直接配置
+            for db_type in ['mysql', 'postgres', 'postgresql', 'mongodb', 'redis']:
+                if db_type in config_data:
+                    db_config = config_data[db_type]
+                    if isinstance(db_config, dict):
+                        db_info = {
+                            'name': db_type,
+                            'type': db_type,
+                            'config': {}
+                        }
+                        
+                        # 检查是否有 link 字段（GORM DSN 格式）
+                        if 'link' in db_config:
+                            dsn_info = parse_gorm_dsn(db_config['link'])
+                            if dsn_info:
+                                db_info['config'].update(dsn_info)
+                        
+                        # 提取其他参数
+                        for param in ['host', 'port', 'user', 'username', 'password', 'database', 'dbname', 'name', 'address']:
+                            if param in db_config:
+                                db_info['config'][param] = db_config[param]
+                        
+                        if db_info['config']:
+                            db_connections.append(db_info)
+                            logger.info(f"添加 {db_type} 配置: {db_info}")
+        
+        # 如果没有找到任何配置，再进行递归提取
+        if not db_connections:
+            logger.info("未找到特殊配置，进行递归提取")
+            extract_db_info(config_data)
+    
+    except Exception as e:
+        logger.error(f"解析数据库配置时出错: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    
+    except Exception as e:
+        logger.warning(f"Failed to parse database config: {e}")
+    
+    return db_connections
+
+@app.get("/api/database/project-databases/{project_name}")
+async def get_project_databases(project_name: str):
+    """获取项目中的所有数据库文件和配置"""
+    try:
+        import glob
+        import yaml
+        import toml
+        
+        project_path = get_project_path(project_name)
+        
+        if not project_path or not os.path.exists(project_path):
+            return JSONResponse({"error": "Project not found"}, status_code=404)
+        
+        db_files = []
+        db_configs = []
+        
+        # 递归搜索数据库文件和配置文件
+        for root, dirs, files in os.walk(project_path):
+            # 跳过常见的非数据库目录
+            dirs[:] = [d for d in dirs if d not in ['node_modules', '.git', '__pycache__', 'dist', 'build', 'vendor']]
+            
+            for file in files:
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, project_path)
+                
+                # 搜索 SQLite 数据库文件
+                if file.endswith('.db') or file.endswith('.sqlite') or file.endswith('.sqlite3'):
+                    file_size = os.path.getsize(full_path) if os.path.exists(full_path) else 0
+                    
+                    # 验证是否是有效的 SQLite 数据库
+                    is_valid = False
+                    try:
+                        conn = sqlite3.connect(full_path)
+                        conn.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1;")
+                        conn.close()
+                        is_valid = True
+                    except Exception:
+                        pass
+                    
+                    db_files.append({
+                        "name": file,
+                        "path": relative_path,
+                        "full_path": full_path,
+                        "size": file_size,
+                        "is_valid": is_valid,
+                        "type": "sqlite"
+                    })
+                
+                # 搜索 Go 项目的配置文件
+                elif file.endswith(('.yaml', '.yml', '.toml')) or file in ['.env', 'go.mod']:
+                    # 支持带环境后缀的配置文件（如 config.dev.toml, config.pro.toml）
+                    is_config_file = (
+                        file in ['config.yaml', 'config.yml', 'config.toml', '.env', 'go.mod'] or
+                        file.startswith('config.') and file.endswith(('.yaml', '.yml', '.toml'))
+                    )
+                    
+                    # 只处理根目录的配置文件
+                    if is_config_file and (root == project_path or relative_path.count('/') <= 1):
+                        try:
+                            config_data = None
+                            config_type = None
+                            
+                            if file.endswith(('.yaml', '.yml')):
+                                with open(full_path, 'r', encoding='utf-8') as f:
+                                    config_data = yaml.safe_load(f)
+                                config_type = 'yaml'
+                            elif file.endswith('.toml'):
+                                with open(full_path, 'r', encoding='utf-8') as f:
+                                    config_data = toml.load(f)
+                                config_type = 'toml'
+                            elif file == '.env':
+                                from dotenv import load_dotenv
+                                config_data = {}
+                                with open(full_path, 'r', encoding='utf-8') as f:
+                                    for line in f:
+                                        line = line.strip()
+                                        if line and not line.startswith('#') and '=' in line:
+                                            key, value = line.split('=', 1)
+                                            config_data[key.strip()] = value.strip()
+                                config_type = 'env'
+                            elif file == 'go.mod':
+                                with open(full_path, 'r', encoding='utf-8') as f:
+                                    config_data = {'module': '', 'go_version': ''}
+                                    for line in f:
+                                        if line.startswith('module '):
+                                            config_data['module'] = line.split()[1]
+                                        elif line.startswith('go '):
+                                            config_data['go_version'] = line.split()[1]
+                                config_type = 'go'
+                            
+                            if config_data:
+                                # 解析数据库配置
+                                db_connections = parse_database_config(config_data, config_type)
+                                
+                                # 提取环境信息
+                                env_info = None
+                                if file.startswith('config.') and '.' in file[:-5]:
+                                    # 提取环境名称（如 config.dev.toml -> dev）
+                                    parts = file.split('.')
+                                    if len(parts) >= 3:
+                                        env_info = parts[1]
+                                
+                                db_configs.append({
+                                    "name": file,
+                                    "path": relative_path,
+                                    "full_path": full_path,
+                                    "type": config_type,
+                                    "data": config_data,
+                                    "db_connections": db_connections,
+                                    "environment": env_info
+                                })
+                        except Exception as e:
+                            logger.warning(f"Failed to read config file {file}: {e}")
+        
+        # 按文件名排序
+        db_files.sort(key=lambda x: x["name"])
+        db_configs.sort(key=lambda x: x["name"])
+        
+        return {
+            "project_name": project_name,
+            "project_path": project_path,
+            "databases": db_files,
+            "configs": db_configs,
+            "database_count": len(db_files),
+            "config_count": len(db_configs)
+        }
+    except Exception as e:
+        logger.error(f"Error getting project databases: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 # --- Catch-all 路由 ---
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
@@ -4888,6 +5645,146 @@ async def catch_all(path_name: str, request: Request):
 
     # 默认响应
     return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
+
+
+# --- Workflow API ---
+
+class WorkflowSaveRequest(BaseModel):
+    project_name: str
+    workflow_name: str
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+
+class WorkflowGenerateRequest(BaseModel):
+    prompt: str
+
+@app.post("/api/workflows/save")
+async def save_workflow(req: WorkflowSaveRequest):
+    """保存工作流"""
+    try:
+        from backend.core.workflow_service import Workflow
+        
+        workflow = Workflow(
+            id=None,
+            name=req.workflow_name,
+            nodes=req.nodes,
+            edges=req.edges,
+            project_name=req.project_name,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat()
+        )
+        
+        workflow_id = workflow_service.save_workflow(workflow)
+        
+        return {
+            "success": True,
+            "workflow_id": workflow_id,
+            "message": "工作流保存成功"
+        }
+    except Exception as e:
+        logger.error(f"Error saving workflow: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/workflows/{project_name}")
+async def get_workflows(project_name: str):
+    """获取项目的所有工作流"""
+    try:
+        workflows = workflow_service.get_workflows_by_project(project_name)
+        return {
+            "workflows": [
+                {
+                    "id": w.id,
+                    "name": w.name,
+                    "created_at": w.created_at,
+                    "updated_at": w.updated_at,
+                    "nodes_count": len(w.nodes),
+                    "edges_count": len(w.edges)
+                }
+                for w in workflows
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting workflows: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/workflows/{project_name}/{workflow_id}")
+async def get_workflow(project_name: str, workflow_id: str):
+    """获取工作流详情"""
+    try:
+        workflow = workflow_service.get_workflow(workflow_id)
+        if not workflow:
+            return JSONResponse({"error": "Workflow not found"}, status_code=404)
+        
+        return {
+            "id": workflow.id,
+            "name": workflow.name,
+            "nodes": workflow.nodes,
+            "edges": workflow.edges,
+            "created_at": workflow.created_at,
+            "updated_at": workflow.updated_at
+        }
+    except Exception as e:
+        logger.error(f"Error getting workflow: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/workflows/{project_name}/{workflow_id}")
+async def delete_workflow(project_name: str, workflow_id: str):
+    """删除工作流"""
+    try:
+        success = workflow_service.delete_workflow(workflow_id)
+        if success:
+            return {"success": True, "message": "工作流删除成功"}
+        else:
+            return JSONResponse({"error": "Workflow not found"}, status_code=404)
+    except Exception as e:
+        logger.error(f"Error deleting workflow: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/workflows/generate")
+async def generate_workflow(req: WorkflowGenerateRequest):
+    """AI 生成工作流"""
+    try:
+        result = workflow_service.generate_workflow_from_prompt(req.prompt)
+        return result
+    except Exception as e:
+        logger.error(f"Error generating workflow: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/workflows/{workflow_id}/execute")
+async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
+    """执行工作流"""
+    try:
+        workflow = workflow_service.get_workflow(workflow_id)
+        if not workflow:
+            return JSONResponse({"error": "Workflow not found"}, status_code=404)
+
+        # 获取项目路径
+        project_path = project_registry.get_project_path(workflow.project_name)
+        if not project_path:
+            return JSONResponse({"error": "Project path not found"}, status_code=404)
+
+        # 执行工作流
+        result = await workflow_executor.execute_workflow(
+            workflow_id,
+            {
+                'nodes': workflow.nodes,
+                'edges': workflow.edges
+            },
+            project_path,
+            context
+        )
+
+        return {
+            "success": result.success,
+            "steps_completed": result.steps_completed,
+            "steps_total": result.steps_total,
+            "logs": result.logs,
+            "output": result.output,
+            "error": result.error
+        }
+    except Exception as e:
+        logger.error(f"Error executing workflow: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":

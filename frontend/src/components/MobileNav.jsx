@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Folder, Terminal, GitBranch, Globe, CheckSquare, Database } from 'lucide-react';
+import { MessageSquare, Folder, Terminal, GitBranch, Globe, CheckSquare, Database, Workflow } from 'lucide-react';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
@@ -29,6 +29,11 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
       id: 'rag',
       icon: Database,
       onClick: () => setActiveTab('rag')
+    },
+    {
+      id: 'workflow',
+      icon: Workflow,
+      onClick: () => setActiveTab('workflow')
     },
     // Conditionally add tasks tab if enabled
     ...(tasksEnabled ? [{

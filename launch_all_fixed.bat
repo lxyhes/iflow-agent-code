@@ -12,6 +12,9 @@ set "BASE_DIR=%~dp0"
 if "%BASE_DIR:~-1%"=="\" set "BASE_DIR=%BASE_DIR:~0,-1%"
 echo [INFO] Base: %BASE_DIR%
 
+:: Create PID file to track processes
+set "PID_FILE=%BASE_DIR%\.launcher_pids.txt"
+
 :: Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -19,6 +22,16 @@ if errorlevel 1 (
     goto :error
 )
 echo [OK] Python found
+
+:: Kill any existing processes from previous runs
+if exist "%PID_FILE%" (
+    echo [INFO] Found previous PID file, cleaning up...
+    for /f "tokens=1" %%p in (%PID_FILE%) do (
+        echo [INFO] Killing previous process %%p...
+        taskkill /F /PID %%p >nul 2>&1
+    )
+    del "%PID_FILE%" >nul 2>&1
+)
 
 :: Kill any existing iFlow process on port 8090
 echo.
@@ -41,6 +54,14 @@ echo.
 echo [INFO] Checking for existing Node.js server process on port 3001...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3001" ^| findstr "LISTENING"') do (
     echo [INFO] Killing process %%a on port 3001...
+    taskkill /F /PID %%a >nul 2>&1
+)
+
+:: Kill any existing frontend process on port 5173
+echo.
+echo [INFO] Checking for existing frontend process on port 5173...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173" ^| findstr "LISTENING"') do (
+    echo [INFO] Killing process %%a on port 5173...
     taskkill /F /PID %%a >nul 2>&1
 )
 
@@ -91,7 +112,13 @@ echo    Backend (Node.js): http://localhost:3001
 echo    Frontend: http://localhost:5173
 echo ====================================================
 echo.
-goto :end
+echo [INFO] Press Ctrl+C to stop all services...
+echo.
+
+:: Monitor for Ctrl+C and cleanup
+:monitor
+timeout /t 1 >nul 2>&1
+goto :monitor
 
 :error
 echo.

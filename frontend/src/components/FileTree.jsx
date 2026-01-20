@@ -12,6 +12,33 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState(new Set());
+  
+  // Load expanded dirs from localStorage when project changes
+  useEffect(() => {
+    if (selectedProject) {
+      try {
+        const saved = localStorage.getItem(`expanded-dirs-${selectedProject.name}`);
+        if (saved) {
+          setExpandedDirs(new Set(JSON.parse(saved)));
+        } else {
+          setExpandedDirs(new Set());
+        }
+      } catch (e) {
+        setExpandedDirs(new Set());
+      }
+    }
+  }, [selectedProject]);
+
+  // Persist expanded dirs
+  useEffect(() => {
+    if (selectedProject) {
+      try {
+        localStorage.setItem(`expanded-dirs-${selectedProject.name}`, JSON.stringify([...expandedDirs]));
+      } catch (e) {
+        console.error('Failed to save expanded dirs:', e);
+      }
+    }
+  }, [expandedDirs, selectedProject]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'

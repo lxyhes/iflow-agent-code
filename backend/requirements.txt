@@ -5,3 +5,11 @@ pydantic
 pyjwt
 requests
 aiofiles
+pyyaml
+toml
+python-dotenv
+pymysql
+psycopg2-binary
+pyodbc
+cx-Oracle
+openpyxl

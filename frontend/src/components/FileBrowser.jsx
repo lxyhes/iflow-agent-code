@@ -110,25 +110,23 @@ const FileBrowser = ({ initialPath, onPathSelect, selectedPath, className = "" }
     const initRoot = async () => {
       setLoadingRoot(true);
       try {
-        const homeRes = await api.browseFilesystem('~', { limit: 1000 });
-        const homeData = await homeRes.json();
+        // Request the virtual root to show drives/volumes
+        const rootRes = await api.browseFilesystem('__ROOT__', { limit: 1000 });
+        const rootData = await rootRes.json();
         
-        if (homeData.currentPath) {
+        if (rootData.currentPath) {
           setRoot({
-            path: homeData.currentPath,
-            name: 'Home'
+            path: rootData.currentPath, // Should be '__ROOT__'
+            name: '此电脑 / System'
           });
-          
-          if (!selectedPath) {
-            onPathSelect(homeData.currentPath);
-          }
         }
-      } catch (e) {
-        console.error("Failed to init file browser:", e);
+      } catch (err) {
+        console.error('Failed to load file system root:', err);
       } finally {
         setLoadingRoot(false);
       }
     };
+    
     initRoot();
   }, []);
 

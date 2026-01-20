@@ -6,9 +6,15 @@
     "fullPath": "E:\\zhihui-soft\\agent_project",
     "sessions": [
       {
+        "id": "session-1768178493759",
+        "summary": "Session session-",
+        "updated_at": "Mon Jan 12 11:16:39 2026",
+        "__provider": "claude"
+      },
+      {
         "id": "session-1767945713842",
         "summary": "Session session-",
-        "updated_at": "Fri Jan  9 16:56:44 2026",
+        "updated_at": "Fri Jan  9 17:32:12 2026",
         "__provider": "claude"
       },
       {
@@ -43,7 +49,7 @@
       }
     ],
     "sessionMeta": {
-      "total": 6
+      "total": 7
     }
   },
   {
@@ -61,6 +67,16 @@
     "displayName": "test_1",
     "path": "E:\\test_1",
     "fullPath": "E:\\test_1",
+    "sessions": [],
+    "sessionMeta": {
+      "total": 0
+    }
+  },
+  {
+    "name": "SongLin",
+    "displayName": "SongLin",
+    "path": "E:\\work\\goServer\\SongLin",
+    "fullPath": "E:\\work\\goServer\\SongLin",
     "sessions": []
   }
 ]

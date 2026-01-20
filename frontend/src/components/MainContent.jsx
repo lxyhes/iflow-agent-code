@@ -32,6 +32,8 @@ const RAGPanel = lazy(() => import('./RAGPanel'));
 const SmartRequirementAnalysis = lazy(() => import('./SmartRequirementAnalysis'));
 const TaskDetail = lazy(() => import('./TaskDetail'));
 const PRDEditor = lazy(() => import('./PRDEditor'));
+const DatabaseQuery = lazy(() => import('./DatabaseQuery'));
+const WorkflowEditor = lazy(() => import('./WorkflowEditor'));
 
 function MainContent({
   selectedProject,
@@ -351,6 +353,9 @@ function MainContent({
                         activeTab === 'git' ? 'Source Control' :
                           (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
                             activeTab === 'rag' ? 'RAG Knowledge Base' :
+                            activeTab === 'database' ? 'Database Query' :
+                            activeTab === 'workflow' ? 'Workflow Editor' :
+                            activeTab === 'smart-req' ? 'Smart Requirement Analysis' :
                             'Project'}
                     </h2>
                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -482,6 +487,38 @@ function MainContent({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                     <span className="hidden md:hidden lg:inline">Smart Req</span>
+                  </span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Database Query" position="bottom">
+                <button
+                  onClick={() => setActiveTab('database')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'database'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Database</span>
+                  </span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Workflow Editor" position="bottom">
+                <button
+                  onClick={() => setActiveTab('workflow')}
+                  className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${activeTab === 'workflow'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                >
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                    </svg>
+                    <span className="hidden md:hidden lg:inline">Workflow</span>
                   </span>
                 </button>
               </Tooltip>
@@ -646,6 +683,26 @@ function MainContent({
             onClearLogs={() => setServerLogs([])}
           /> */}
           </div>
+          {activeTab === 'database' && (
+            <div className="h-full w-full overflow-hidden">
+                            <ErrorBoundary showDetails={true}>
+                              <Suspense fallback={null}>
+                               <DatabaseQuery selectedProject={selectedProject} />
+                              </Suspense>
+                            </ErrorBoundary>
+                          </div>          )}
+          {activeTab === 'workflow' && (
+            <div className="h-full w-full overflow-hidden">
+              <ErrorBoundary showDetails={true}>
+                <Suspense fallback={null}>
+                  <WorkflowEditor 
+                    selectedProject={selectedProject}
+                    visible={activeTab === 'workflow'}
+                  />
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          )}
         </div>
 
         {/* Code Editor Right Sidebar - Desktop only, Mobile uses modal */}

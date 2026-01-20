@@ -62,7 +62,23 @@ function Sidebar({
   isMobile,
   onToggleSidebar
 }) {
-  const [expandedProjects, setExpandedProjects] = useState(new Set());
+  const [expandedProjects, setExpandedProjects] = useState(() => {
+    try {
+      const saved = localStorage.getItem('expandedProjects');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  // Persist expandedProjects to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('expandedProjects', JSON.stringify([...expandedProjects]));
+    } catch (e) {
+      console.error('Failed to save expandedProjects:', e);
+    }
+  }, [expandedProjects]);
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');

@@ -28,6 +28,13 @@ const CommandPalette = ({ isOpen, onClose, projects, selectedProject, onSelectPr
       ]
     },
     {
+      name: 'Chat Actions',
+      items: [
+        { id: 'chat-clear', icon: <RefreshCw className="w-4 h-4" />, label: 'Clear Chat', action: () => window.dispatchEvent(new CustomEvent('clear-chat')) },
+        { id: 'chat-new', icon: <MessageSquare className="w-4 h-4" />, label: 'New Chat', action: () => navigate('/') },
+      ]
+    },
+    {
       name: 'System',
       items: [
         { id: 'sys-theme', icon: isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />, label: `Toggle ${isDarkMode ? 'Light' : 'Dark'} Mode`, action: onToggleTheme },

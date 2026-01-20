@@ -648,6 +648,9 @@ const ChatInterfaceMinimal = memo(({
         <ChatToolbar
           showMoreMenu={chatState.showMoreMenu}
           setShowMoreMenu={chatState.setShowMoreMenu}
+          messages={chatState.chatMessages}
+          selectedProject={selectedProject}
+          selectedSession={selectedSession}
         />
         <ChatInput
           input={inputState.input}

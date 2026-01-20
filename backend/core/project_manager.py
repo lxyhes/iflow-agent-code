@@ -23,7 +23,11 @@ class ProjectManager:
         self.projects = self._load_projects()
 
     def _load_projects(self) -> List[Dict[str, Any]]:
+        logger.info(f"正在加载项目列表，文件路径: {PROJECTS_FILE}")
+        logger.info(f"文件是否存在: {os.path.exists(PROJECTS_FILE)}")
+        
         if not os.path.exists(PROJECTS_FILE):
+            logger.warning(f"项目文件不存在: {PROJECTS_FILE}，使用默认项目")
             return [{
                 "name": "default",
                 "displayName": "Default Project",
@@ -34,8 +38,13 @@ class ProjectManager:
             }]
         try:
             with open(PROJECTS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
+                projects = json.load(f)
+                logger.info(f"成功加载 {len(projects)} 个项目")
+                for p in projects:
+                    logger.info(f"  - {p.get('name')}: {p.get('fullPath')}")
+                return projects
+        except Exception as e:
+            logger.error(f"加载项目文件失败: {e}")
             return []
 
     def save_projects(self):

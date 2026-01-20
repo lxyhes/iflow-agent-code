@@ -5,6 +5,10 @@ import App from './App.jsx'
 import './index.css'
 import 'katex/dist/katex.min.css'
 import { queryClient } from './lib/queryClient'
+import { initSentry } from './utils/sentry'
+
+// Initialize Sentry error tracking
+initSentry();
 
 // 本地开发模式：自动设置 mock token
 if (import.meta.env.VITE_IS_PLATFORM !== 'true') {
