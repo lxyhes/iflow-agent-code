@@ -511,9 +511,9 @@ const ChatInterfaceMinimal = memo(({
   ], []);
 
   // ============================================
-  // 👁️ 获取可见消息列表
+  // 👁️ 获取可见消息列表（已优化：使用 useMemo 缓存）
   // ============================================
-  const visibleMessages = chatState.getVisibleMessages();
+  const visibleMessages = chatState.visibleMessages;
 
   // ============================================
   // ⚠️ 边界情况：未选择项目
@@ -714,7 +714,29 @@ const ChatInterfaceMinimal = memo(({
 // ============================================
 ChatInterfaceMinimal.displayName = 'ChatInterfaceMinimal';
 
-export default ChatInterfaceMinimal;
+// 自定义比较函数，优化重渲染性能
+const arePropsEqual = (prevProps, nextProps) => {
+  // 项目和会话变化时需要重新渲染
+  if (prevProps.selectedProject?.name !== nextProps.selectedProject?.name) return false;
+  if (prevProps.selectedSession?.id !== nextProps.selectedSession?.id) return false;
+  
+  // 消息列表变化时需要重新渲染
+  if (prevProps.messages?.length !== nextProps.messages?.length) return false;
+  if (prevProps.messages?.[prevProps.messages.length - 1]?.id !== nextProps.messages?.[nextProps.messages.length - 1]?.id) return false;
+  
+  // 其他关键 props 变化时需要重新渲染
+  if (prevProps.autoExpandTools !== nextProps.autoExpandTools) return false;
+  if (prevProps.showRawParameters !== nextProps.showRawParameters) return false;
+  if (prevProps.showThinking !== nextProps.showThinking) return false;
+  if (prevProps.autoScrollToBottom !== nextProps.autoScrollToBottom) return false;
+  if (prevProps.sendByCtrlEnter !== nextProps.sendByCtrlEnter) return false;
+  if (prevProps.aiPersona !== nextProps.aiPersona) return false;
+  
+  // 其他 props 变化时不重新渲染
+  return true;
+};
+
+export default memo(ChatInterfaceMinimal, arePropsEqual);
 
 /**
  * 📚 极致优化要点总结

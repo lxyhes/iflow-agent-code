@@ -272,9 +272,10 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       convertEol: true,
       scrollback: 10000,
       tabStopWidth: 4,
-      windowsMode: false,
+      windowsMode: false, // Do not enable windowsMode, we handle pty on backend
       macOptionIsMeta: true,
       macOptionClickForcesSelection: false,
+      logLevel: 'off', // Suppress parsing errors/warnings
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
@@ -323,62 +324,27 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     }, 100);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
+      // Allow copy/paste with Ctrl+C/V
       if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
-        document.execCommand('copy');
-        return false;
+        return false; // Let browser handle copy
       }
-
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        navigator.clipboard.readText().then(text => {
-          if (terminal.current) {
-            terminal.current.write(text);
-          }
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-              type: 'input',
-              data: text
-            }));
-          }
-        }).catch(() => { });
-        return false;
+        return false; // Let browser handle paste
       }
+      
+      // Let xterm.js handle all other keys natively
+      // This ensures proper handling of arrow keys, backspace, etc.
+      return true;
+    });
 
-      let inputData = event.key;
-      let displayData = inputData;
-      if (event.key === 'Enter') {
-        inputData = '\r';
-        displayData = '\r';
-      } else if (event.key === 'Backspace') {
-        inputData = '\b';
-        displayData = '\b \b';
-      } else if (event.key === 'Tab') {
-        inputData = '\t';
-        displayData = '\t';
-      } else if (event.key.startsWith('Arrow')) {
-        const arrowKeys = { ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowRight: '\x1b[C', ArrowLeft: '\x1b[D' };
-        inputData = arrowKeys[event.key] || '';
-        displayData = inputData;
-      } else if (event.key === 'Escape') {
-        inputData = '\x1b';
-        displayData = '\x1b';
-      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        inputData = event.key;
-        displayData = event.key;
-      } else {
-        return true;
-      }
-
-      if (terminal.current) {
-        terminal.current.write(displayData);
-      }
+    terminal.current.onData((data) => {
+      // xterm.js handles local echo suppression automatically when connected properly
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({
           type: 'input',
-          data: inputData
+          data: data
         }));
       }
-
-      return false;
     });
 
     setTimeout(() => {
@@ -395,14 +361,6 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     }, 100);
 
     setIsInitialized(true);
-    terminal.current.onData((data) => {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: 'input',
-          data: data
-        }));
-      }
-    });
 
     const resizeObserver = new ResizeObserver(() => {
       if (fitAddon.current && terminal.current) {

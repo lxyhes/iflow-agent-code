@@ -12,14 +12,39 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger("ShellService")
 
+# Conditional Imports for PTY support
+WINPTY_AVAILABLE = False
+PTY_AVAILABLE = False
+
+if os.name == 'nt':
+    try:
+        from winpty import PtyProcess
+        WINPTY_AVAILABLE = True
+        logger.info("Winpty (pywinpty) is available.")
+    except ImportError:
+        logger.warning("Winpty not available. Install 'pywinpty' for better shell experience.")
+else:
+    try:
+        import pty
+        import fcntl
+        import termios
+        import struct
+        PTY_AVAILABLE = True
+        logger.info("PTY module is available.")
+    except ImportError:
+        logger.warning("PTY module not available.")
+
 class ShellSession:
     def __init__(self, cwd: str = None):
         # 验证并设置工作目录
         self.cwd = self._validate_cwd(cwd)
         self.process = None
+        self.master_fd = None # For POSIX PTY
         self.websocket = None
         self.output_queue = queue.Queue()
         self.running = False
+        self.use_pty = False
+        self.winpty_proc = None # For Windows Winpty
 
     def _validate_cwd(self, cwd: Optional[str]) -> str:
         """验证工作目录，确保它存在且可访问"""
@@ -52,32 +77,34 @@ class ShellSession:
         system = platform.system()
 
         if system == "Windows":
-            return ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", "-"]
+            return ["powershell.exe", "-NoLogo", "-NoProfile"]
         elif system == "Darwin":
             # macOS 默认使用 zsh
-            zsh_path = subprocess.run(["which", "zsh"], capture_output=True, text=True).stdout.strip()
-            if zsh_path and os.path.exists(zsh_path):
-                logger.info(f"使用 zsh: {zsh_path}")
-                return [zsh_path, "-i"]
-            else:
-                # 回退到 bash
-                bash_path = subprocess.run(["which", "bash"], capture_output=True, text=True).stdout.strip()
-                if bash_path and os.path.exists(bash_path):
-                    logger.info(f"使用 bash: {bash_path}")
-                    return [bash_path, "-i"]
-                else:
-                    # 最后回退到 /bin/bash
-                    logger.warning("未找到 zsh 或 bash，使用 /bin/bash")
-                    return ["/bin/bash", "-i"]
+            zsh_path = "/bin/zsh"
+            if os.path.exists(zsh_path):
+                return [zsh_path, "-l"]
+            return ["/bin/bash", "-l"]
         else:
             # Linux 使用 bash
-            bash_path = subprocess.run(["which", "bash"], capture_output=True, text=True).stdout.strip()
-            if bash_path and os.path.exists(bash_path):
-                logger.info(f"使用 bash: {bash_path}")
-                return [bash_path, "-i"]
-            else:
-                logger.warning("未找到 bash，使用 /bin/bash")
-                return ["/bin/bash", "-i"]
+            bash_path = "/bin/bash"
+            if os.path.exists(bash_path):
+                return [bash_path]
+            return ["/bin/sh"]
+
+    def _decode_data(self, data: bytes) -> str:
+        """Decode binary data to string with fallback"""
+        try:
+            return data.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                # Try system preferred encoding (e.g., cp1252, gbk)
+                import locale
+                return data.decode(locale.getpreferredencoding())
+            except:
+                try:
+                    return data.decode('gbk')
+                except:
+                    return data.decode('utf-8', errors='replace')
 
     async def start(self, websocket: WebSocket):
         self.websocket = websocket
@@ -94,45 +121,66 @@ class ShellSession:
         await self._send("output", f"Connecting to shell...\r\n")
 
         try:
-            # 获取 shell 命令
             shell_cmd = self._get_shell_command()
-            logger.info(f"Shell 命令: {' '.join(shell_cmd)}")
+            logger.info(f"Shell 命令: {shell_cmd}")
 
-            # 创建进程
-            loop = asyncio.get_event_loop()
+            # --- Windows with WinPty ---
+            if WINPTY_AVAILABLE and os.name == 'nt':
+                self.use_pty = True
+                cmd_str = " ".join(shell_cmd)
+                # winpty spawn needs a string command usually, or we pass executable
+                self.winpty_proc = PtyProcess.spawn(
+                    shell_cmd,
+                    cwd=self.cwd,
+                    dimensions=(24, 80) # Default size, will be resized
+                )
+                self.process = self.winpty_proc # Alias for common checks if needed, but methods differ
+                logger.info(f"WinPty 进程已启动, PID={self.winpty_proc.pid}")
+                await self._send("output", f"Shell ready (WinPty)\r\nCWD: {self.cwd}\r\n")
 
-            def create_process():
-                try:
-                    return subprocess.Popen(
-                        shell_cmd,
-                        cwd=self.cwd,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=0,
-                        env=os.environ.copy()  # 传递环境变量
-                    )
-                except Exception as e:
-                    logger.error(f"创建进程失败: {e}")
-                    raise
+            # --- POSIX with PTY ---
+            elif PTY_AVAILABLE and os.name != 'nt':
+                self.use_pty = True
+                self.master_fd, self.slave_fd = pty.openpty()
+                
+                self.process = subprocess.Popen(
+                    shell_cmd,
+                    cwd=self.cwd,
+                    stdin=self.slave_fd,
+                    stdout=self.slave_fd,
+                    stderr=self.slave_fd,
+                    preexec_fn=os.setsid,
+                    close_fds=True,
+                    env=os.environ.copy()
+                )
+                os.close(self.slave_fd) # Close slave in parent
+                logger.info(f"PTY Shell 进程已启动, PID={self.process.pid}")
+                await self._send("output", f"Shell ready (PTY)\r\nCWD: {self.cwd}\r\n")
 
-            self.process = await loop.run_in_executor(None, create_process)
+            # --- Fallback to Subprocess (No PTY) ---
+            else:
+                self.use_pty = False
+                logger.warning("Fallback to basic subprocess shell (No PTY).")
+                
+                env = os.environ.copy()
+                env["TERM"] = "xterm-256color"
+                env["PYTHONIOENCODING"] = "utf-8"
 
-            logger.info(f"Shell 进程已启动, PID={self.process.pid}")
-            await self._send("output", f"Shell ready (PID: {self.process.pid})\r\nCWD: {self.cwd}\r\n\r\n$ ")
+                self.process = subprocess.Popen(
+                    shell_cmd,
+                    cwd=self.cwd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=False,
+                    bufsize=0,
+                    env=env
+                )
+                logger.info(f"Basic Shell 进程已启动, PID={self.process.pid}")
+                await self._send("output", f"Shell ready (Basic)\r\nCWD: {self.cwd}\r\nWarning: PTY not available, interactive features may be limited.\r\n$ ")
 
-        except FileNotFoundError as e:
-            logger.error(f"Shell 可执行文件未找到: {e}")
-            await self._send("output", f"Error: Shell 可执行文件未找到: {e}\r\n")
-            await self._send("output", "请确保系统已安装 shell (bash/zsh)\r\n")
-            return
-        except PermissionError as e:
-            logger.error(f"权限错误: {e}")
-            await self._send("output", f"Error: 权限不足: {e}\r\n")
-            return
         except Exception as e:
-            logger.error(f"Shell 进程启动失败: {e}")
+            logger.error(f"Shell 启动失败: {e}")
             await self._send("output", f"Error: {e}\r\n")
             return
 
@@ -147,7 +195,13 @@ class ShellSession:
                 await self._flush_output()
 
                 # 检查进程状态
-                if self.process and self.process.poll() is not None:
+                is_alive = True
+                if self.use_pty and os.name == 'nt':
+                    is_alive = self.winpty_proc.isalive()
+                elif self.process:
+                    is_alive = (self.process.poll() is None)
+                
+                if not is_alive:
                     await self._flush_output()
                     await self._send("output", "\r\n[Shell exited]\r\n")
                     break
@@ -175,59 +229,128 @@ class ShellSession:
     async def _process_input(self, raw: str):
         """处理输入消息"""
         data = raw
+        msg_type = ""
+        cols = 80
+        rows = 24
+
         try:
             msg = json.loads(raw)
             if isinstance(msg, dict):
                 msg_type = msg.get("type", "")
                 if msg_type == "init":
-                    print(f"[Shell] Init received")
+                    # Initial resize
+                    cols = msg.get("cols", 80)
+                    rows = msg.get("rows", 24)
+                    self._resize(cols, rows)
                     return
                 if msg_type == "resize":
+                    cols = msg.get("cols", 80)
+                    rows = msg.get("rows", 24)
+                    self._resize(cols, rows)
                     return
                 if msg_type == "input":
                     data = msg.get("data", "")
         except:
             pass
         
-        if data and self.process and self.process.stdin:
-            try:
-                # 写入命令 - 如果是文本模式，直接写入字符串
-                if isinstance(self.process.stdin, io.TextIOWrapper):
-                    self.process.stdin.write(data)
-                else:
-                    self.process.stdin.write(data.encode('utf-8'))
+        # Write data to shell
+        if not data:
+            return
+
+        try:
+            if self.use_pty and os.name == 'nt':
+                # WinPty write
+                self.winpty_proc.write(data)
+            
+            elif self.use_pty and os.name != 'nt':
+                # POSIX PTY write
+                if self.master_fd:
+                    os.write(self.master_fd, data.encode('utf-8'))
+            
+            elif self.process and self.process.stdin:
+                # Basic Subprocess write
+                encoded_data = data.encode('utf-8', errors='ignore')
+                self.process.stdin.write(encoded_data)
                 self.process.stdin.flush()
-                print(f"[Shell] Sent: {repr(data)}")
-            except Exception as e:
-                print(f"[Shell] Write error: {e}")
+
+        except Exception as e:
+            print(f"[Shell] Write error: {e}")
+
+    def _resize(self, cols: int, rows: int):
+        """Resize terminal"""
+        try:
+            if self.use_pty and os.name == 'nt':
+                self.winpty_proc.setwinsize(rows, cols)
+            elif self.use_pty and os.name != 'nt':
+                if self.master_fd:
+                    winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                    fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
+        except Exception as e:
+            logger.warning(f"Resize failed: {e}")
 
     def _reader_thread(self):
         """在线程中读取进程输出"""
         logger.info("Shell 读取线程已启动")
         try:
-            while self.running and self.process:
-                if self.process.poll() is not None:
-                    # 读取剩余输出
+            while self.running:
+                text = ""
+                
+                # --- Windows WinPty Read ---
+                if self.use_pty and os.name == 'nt':
+                    if not self.winpty_proc.isalive():
+                        break
                     try:
+                        # Blocking read
+                        text = self.winpty_proc.read(1024)
+                        # Filter out DEL characters which cause xterm.js parsing errors
+                        if text:
+                            text = text.replace('\x7f', '')
+                    except Exception as e:
+                        if "EOF" in str(e):
+                            break
+                        # logger.warning(f"WinPty read error: {e}")
+                        break
+
+                # --- POSIX PTY Read ---
+                elif self.use_pty and os.name != 'nt':
+                    try:
+                        data = os.read(self.master_fd, 1024)
+                        if not data:
+                            break
+                        text = self._decode_data(data)
+                        # Filter DEL here too just in case
+                        if text:
+                            text = text.replace('\x7f', '')
+                    except OSError:
+                        break
+
+                # --- Basic Subprocess Read ---
+                elif self.process:
+                    if self.process.poll() is not None:
+                        # Read remaining
                         rest = self.process.stdout.read()
                         if rest:
-                            self.output_queue.put(rest)
-                    except Exception as e:
-                        logger.warning(f"读取剩余输出失败: {e}")
-                    break
+                            decoded = self._decode_data(rest)
+                            self.output_queue.put(decoded.replace('\x7f', ''))
+                        break
+                    
+                    try:
+                        data = self.process.stdout.read(4096)
+                        if data:
+                            text = self._decode_data(data)
+                            if text:
+                                text = text.replace('\x7f', '')
+                        else:
+                            break
+                    except:
+                        break
+                
+                if text:
+                    self.output_queue.put(text)
+                else:
+                    import time
+                    time.sleep(0.01)
 
-                try:
-                    # 读取一行（非阻塞）
-                    line = self.process.stdout.readline()
-                    if line:
-                        self.output_queue.put(line)
-                    else:
-                        # 如果没有数据，短暂休眠
-                        import time
-                        time.sleep(0.01)
-                except Exception as e:
-                    logger.warning(f"Shell 读取错误: {e}")
-                    break
         except Exception as e:
             logger.error(f"Shell 读取线程错误: {e}")
         finally:
@@ -256,29 +379,31 @@ class ShellSession:
     def _cleanup(self):
         """清理资源"""
         self.running = False
-        if self.process:
+        
+        if self.use_pty and os.name == 'nt' and self.winpty_proc:
             try:
-                # 先尝试优雅终止
-                self.process.terminate()
-                logger.info(f"Shell 进程已终止 (PID: {self.process.pid})")
-            except Exception as e:
-                logger.warning(f"终止进程失败: {e}")
-
-            try:
-                # 等待进程结束
-                import time
-                self.process.wait(timeout=2)
+                self.winpty_proc.close()
             except:
                 pass
+            self.winpty_proc = None
 
+        if self.use_pty and os.name != 'nt' and self.master_fd:
             try:
-                # 如果还没结束，强制杀死
+                os.close(self.master_fd)
+            except:
+                pass
+            self.master_fd = None
+
+        if self.process:
+            try:
+                self.process.terminate()
+            except:
+                pass
+            try:
                 if self.process.poll() is None:
                     self.process.kill()
-                    logger.info(f"Shell 进程已强制杀死 (PID: {self.process.pid})")
-            except Exception as e:
-                logger.warning(f"强制杀死进程失败: {e}")
-
+            except:
+                pass
             self.process = None
 
 shell_manager: Dict[str, ShellSession] = {}

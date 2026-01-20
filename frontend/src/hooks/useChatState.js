@@ -3,7 +3,7 @@
  * 管理聊天的核心状态
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { chatStorage, draftStorage } from '../utils/indexedDBStorage';
 import { useChatHistory } from './useChatHistory';
 import safeLocalStorage from '../utils/safeStorage';
@@ -146,8 +146,8 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
     });
   }, []);
 
-  // 获取可见消息
-  const getVisibleMessages = useCallback(() => {
+  // 获取可见消息（使用 useMemo 缓存结果）
+  const visibleMessages = useMemo(() => {
     return chatMessages.length <= visibleMessageCount 
       ? chatMessages 
       : chatMessages.slice(-visibleMessageCount);
@@ -224,7 +224,7 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
     clearAllNotifications,
     markNotificationAsRead,
     handleModeSwitch,
-    getVisibleMessages
+    visibleMessages
   };
 };
 

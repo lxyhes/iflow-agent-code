@@ -42,7 +42,7 @@ export default defineConfig(({ command, mode }) => {
         },
         // Proxy WebSocket for shell
         '/shell': {
-          target: 'http://localhost:3001',
+          target: BACKEND_URL,
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path
