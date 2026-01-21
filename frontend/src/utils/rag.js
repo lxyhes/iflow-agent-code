@@ -103,11 +103,22 @@ export async function retrieveRAG(projectPath, query, nResults = 5, options = {}
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'RAG 检索失败');
+    const text = await response.text().catch(() => '');
+    try {
+      const error = text ? JSON.parse(text) : null;
+      throw new Error(error?.error || error?.message || 'RAG 检索失败');
+    } catch {
+      throw new Error(text || 'RAG 检索失败');
+    }
   }
 
-  return response.json();
+  const text = await response.text().catch(() => '');
+  if (!text) return { success: true, query, results: [], count: 0 };
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('RAG 返回格式异常（非 JSON）');
+  }
 }
 
 /**

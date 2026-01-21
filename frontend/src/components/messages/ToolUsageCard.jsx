@@ -29,6 +29,47 @@ const ToolUsageCard = ({ message }) => {
   // 判断是否是命令执行操作
   const isCommand = message.toolType === 'command' || message.toolType === 'run_shell_command';
 
+  const imageItems = (() => {
+    const imgs = [];
+    const addDataUrl = (dataUrl) => {
+      const s = String(dataUrl || '');
+      if (!s.startsWith('data:image/')) return;
+      imgs.push({ src: s });
+    };
+    const addHttpUrl = (url) => {
+      const s = String(url || '');
+      if (!/^https?:\/\//i.test(s)) return;
+      if (!/\.(png|jpg|jpeg|gif|webp|svg)(\?|#|$)/i.test(s)) return;
+      imgs.push({ src: s });
+    };
+
+    if (typeof message.result === 'string') {
+      addDataUrl(message.result);
+      addHttpUrl(message.result);
+    } else if (message.result && typeof message.result === 'object') {
+      if (typeof message.result.image_base64 === 'string' && message.result.image_base64) {
+        addDataUrl(`data:image/png;base64,${message.result.image_base64}`);
+      }
+      if (typeof message.result.preview_url === 'string') addHttpUrl(message.result.preview_url);
+      if (Array.isArray(message.result.images)) {
+        for (const it of message.result.images) {
+          if (!it) continue;
+          if (typeof it === 'string') {
+            addDataUrl(it);
+            addHttpUrl(it);
+          } else if (typeof it === 'object') {
+            if (typeof it.dataUrl === 'string') addDataUrl(it.dataUrl);
+            if (typeof it.url === 'string') addHttpUrl(it.url);
+            if (typeof it.base64 === 'string' && it.base64) addDataUrl(`data:${it.mimeType || 'image/png'};base64,${it.base64}`);
+          }
+          if (imgs.length >= 6) break;
+        }
+      }
+    }
+
+    return imgs;
+  })();
+
   // 提取文件信息
   const fileName = message.toolLabel?.match(/path:\s*([^\s,]+)/)?.[1] || 
                   message.toolLabel?.split(',')[0] || 
@@ -230,6 +271,19 @@ const ToolUsageCard = ({ message }) => {
               <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 block">
                 执行结果
               </span>
+              {imageItems.length > 0 && (
+                <div className="mb-2 grid grid-cols-2 gap-2">
+                  {imageItems.map((img, idx) => (
+                    <img
+                      key={idx}
+                      src={img.src}
+                      alt="tool preview"
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700"
+                      loading="lazy"
+                    />
+                  ))}
+                </div>
+              )}
               <pre className="text-xs text-gray-700 dark:text-gray-300 font-mono whitespace-pre-wrap">
                 {typeof message.result === 'string' 
                   ? message.result 

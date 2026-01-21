@@ -3,12 +3,102 @@
  * 助手消息卡片组件
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import IFlowLogo from '../IFlowLogo.jsx';
 import CursorLogo from '../CursorLogo.jsx';
 import MarkdownRenderer from '../markdown/MarkdownRenderer';
 import ThinkingBlock from '../markdown/ThinkingBlock';
 import ToolUsageCard from './ToolUsageCard';
+
+const autoParagraphize = (text) => {
+  const s = String(text || '');
+  if (!s) return s;
+  if (s.includes('\n\n') || s.length < 380) return s;
+  const parts = s.split(/```[\s\S]*?```/g);
+  const blocks = s.match(/```[\s\S]*?```/g) || [];
+  const out = [];
+
+  const formatPlain = (plain) => {
+    const src = plain.replace(/\r\n/g, '\n');
+    let buf = '';
+    let run = 0;
+    for (let i = 0; i < src.length; i += 1) {
+      const ch = src[i];
+      buf += ch;
+      run += 1;
+      const next = src[i + 1] || '';
+      const isBreakable = /[。！？.!?]/.test(ch) && (next === ' ' || next === '\n' || next === '\t' || next === '');
+      if (run > 220 && isBreakable) {
+        buf += '\n\n';
+        run = 0;
+      }
+      if (ch === '\n') run = 0;
+    }
+    return buf;
+  };
+
+  for (let i = 0; i < parts.length; i += 1) {
+    out.push(formatPlain(parts[i]));
+    if (blocks[i]) out.push(blocks[i]);
+  }
+  return out.join('');
+};
+
+const TypedMarkdown = ({ content, isStreaming }) => {
+  const target = useMemo(() => autoParagraphize(content), [content]);
+  const [typed, setTyped] = useState(target);
+  const rafRef = useRef(null);
+  const lastKeyRef = useRef(null);
+
+  useEffect(() => {
+    const key = target;
+    if (lastKeyRef.current !== key) {
+      lastKeyRef.current = key;
+      if (!isStreaming) {
+        setTyped(key);
+        return;
+      }
+      setTyped((prev) => (prev.length > key.length ? '' : prev));
+    }
+  }, [target, isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      if (typed !== target) setTyped(target);
+      return;
+    }
+    if (typed.length >= target.length) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    let last = performance.now();
+    const step = (now) => {
+      const dt = now - last;
+      last = now;
+      const remaining = target.length - typed.length;
+      const rate = Math.max(120, Math.min(520, Math.floor(target.length / 10)));
+      const add = Math.max(8, Math.floor((rate * dt) / 1000));
+      const nextLen = Math.min(target.length, typed.length + Math.min(add, remaining));
+      setTyped(target.slice(0, nextLen));
+      if (nextLen < target.length) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [isStreaming, target, typed]);
+
+  return (
+    <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none prose-p:mb-3 prose-strong:bg-yellow-50 prose-strong:text-gray-900 dark:prose-strong:bg-yellow-900/30 dark:prose-strong:text-white prose-strong:rounded prose-strong:px-1">
+      {typed}
+    </MarkdownRenderer>
+  );
+};
 
 const AssistantMessage = ({ 
   message, 
@@ -33,9 +123,10 @@ const AssistantMessage = ({
   const [showMenu, setShowMenu] = useState(false);
   const isEditing = editingMessageId === message.id;
   const isFavorited = favoritedMessages?.has(message.id);
+  const shouldSeparate = !isGrouped && message.type === 'assistant' && !message.isToolUse;
 
   return (
-    <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2 relative">
+    <div className={`flex gap-4 w-full max-w-4xl pr-4 group relative ${shouldSeparate ? 'mb-6 pb-6 border-b border-gray-100 dark:border-gray-800' : 'mb-2'}`}>
       {/* Left Column: Avatar */}
       <div className="flex-shrink-0 flex flex-col items-center">
         {!isGrouped && (
@@ -86,9 +177,7 @@ const AssistantMessage = ({
 
           {/* Content */}
           {message.content && (
-            <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none">
-              {message.content}
-            </MarkdownRenderer>
+            <TypedMarkdown content={message.content} isStreaming={!!message.isStreaming} />
           )}
         </div>
 

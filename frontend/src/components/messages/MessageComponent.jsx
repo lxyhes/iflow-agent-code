@@ -70,6 +70,7 @@ const MessageComponent = memo(({
   return (
     <div
       ref={messageRef}
+      data-message-id={message.id}
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end' : ''} animate-fade-in-up`}
     >
       {message.type === 'user' ? (

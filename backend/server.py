@@ -134,6 +134,25 @@ class CacheManager:
     def __len__(self):
         return len(self.cache)
 
+    def __getitem__(self, key):
+        if key in self.cache:
+            self.access_times[key] = datetime.now().timestamp()
+            self._total_accesses += 1
+            self._hits += 1
+            return self.cache[key]
+        self._total_accesses += 1
+        raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        self.set(key, value)
+
+    def __delitem__(self, key):
+        if key not in self.cache:
+            raise KeyError(key)
+        del self.cache[key]
+        if key in self.access_times:
+            del self.access_times[key]
+
 # --- MODELS ---
 class CreateProjectRequest(BaseModel): path: str
 
@@ -217,11 +236,22 @@ def get_project_path(project_name: str) -> str:
     # 如果还是找不到，尝试在父目录下寻找匹配的项目文件夹名
     # 获取 backend 的父目录即 agent_project
     current_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    PathValidator.add_allowed_root(current_base)
+    PathValidator.add_allowed_root(os.path.dirname(current_base))
     logger.info(f"[get_project_path] Checking if project_name matches current_base: {project_name} == {os.path.basename(current_base)}")
     # 检查是否匹配当前项目文件夹名
     if project_name == os.path.basename(current_base):
         logger.info(f"[get_project_path] Matched current_base: {current_base}")
         return current_base
+
+    potential_in_base = os.path.join(current_base, project_name)
+    logger.info(f"[get_project_path] Checking potential_in_base: {potential_in_base}")
+    if os.path.isdir(potential_in_base):
+        is_valid, _, normalized = PathValidator.validate_project_path(potential_in_base)
+        if is_valid:
+            project_registry.register_project(project_name, normalized)
+            logger.info(f"[get_project_path] Found in current_base: {normalized}")
+            return normalized
         
     # 检查当前工作目录的父目录
     parent_dir = os.path.dirname(os.getcwd())
@@ -553,17 +583,42 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
                         # 工具调用（SDK 客户端）
                         metadata = msg.get("metadata", {})
                         tool_name = metadata.get("tool_name", "unknown")
+                        tool_type = metadata.get("tool_type") or "generic"
                         status = metadata.get("status", "running")
                         agent_info = metadata.get("agent_info")
+                        tool_call_id = metadata.get("tool_call_id")
+                        tool_params = metadata.get("tool_params")
+                        result = metadata.get("result")
+                        old_content = metadata.get("old_content")
+                        new_content = metadata.get("new_content")
                         
                         if status == "running":
                             # 工具开始执行
-                            event_data = {'type': 'tool_start', 'tool_type': 'generic', 'tool_name': tool_name, 'label': metadata.get('label', ''), 'agent_info': agent_info}
+                            event_data = {
+                                'type': 'tool_start',
+                                'tool_type': tool_type,
+                                'tool_name': tool_name,
+                                'tool_call_id': tool_call_id,
+                                'label': msg.get("content", "") or metadata.get('label', ''),
+                                'agent_info': agent_info,
+                                'tool_params': tool_params,
+                            }
                             logger.info(f">>> TOOL_START: {event_data}")
                             yield f"data: {json.dumps(event_data)}\n\n"
                         else:
                             # 工具执行完成
-                            event_data = {'type': 'tool_end', 'tool_type': 'generic', 'tool_name': tool_name, 'status': status, 'agent_info': agent_info}
+                            event_data = {
+                                'type': 'tool_end',
+                                'tool_type': tool_type,
+                                'tool_name': tool_name,
+                                'tool_call_id': tool_call_id,
+                                'status': status,
+                                'agent_info': agent_info,
+                                'tool_params': tool_params,
+                                'result': result,
+                                'old_content': old_content,
+                                'new_content': new_content,
+                            }
                             logger.info(f">>> TOOL_END: {event_data}")
                             yield f"data: {json.dumps(event_data)}\n\n"
                             
@@ -2244,8 +2299,9 @@ async def index_project_rag(request: Request, project_path: str = None, project_
         
         logger.info(f"Dependencies check: CHROMADB_AVAILABLE={CHROMADB_AVAILABLE}, SKLEARN_AVAILABLE={SKLEARN_AVAILABLE}")
         
+        cache_key = final_project_path
         # 确保 RAG 服务被创建（使用项目路径作为缓存键）
-        if project_path not in rag_cache:
+        if cache_key not in rag_cache:
             # 根据配置选择 RAG 模式
             rag_mode = global_config.get("rag_mode", "tfidf")
             use_chromadb = (rag_mode == "chromadb")
@@ -2254,10 +2310,10 @@ async def index_project_rag(request: Request, project_path: str = None, project_
                 logger.warning("ChromaDB requested but not available, falling back to TF-IDF")
                 use_chromadb = False
             
-            rag_cache[project_path] = get_rag_service(project_path, use_chromadb=use_chromadb)
-            logger.info(f"Created new RAG service for {project_name} at {project_path} (mode: {'ChromaDB' if use_chromadb else 'TF-IDF'})")
+            rag_cache[cache_key] = get_rag_service(final_project_path, use_chromadb=use_chromadb)
+            logger.info(f"Created new RAG service for {project_name} at {final_project_path} (mode: {'ChromaDB' if use_chromadb else 'TF-IDF'})")
         
-        rag_service = rag_cache[project_path]
+        rag_service = rag_cache[cache_key]
         
         # 创建异步生成器用于进度更新
         async def progress_generator():

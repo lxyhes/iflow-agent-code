@@ -9,15 +9,58 @@ export const useScrollManagement = (chatMessages, autoScrollToBottom) => {
   const scrollContainerRef = useRef(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const rafRef = useRef(null);
+  const lastAutoScrollAtRef = useRef(0);
 
-  // 滚动到底部
+  const getScroller = () => {
+    const cur = scrollContainerRef.current;
+    if (!cur) return null;
+    if (cur.scrollerRef?.current) return cur.scrollerRef.current;
+    return cur;
+  };
+
+  const smoothScroll = (el, to, durationMs = 380) => {
+    if (!el) return;
+    const start = el.scrollTop;
+    const change = to - start;
+    if (Math.abs(change) < 2) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    const startTime = performance.now();
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const step = (now) => {
+      const p = Math.min(1, (now - startTime) / durationMs);
+      el.scrollTop = start + change * easeOutCubic(p);
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  };
+
+  // 滚动到底部（兼容 Virtuoso 与普通 DOM 容器）
   const scrollToBottom = useCallback((behavior = 'smooth') => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollToIndex({
+    const cur = scrollContainerRef.current;
+    if (!cur) return;
+
+    if (typeof cur.scrollToIndex === 'function') {
+      cur.scrollToIndex({
         index: 'LAST',
         align: 'end',
-        behavior
+        behavior: behavior === 'auto' ? 'auto' : 'smooth'
       });
+      return;
+    }
+
+    const el = getScroller();
+    if (!el) return;
+    const target = el.scrollHeight - el.clientHeight;
+    if (behavior === 'auto') {
+      el.scrollTop = target;
+    } else {
+      smoothScroll(el, target, 380);
     }
   }, []);
 
@@ -26,24 +69,32 @@ export const useScrollManagement = (chatMessages, autoScrollToBottom) => {
     if (!scrollContainerRef.current) return;
     
     const index = chatMessages.findIndex(m => m.id === messageId);
-    if (index !== -1) {
+    if (index === -1) return;
+
+    const cur = scrollContainerRef.current;
+    if (typeof cur.scrollToIndex === 'function') {
       scrollContainerRef.current.scrollToIndex({
         index,
         align: 'start',
         behavior: 'smooth'
       });
+      return;
+    }
+    const el = getScroller();
+    if (!el) return;
+    const node = el.querySelector?.(`[data-message-id="${CSS.escape(String(messageId))}"]`);
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
   }, [chatMessages]);
 
   // 自动滚动到底部
   useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0 && !isUserScrolledUp && autoScrollToBottom) {
-      scrollContainerRef.current.scrollToIndex({
-        index: 'LAST',
-        align: 'end',
-        behavior: 'auto'
-      });
-    }
+    if (!scrollContainerRef.current || chatMessages.length === 0 || isUserScrolledUp || !autoScrollToBottom) return;
+    const now = Date.now();
+    if (now - lastAutoScrollAtRef.current < 120) return;
+    lastAutoScrollAtRef.current = now;
+    scrollToBottom('auto');
   }, [chatMessages.length, isUserScrolledUp, autoScrollToBottom]);
 
   // 处理滚动事件

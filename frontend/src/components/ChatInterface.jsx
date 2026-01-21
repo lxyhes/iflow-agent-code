@@ -122,6 +122,94 @@ const Markdown = ({ children, className }) => {
   );
 };
 
+const autoParagraphize = (text) => {
+  const s = String(text || '');
+  if (!s) return s;
+  if (s.includes('\n\n') || s.length < 380) return s;
+  const parts = s.split(/```[\s\S]*?```/g);
+  const blocks = s.match(/```[\s\S]*?```/g) || [];
+  const out = [];
+
+  const formatPlain = (plain) => {
+    const src = plain.replace(/\r\n/g, '\n');
+    let buf = '';
+    let run = 0;
+    for (let i = 0; i < src.length; i += 1) {
+      const ch = src[i];
+      buf += ch;
+      run += 1;
+      const next = src[i + 1] || '';
+      const isBreakable = /[。！？.!?]/.test(ch) && (next === ' ' || next === '\n' || next === '\t' || next === '');
+      if (run > 220 && isBreakable) {
+        buf += '\n\n';
+        run = 0;
+      }
+      if (ch === '\n') run = 0;
+    }
+    return buf;
+  };
+
+  for (let i = 0; i < parts.length; i += 1) {
+    out.push(formatPlain(parts[i]));
+    if (blocks[i]) out.push(blocks[i]);
+  }
+  return out.join('');
+};
+
+const TypedAssistantMarkdown = memo(({ content, isStreaming }) => {
+  const target = useMemo(() => autoParagraphize(content), [content]);
+  const [typed, setTyped] = useState(target);
+  const rafRef = useRef(null);
+  const lastTargetRef = useRef(null);
+
+  useEffect(() => {
+    if (lastTargetRef.current !== target) {
+      lastTargetRef.current = target;
+      if (!isStreaming) {
+        setTyped(target);
+      } else {
+        setTyped((prev) => (prev.length > target.length ? '' : prev));
+      }
+    }
+  }, [target, isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      if (typed !== target) setTyped(target);
+      return;
+    }
+    if (typed.length >= target.length) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    let last = performance.now();
+    const step = (now) => {
+      const dt = now - last;
+      last = now;
+      const rate = Math.max(120, Math.min(520, Math.floor(target.length / 10)));
+      const add = Math.max(8, Math.floor((rate * dt) / 1000));
+      const nextLen = Math.min(target.length, typed.length + add);
+      setTyped(target.slice(0, nextLen));
+      if (nextLen < target.length) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [isStreaming, target, typed]);
+
+  return (
+    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray prose-p:mb-3 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 prose-strong:bg-yellow-50 prose-strong:text-gray-900 dark:prose-strong:bg-yellow-900/30 dark:prose-strong:text-white prose-strong:rounded prose-strong:px-1">
+      {typed}
+    </Markdown>
+  );
+});
+
 // Format "IFlow AI usage limit reached|<epoch>" into a local time string
 function formatUsageLimitText(text) {
   try {
@@ -554,7 +642,11 @@ const MessageComponent = memo(({
         </div>
       ) : (
         /* Assistant/System messages - 2 Column Layout */
-        <div className="flex gap-4 w-full max-w-4xl pr-4 group mb-2">
+        <div className={`flex gap-4 w-full max-w-4xl pr-4 group ${
+          (!isGrouped && message.type === 'assistant' && !message.isToolUse)
+            ? 'mb-6 pb-6 border-b border-gray-100 dark:border-gray-800'
+            : 'mb-2'
+        }`}>
           {/* Left Column: Avatar */}
           <div className="flex-shrink-0 flex flex-col items-center">
             {!isGrouped && (
@@ -1845,9 +1937,7 @@ const MessageComponent = memo(({
 
                   // Normal rendering for non-JSON content
                   return message.type === 'assistant' ? (
-                    <Markdown className="prose prose-sm max-w-none dark:prose-invert prose-gray prose-p:mb-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-code:px-1 prose-code:py-0.5 prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
-                      {content}
-                    </Markdown>
+                    <TypedAssistantMarkdown content={content} isStreaming={!!message.isStreaming} />
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}
@@ -2144,6 +2234,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  const scrollAnimRef = useRef(null);
+  const lastAutoScrollAtRef = useRef(0);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -3185,16 +3277,36 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // So we don't try to extract them from loaded sessionMessages
 
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
-  const scrollToBottom = useCallback(() => {
-    if (scrollContainerRef.current) {
-      // Virtuoso provides scrollToIndex method
-      scrollContainerRef.current.scrollToIndex({
-        index: 'LAST',
-        behavior: 'smooth'
-      });
-      // Don't reset isUserScrolledUp here - let the scroll handler manage it
-      // This prevents fighting with user's scroll position during streaming
+  const scrollToBottom = useCallback((durationMs = 380) => {
+    const virtuoso = scrollContainerRef.current;
+    const scroller = virtuoso?.scrollerRef?.current;
+
+    if (!scroller) {
+      virtuoso?.scrollToIndex?.({ index: 'LAST', behavior: 'smooth' });
+      return;
     }
+
+    const target = scroller.scrollHeight - scroller.clientHeight;
+    const start = scroller.scrollTop;
+    const change = target - start;
+    if (Math.abs(change) < 2) return;
+
+    if (scrollAnimRef.current) cancelAnimationFrame(scrollAnimRef.current);
+
+    const startTime = performance.now();
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now) => {
+      const p = Math.min(1, (now - startTime) / durationMs);
+      scroller.scrollTop = start + change * easeOutCubic(p);
+      if (p < 1) {
+        scrollAnimRef.current = requestAnimationFrame(step);
+      } else {
+        scrollAnimRef.current = null;
+      }
+    };
+
+    scrollAnimRef.current = requestAnimationFrame(step);
   }, []);
 
   // Check if user is near the bottom of the scroll container
@@ -4231,6 +4343,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
+  const lastMessageKey = useMemo(() => {
+    const m = chatMessages[chatMessages.length - 1];
+    if (!m) return '';
+    return [
+      m.id || '',
+      m.type || '',
+      m.isStreaming ? '1' : '0',
+      m.toolStatus || '',
+      String(m.content || '').length,
+      String(m.reasoning || '').length
+    ].join('|');
+  }, [chatMessages]);
+
   // Capture scroll position before render when auto-scroll is disabled
   useEffect(() => {
     if (!autoScrollToBottom && scrollContainerRef.current) {
@@ -4248,7 +4373,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       if (autoScrollToBottom) {
         // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
         if (!isUserScrolledUp) {
-          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
+          const now = Date.now();
+          if (now - lastAutoScrollAtRef.current > 120) {
+            lastAutoScrollAtRef.current = now;
+            setTimeout(() => scrollToBottom(380), 20);
+          }
         }
       } else {
         // When auto-scroll is disabled, preserve the visual position
@@ -4264,7 +4393,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-  }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
+  }, [lastMessageKey, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
 
   // Scroll to bottom when messages first load after session switch
   useEffect(() => {
@@ -4951,10 +5080,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   type: 'assistant',
                   isToolUse: true,
                   toolName: data.tool_name,
-                  toolType: data.tool_type,
+                  toolType: data.tool_type || 'generic',
                   toolLabel: data.label,
                   toolStatus: 'running',
                   agentInfo: data.agent_info,
+                  toolCallId: data.tool_call_id,
+                  toolParams: data.tool_params,
                   timestamp: new Date()
                 }]);
               } else if (data.type === 'tool_end') {
@@ -4963,8 +5094,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   const newHistory = [...prev];
                   // 找到最后一个匹配的工具卡片
                   for (let i = newHistory.length - 1; i >= 0; i--) {
-                    if (newHistory[i].isToolUse && newHistory[i].toolName === data.tool_name && newHistory[i].toolStatus === 'running') {
-                      newHistory[i] = { ...newHistory[i], toolStatus: data.status, agentInfo: data.agent_info };
+                    const matchById = data.tool_call_id && newHistory[i].toolCallId === data.tool_call_id;
+                    const matchByName = newHistory[i].toolName === data.tool_name;
+                    if (newHistory[i].isToolUse && newHistory[i].toolStatus === 'running' && (matchById || matchByName)) {
+                      newHistory[i] = {
+                        ...newHistory[i],
+                        toolStatus: data.status,
+                        agentInfo: data.agent_info,
+                        toolParams: data.tool_params ?? newHistory[i].toolParams,
+                        result: data.result,
+                        oldContent: data.old_content,
+                        newContent: data.new_content,
+                        output: data.output
+                      };
                       break;
                     }
                   }
@@ -4982,7 +5124,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               } else if (data.type === 'error') {
                 setChatMessages(prev => [...prev, {
                   type: 'error',
-                  content: data.content,
+                  content: `出错了：${data.content || '未知错误'}`,
                   timestamp: new Date()
                 }]);
               } else if (data.type === 'done') {
@@ -5004,7 +5146,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setChatMessages(prev => [...prev, { type: 'assistant', content: '\n\n*(已停止生成)*', timestamp: new Date() }]);
       } else {
         console.error("Agent Error:", e);
-        setChatMessages(prev => [...prev, { type: 'error', content: "Failed to connect to Agent: " + e.toString(), timestamp: new Date() }]);
+        setChatMessages(prev => [...prev, { type: 'error', content: `连接 Agent 失败，请稍后重试。\n\n详细信息：${String(e?.message || e)}`, timestamp: new Date() }]);
       }
     } finally {
       setIsLoading(false);

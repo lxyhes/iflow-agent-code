@@ -393,15 +393,31 @@ class IFlowSDKClient:
                         # 工具调用
                         self.tool_call_count += 1
                         tool_status = self._get_tool_call_status(message.status)
+                        tool_call_id = getattr(message, "tool_call_id", None) or getattr(message, "id", None)
+                        tool_type = getattr(message, "tool_type", None)
+                        tool_params = (
+                            getattr(message, "tool_params", None)
+                            or getattr(message, "params", None)
+                            or getattr(message, "arguments", None)
+                        )
+                        result = getattr(message, "result", None) or getattr(message, "output", None)
+                        old_content = getattr(message, "old_content", None) or getattr(message, "oldContent", None)
+                        new_content = getattr(message, "new_content", None) or getattr(message, "newContent", None)
 
                         yield {
                             "type": "tool_call",
                             "content": message.label or f"执行工具: {message.tool_name or 'unknown'}",
                             "metadata": {
+                                "tool_call_id": tool_call_id,
                                 "tool_name": message.tool_name,
+                                "tool_type": tool_type,
                                 "status": tool_status,
                                 "status_enum": str(message.status) if message.status else None,
-                                "agent_info": self._serialize_agent_info(message.agent_info) if message.agent_info else None
+                                "agent_info": self._serialize_agent_info(message.agent_info) if message.agent_info else None,
+                                "tool_params": tool_params,
+                                "result": result,
+                                "old_content": old_content,
+                                "new_content": new_content,
                             }
                         }
 
