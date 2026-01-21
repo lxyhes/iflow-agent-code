@@ -178,7 +178,7 @@ const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
   return (
     <div className="h-full flex flex-col">
       {showHeader && (
-        <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-900/60 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">节点库</h2>
@@ -224,7 +224,7 @@ const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
                   onClick={() =>
                     setCollapsedCategories((prev) => ({ ...prev, [category]: !prev[category] }))
                   }
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-left"
+                  className="w-full px-4 py-3 bg-gray-50/80 dark:bg-gray-900/40 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-2">
                     {isCollapsed ? (
@@ -248,10 +248,10 @@ const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
                           key={node.type}
                           onDragStart={(event) => onDragStart(event, node.type)}
                           draggable
-                          className="p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 rounded-xl cursor-grab transition-all duration-200 dark:bg-gray-900/40 dark:hover:bg-gray-900/70 dark:border-gray-700 dark:hover:border-gray-600"
+                          className="p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-2xl cursor-grab transition-all duration-200 shadow-sm hover:shadow dark:bg-gray-900/40 dark:hover:bg-gray-900/70 dark:border-gray-800 dark:hover:border-gray-700"
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-xl ${node.color} shadow-sm`}>
+                            <div className={`p-2 rounded-2xl ${node.color} shadow-sm`}>
                               <Icon className="w-4 h-4 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -276,7 +276,7 @@ const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
 
       {/* 快捷提示 */}
       {showFooter && (
-        <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-gradient-to-t from-white to-gray-50 dark:from-gray-900 dark:to-gray-900/60 border-t border-gray-200 dark:border-gray-800">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
             <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             快捷提示

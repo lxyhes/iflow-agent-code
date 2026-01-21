@@ -58,6 +58,7 @@ from backend.core.document_version_manager import get_version_manager
 from backend.core.database_query_service import database_query_service
 from backend.core.workflow_service import workflow_service
 from backend.core.workflow_executor import workflow_executor
+from backend.core.workflow_execution_store import workflow_execution_store
 
 app = FastAPI(title="IFlow Agent API")
 
@@ -5808,6 +5809,10 @@ async def execute_workflow_stream(workflow_id: str, project_name: str = Query(No
         return {"nodes": normalized_nodes, "edges": edges}
 
     async def event_generator():
+        execution_id = None
+        steps_total = 0
+        steps_completed = 0
+        started_at = datetime.now().isoformat()
         try:
             workflow = workflow_service.get_workflow(workflow_id)
             workflow_data = None
@@ -5829,7 +5834,19 @@ async def execute_workflow_stream(workflow_id: str, project_name: str = Query(No
                     }
 
             if not workflow_data:
-                yield f"data: {json.dumps({'type': 'error', 'error': 'Workflow not found'}, ensure_ascii=False)}\n\n"
+                execution_id = f"exec_{workflow_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                workflow_execution_store.create(execution_id, {
+                    "workflow_id": workflow_id,
+                    "workflow_name": None,
+                    "project_name": project_name,
+                    "status": "failed",
+                    "started_at": started_at,
+                    "ended_at": datetime.now().isoformat(),
+                    "error": "Workflow not found"
+                })
+                err_event = {'type': 'error', 'error': 'Workflow not found', 'execution_id': execution_id, 'timestamp': datetime.now().isoformat()}
+                workflow_execution_store.append_event(execution_id, err_event)
+                yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
                 return
 
             resolved_project_name = project_name or workflow_data.get("project_name")
@@ -5837,16 +5854,69 @@ async def execute_workflow_stream(workflow_id: str, project_name: str = Query(No
 
             normalized_graph = normalize_workflow_graph(workflow_data.get("nodes", []), workflow_data.get("edges", []))
 
+            execution_id = f"exec_{workflow_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            workflow_execution_store.create(execution_id, {
+                "workflow_id": workflow_id,
+                "workflow_name": (workflow.name if workflow else None),
+                "project_name": resolved_project_name,
+                "status": "running",
+                "started_at": started_at,
+                "steps_total": 0,
+                "steps_completed": 0
+            })
+
             async for update in workflow_executor.execute_workflow_stream(
                 workflow_id,
                 normalized_graph,
                 project_path,
                 context={"project_name": resolved_project_name}
             ):
+                if isinstance(update, dict):
+                    update = {**update, "execution_id": execution_id}
+
+                if isinstance(update, dict) and update.get("type") == "plan":
+                    steps_total = int(update.get("steps_total") or 0)
+                    workflow_execution_store.update(execution_id, {"steps_total": steps_total})
+
+                if isinstance(update, dict) and update.get("type") == "step_complete":
+                    steps_completed += 1
+                    workflow_execution_store.update(execution_id, {"steps_completed": steps_completed})
+
+                if isinstance(update, dict) and update.get("type") == "error":
+                    workflow_execution_store.update(execution_id, {
+                        "status": "failed",
+                        "ended_at": datetime.now().isoformat(),
+                        "error": update.get("error")
+                    })
+
+                if isinstance(update, dict) and update.get("type") == "complete":
+                    workflow_execution_store.update(execution_id, {
+                        "status": "completed",
+                        "ended_at": datetime.now().isoformat(),
+                        "steps_total": steps_total,
+                        "steps_completed": steps_completed
+                    })
+
+                if isinstance(update, dict):
+                    workflow_execution_store.append_event(execution_id, update)
+
                 yield f"data: {json.dumps(update, ensure_ascii=False)}\n\n"
         except Exception as e:
             logger.error(f"Error executing workflow stream: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+            if not execution_id:
+                execution_id = f"exec_{workflow_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                workflow_execution_store.create(execution_id, {
+                    "workflow_id": workflow_id,
+                    "workflow_name": (workflow.name if workflow else None) if 'workflow' in locals() else None,
+                    "project_name": project_name,
+                    "status": "failed",
+                    "started_at": started_at,
+                    "ended_at": datetime.now().isoformat(),
+                    "error": str(e)
+                })
+            err_event = {'type': 'error', 'error': str(e), 'execution_id': execution_id, 'timestamp': datetime.now().isoformat()}
+            workflow_execution_store.append_event(execution_id, err_event)
+            yield f"data: {json.dumps(err_event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -5857,6 +5927,22 @@ async def execute_workflow_stream(workflow_id: str, project_name: str = Query(No
 @app.get("/api/workflows/stream/{workflow_id}/execute")
 async def execute_workflow_stream_route(workflow_id: str, project_name: str = Query(None)):
     return await execute_workflow_stream(workflow_id, project_name)
+
+@app.get("/api/workflows/executions")
+async def list_workflow_executions(
+    limit: int = Query(50, ge=1, le=200),
+    workflow_id: str = Query(None),
+    project_name: str = Query(None)
+):
+    items = workflow_execution_store.list(limit=limit, workflow_id=workflow_id, project_name=project_name)
+    return {"success": True, "executions": items}
+
+@app.get("/api/workflows/executions/{execution_id}")
+async def get_workflow_execution(execution_id: str):
+    record = workflow_execution_store.get(execution_id)
+    if not record:
+        return JSONResponse({"error": "Execution not found"}, status_code=404)
+    return {"success": True, "execution": record}
 
 
 # --- Catch-all 路由 ---

@@ -26,6 +26,8 @@ import { nodeTypes } from './workflow/CustomNodes';
 import NodePropertiesPanel from './workflow/NodePropertiesPanel';
 import AiRefinementDialog from './workflow/AiRefinementDialog';
 import WorkflowValidationPanel from './workflow/WorkflowValidationPanel';
+import ExecutionHistoryPanel from './workflow/ExecutionHistoryPanel';
+import WorkflowTemplateModal from './workflow/WorkflowTemplateModal';
 import { authenticatedFetch } from '../utils/api';
 import { useToast } from '../contexts/ToastContext';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
@@ -36,6 +38,7 @@ import {
   downloadClaudeCommandFile
 } from '../utils/iflowWorkflowExporter';
 import { validateWorkflow as validateWorkflowStructure } from '../utils/workflowValidator';
+import { cloneWorkflowTemplate } from './workflow/workflowTemplates';
 
 const SAMPLE_NODES = [
   {
@@ -106,6 +109,8 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showExecutionHistory, setShowExecutionHistory] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [executionStats, setExecutionStats] = useState({
@@ -122,6 +127,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const lastExecutingNodeIdRef = useRef(null);
   const currentExecutingNodeIdRef = useRef(null);
   const [logsDock, setLogsDock] = useState('side');
+  const [lastExecutionId, setLastExecutionId] = useState(null);
 
   useEffect(() => {
     if (hasInitialized) return;
@@ -519,6 +525,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         const now = new Date().toISOString();
 
         if (data.type === 'start') {
+          if (data.execution_id) setLastExecutionId(data.execution_id);
           setExecutionLogs((prev) => [
             ...prev,
             { type: 'info', message: '工作流开始执行...', timestamp: now }
@@ -653,6 +660,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             currentNodeLabel: null,
           }));
         } else if (data.type === 'error') {
+          if (data.execution_id) setLastExecutionId(data.execution_id);
           const nodeId = data.node_id || null;
           if (nodeId) {
             setNodes((nds) =>
@@ -782,9 +790,9 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-gradient-to-b from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
       {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between gap-4 px-4 md:px-6 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between gap-4 px-4 md:px-6 py-3 bg-white/75 dark:bg-gray-900/55 backdrop-blur border-b border-gray-200/70 dark:border-gray-800 shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
           {isEditingName ? (
             <input
@@ -816,6 +824,22 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowTemplateModal(true)}
+            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 shadow-sm transition-colors dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 dark:border-gray-700"
+            title="选择工作流模板"
+          >
+            <LayoutGrid className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <span>模板</span>
+          </button>
+          <button
+            onClick={() => setShowExecutionHistory(true)}
+            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
+            title="查看执行历史"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>历史</span>
+          </button>
           <button
             onClick={() => setShowLibrary(true)}
             className="lg:hidden inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
@@ -1403,6 +1427,29 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           onConfirm={confirmDialog.onConfirm}
         />
       )}
+
+      <ExecutionHistoryPanel
+        isOpen={showExecutionHistory}
+        onClose={() => setShowExecutionHistory(false)}
+        projectName={selectedProject?.name || projectName}
+        workflowId={null}
+      />
+
+      <WorkflowTemplateModal
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onPickTemplate={(tpl) => {
+          const graph = cloneWorkflowTemplate(tpl);
+          setWorkflowName(tpl.name);
+          setNodes(graph.nodes);
+          setEdges(graph.edges);
+          setShowPropertiesPanel(false);
+          setSelectedNode(null);
+          setShowLogs(false);
+          setShowTemplateModal(false);
+          toast.success(`已应用模板：${tpl.name}`);
+        }}
+      />
     </div>
   );
 };
