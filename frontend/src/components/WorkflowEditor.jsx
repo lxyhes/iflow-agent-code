@@ -20,8 +20,8 @@ import 'reactflow/dist/style.css';
 
 import {
   Save, Play, Trash2, RefreshCw,
-  Sparkles, Download, Upload, ChevronDown, CheckCircle,
-  LayoutGrid, PanelLeft, X, Undo2, Redo2
+  Sparkles, Download, Upload, CheckCircle,
+  LayoutGrid, PanelLeft, X, Undo2, Redo2, MoreHorizontal, Copy, Box
 } from 'lucide-react';
 import NodeLibrary from './workflow/NodeLibrary';
 import { nodeTypes } from './workflow/CustomNodes';
@@ -31,11 +31,14 @@ import WorkflowValidationPanel from './workflow/WorkflowValidationPanel';
 import ExecutionHistoryPanel from './workflow/ExecutionHistoryPanel';
 import WorkflowTemplateModal from './workflow/WorkflowTemplateModal';
 import WorkflowDraftBanner from './workflow/WorkflowDraftBanner';
+import NodeSearchDialog from './workflow/NodeSearchDialog';
+import SaveTemplateDialog from './workflow/SaveTemplateDialog';
 import { useWorkflowHistory } from './workflow/useWorkflowHistory';
 import { useWorkflowAutosave } from './workflow/useWorkflowAutosave';
 import { useWorkflowShortcuts } from './workflow/useWorkflowShortcuts';
 import { normalizeImportedWorkflow } from './workflow/workflowImportExport';
 import { computeGraphSignature } from './workflow/workflowGraphUtils';
+import { upsertCustomTemplate } from './workflow/workflowTemplateStorage';
 import { authenticatedFetch } from '../utils/api';
 import { useToast } from '../contexts/ToastContext';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
@@ -114,12 +117,16 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [executing, setExecuting] = useState(false);
   const [executionLogs, setExecutionLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
+  const [logFilter, setLogFilter] = useState('all');
+  const [logQuery, setLogQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
   const [selection, setSelection] = useState({ nodes: [], edges: [] });
+  const [showNodeSearch, setShowNodeSearch] = useState(false);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showExecutionHistory, setShowExecutionHistory] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [executionStats, setExecutionStats] = useState({
@@ -136,7 +143,43 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const lastExecutingNodeIdRef = useRef(null);
   const currentExecutingNodeIdRef = useRef(null);
   const [logsDock, setLogsDock] = useState('side');
+  const [is3DMode, setIs3DMode] = useState(false);
   const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+  const [lastManualSavedSignature, setLastManualSavedSignature] = useState(null);
+  const [saveFlash, setSaveFlash] = useState(null);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('iflow:workflow:logsDock');
+      if (v === 'side' || v === 'bottom' || v === 'floating') {
+        setLogsDock(v);
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('iflow:workflow:3dMode');
+      if (v === '1') setIs3DMode(true);
+      else if (v === '0') setIs3DMode(false);
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('iflow:workflow:logsDock', logsDock);
+    } catch {
+    }
+  }, [logsDock]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('iflow:workflow:3dMode', is3DMode ? '1' : '0');
+    } catch {
+    }
+  }, [is3DMode]);
 
   const history = useWorkflowHistory({ initialNodes: [], initialEdges: [] });
   const nodesRef = useRef(nodes);
@@ -168,6 +211,22 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     ? computeGraphSignature({ workflowName: workflowDraft.workflow_name, nodes: workflowDraft.nodes, edges: workflowDraft.edges })
     : null;
   const showDraftBanner = autosaveMeta.hadDraftOnInit && !draftBannerDismissed && workflowDraft && draftSignature !== currentSignature;
+  const isDirty = lastManualSavedSignature !== null && currentSignature !== lastManualSavedSignature;
+
+  useEffect(() => {
+    if (!hasInitialized) return;
+    setLastManualSavedSignature((prev) => (prev === null ? currentSignature : prev));
+  }, [currentSignature, hasInitialized]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   const applyGraph = useCallback((graph) => {
     setNodes(graph.nodes || []);
@@ -201,6 +260,44 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       edges: Array.isArray(sel.edges) ? sel.edges : [],
     });
   }, []);
+
+  const focusNode = useCallback((node) => {
+    if (!node || !reactFlowInstance) return;
+    try {
+      reactFlowInstance.fitView({ nodes: [node], padding: 0.35, duration: 300 });
+    } catch {
+    }
+  }, [reactFlowInstance]);
+
+  const focusCurrentExecutingNode = useCallback(() => {
+    const nodeId = currentExecutingNodeIdRef.current;
+    if (!nodeId) return;
+    const node = nodesRef.current.find((n) => n.id === nodeId);
+    if (!node) return;
+    focusNode(node);
+  }, [focusNode]);
+
+  const copyText = useCallback(async (text) => {
+    const value = String(text ?? '');
+    if (!value) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      toast.success('已复制');
+    } catch (_e) {
+      toast.error('复制失败');
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (hasInitialized) return;
@@ -347,6 +444,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   // 保存工作流
   const handleSave = async () => {
     try {
+      setSaveFlash(null);
       setLoading(true);
 
       const workflowData = {
@@ -368,11 +466,18 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
       if (data.success) {
         markSaved();
+        setLastManualSavedSignature(computeGraphSignature({ workflowName, nodes: nodesRef.current, edges: edgesRef.current }));
+        setSaveFlash('saved');
+        window.setTimeout(() => setSaveFlash(null), 1200);
         toast.success('工作流保存成功');
       } else {
+        setSaveFlash('error');
+        window.setTimeout(() => setSaveFlash(null), 1200);
         toast.error(`保存失败：${data.error || '未知错误'}`);
       }
     } catch (error) {
+      setSaveFlash('error');
+      window.setTimeout(() => setSaveFlash(null), 1200);
       toast.error(`保存失败：${error.message}`);
     } finally {
       setLoading(false);
@@ -438,6 +543,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     onToggleLibrary: () => setShowLibrary((v) => !v),
     onDeleteSelection: handleDeleteSelection,
     onDuplicate: handleDuplicate,
+    onFind: () => setShowNodeSearch(true),
   });
 
   // AI 迭代优化
@@ -788,8 +894,8 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           });
         } else if (data.type === 'step_output') {
           const nodeId = data.node_id || currentExecutingNodeIdRef.current;
+          const output = String(data.output ?? '');
           if (nodeId) {
-            const output = String(data.output ?? '');
             setNodes((nds) =>
               nds.map((node) => {
                 if (node.id !== nodeId) return node;
@@ -798,9 +904,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             );
           }
 
+          const outputForLog = output.length > 2000 ? `${output.slice(0, 2000)}…` : output;
           setExecutionLogs((prev) => [
             ...prev,
-            { type: 'success', message: `节点输出: ${data.output}`, timestamp: now }
+            { type: 'success', message: `节点输出: ${outputForLog}`, timestamp: now, data: { output, nodeId } }
           ]);
         } else if (data.type === 'step_complete') {
           const nodeId = data.node_id || null;
@@ -839,10 +946,16 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             setNodes((nds) =>
               nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, status: 'error' } } : n))
             );
+            const node = nodesRef.current.find((n) => n.id === nodeId);
+            if (node) {
+              focusNode(node);
+              setSelectedNode(node);
+              setShowPropertiesPanel(true);
+            }
           }
           setExecutionLogs((prev) => [
             ...prev,
-            { type: 'error', message: `错误: ${data.error}`, timestamp: now }
+            { type: 'error', message: `错误: ${data.error}`, timestamp: now, data: { nodeId } }
           ]);
           setExecuting(false);
           eventSourceRef.current?.close?.();
@@ -990,10 +1103,22 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     );
   };
 
+  const visibleExecutionLogs = executionLogs.filter((log) => {
+    if (logFilter === 'error' && log.type !== 'error') return false;
+    if (logFilter === 'output' && !(log.type === 'success' || log.type === 'chunk')) return false;
+
+    const q = logQuery.trim().toLowerCase();
+    if (!q) return true;
+    const message = String(log.message ?? '').toLowerCase();
+    const output = String(log.data?.output ?? '').slice(0, 4000).toLowerCase();
+    const nodeId = String(log.data?.nodeId ?? '').toLowerCase();
+    return message.includes(q) || output.includes(q) || nodeId.includes(q);
+  });
+
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-slate-50 via-white to-slate-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
       {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between gap-4 px-4 md:px-6 py-3 bg-white/75 dark:bg-gray-900/55 backdrop-blur border-b border-gray-200/70 dark:border-gray-800 shadow-sm">
+      <div className="relative z-[60] flex items-center justify-between gap-4 px-4 md:px-6 py-3 bg-white/75 dark:bg-gray-900/55 backdrop-blur border-b border-gray-200/70 dark:border-gray-800 shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
           {isEditingName ? (
             <input
@@ -1010,7 +1135,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
               className="text-lg md:text-xl font-bold text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate"
               onClick={() => setIsEditingName(true)}
             >
-              {workflowName}
+              <span className="inline-flex items-center gap-2 min-w-0">
+                <span className="truncate">{workflowName}</span>
+                {isDirty && <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />}
+              </span>
             </h1>
           )}
           
@@ -1021,6 +1149,17 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600">
               {edges.length} 连线
             </span>
+            {lastManualSavedSignature !== null && (
+              <span
+                className={`px-2 py-1 rounded-full border ${
+                  isDirty
+                    ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800/70 dark:text-amber-200'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800/70 dark:text-emerald-200'
+                }`}
+              >
+                {isDirty ? '未保存' : '已保存'}
+              </span>
+            )}
             {autosaveMeta.lastSavedAtText && (
               <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600">
                 草稿 {autosaveMeta.lastSavedAtText}
@@ -1037,6 +1176,20 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           >
             <PanelLeft className="w-4 h-4" />
             <span className="hidden sm:inline">节点库</span>
+          </button>
+
+          <button
+            onClick={() => setIs3DMode((v) => !v)}
+            className={`hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+              is3DMode
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600'
+            }`}
+            title="3D 视觉效果"
+            aria-label="3D 视觉效果"
+          >
+            <Box className="w-4 h-4" />
+            <span>3D</span>
           </button>
 
           <button
@@ -1072,7 +1225,9 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             className="hidden sm:inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>{loading ? '保存中...' : '保存'}</span>
+            <span>
+              {loading ? '保存中...' : saveFlash === 'saved' ? '已保存' : saveFlash === 'error' ? '失败' : '保存'}
+            </span>
           </button>
 
           <div className="relative" ref={actionsMenuRef}>
@@ -1080,13 +1235,15 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
               onClick={() => setShowActionsMenu((v) => !v)}
               className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 hover:bg-gray-950 text-white rounded-lg text-sm font-medium transition-colors dark:bg-gray-700 dark:hover:bg-gray-600"
               aria-expanded={showActionsMenu}
+              title="菜单"
+              aria-label="菜单"
             >
-              <ChevronDown className="w-4 h-4" />
-              <span className="hidden sm:inline">更多</span>
+              <MoreHorizontal className="w-4 h-4" />
+              <span>菜单</span>
             </button>
 
             {showActionsMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-[70] overflow-hidden">
                 <div className="px-3 py-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-950/40 border-b border-gray-200 dark:border-gray-800">
                   快速操作
                 </div>
@@ -1099,6 +1256,16 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                 >
                   <LayoutGrid className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                   <span className="flex-1">模板库</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowSaveTemplate(true);
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">保存为模板</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1312,6 +1479,38 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         </div>
       )}
 
+      <NodeSearchDialog
+        open={showNodeSearch}
+        nodes={nodes}
+        onClose={() => setShowNodeSearch(false)}
+        onPick={(node) => {
+          setShowNodeSearch(false);
+          focusNode(node);
+          setSelectedNode(node);
+          setShowPropertiesPanel(true);
+        }}
+      />
+
+      <SaveTemplateDialog
+        open={showSaveTemplate}
+        initialName={workflowName}
+        onClose={() => setShowSaveTemplate(false)}
+        onSave={(meta) => {
+          const id = `custom_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+          upsertCustomTemplate({
+            id,
+            name: meta.name,
+            category: meta.category,
+            tags: meta.tags,
+            description: meta.description,
+            nodes: nodesRef.current,
+            edges: edgesRef.current,
+          });
+          setShowSaveTemplate(false);
+          toast.success('已保存为模板（我的）');
+        }}
+      />
+
       {/* AI 生成面板 */}
       {showAiPanel && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
@@ -1386,10 +1585,80 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                 <RefreshCw className={`w-4 h-4 ${executing ? 'animate-spin' : ''} text-blue-600 dark:text-blue-400`} />
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">执行日志</h3>
                 <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-                  {executionLogs.length} 条
+                  {visibleExecutionLogs.length} 条
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <input
+                  value={logQuery}
+                  onChange={(e) => setLogQuery(e.target.value)}
+                  placeholder="搜索日志"
+                  className="hidden md:block w-44 px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = visibleExecutionLogs
+                      .map((log) => {
+                        const ts = new Date(log.timestamp).toLocaleString();
+                        const body = log.data?.output ? String(log.data.output) : String(log.message ?? '');
+                        return `[${ts}] [${log.type}] ${body}`;
+                      })
+                      .join('\n\n');
+                    copyText(text);
+                  }}
+                  disabled={visibleExecutionLogs.length === 0}
+                  className="hidden sm:inline-flex items-center px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  复制可见
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!window.confirm('确定清空执行日志？')) return;
+                    setExecutionLogs([]);
+                    setLogQuery('');
+                  }}
+                  disabled={executionLogs.length === 0}
+                  className="hidden sm:inline-flex items-center px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  清空
+                </button>
+                <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setLogFilter('all')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logFilter === 'all'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    全部
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogFilter('error')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logFilter === 'error'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    错误
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogFilter('output')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logFilter === 'output'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    输出
+                  </button>
+                </div>
                 <div className="hidden sm:flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
                   <button
                     type="button"
@@ -1435,10 +1704,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
               </div>
             </div>
             <div className={logsDock === 'bottom' ? 'px-4 py-3 h-56 overflow-y-auto bg-gray-50 dark:bg-gray-900' : 'px-4 py-3 max-h-64 overflow-y-auto bg-gray-50 dark:bg-gray-900'}>
-              {executionLogs.length === 0 ? (
+              {visibleExecutionLogs.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm">暂无日志</p>
               ) : (
-                executionLogs.map((log, index) => (
+                visibleExecutionLogs.map((log, index) => (
                   <div
                     key={index}
                     className={`mb-3 text-sm ${
@@ -1457,6 +1726,32 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                           {String(log.message ?? '')}
                         </MarkdownRenderer>
                       </div>
+                      {(log.type === 'success' || log.type === 'error') && log.data?.nodeId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const node = nodesRef.current.find((n) => n.id === log.data.nodeId);
+                            if (!node) return;
+                            focusNode(node);
+                            setSelectedNode(node);
+                            setShowPropertiesPanel(true);
+                          }}
+                          className="mt-0.5 px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors text-[11px]"
+                        >
+                          定位
+                        </button>
+                      )}
+                      {log.type === 'success' && log.data?.output && (
+                        <button
+                          type="button"
+                          onClick={() => copyText(log.data.output)}
+                          className="mt-0.5 w-8 h-8 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors flex items-center justify-center"
+                          aria-label="复制输出"
+                          title="复制输出"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -1473,7 +1768,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             <NodeLibrary />
           </div>
 
-          <div className="flex-1 min-w-0 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden relative" ref={reactFlowWrapper}>
+          <div
+            className={`flex-1 min-w-0 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden relative ${is3DMode ? 'iflow-workflow-3d' : ''}`}
+            ref={reactFlowWrapper}
+          >
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -1543,6 +1841,23 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                         }}
                       />
                     </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={focusCurrentExecutingNode}
+                        disabled={!executionStats.currentNodeId}
+                        className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        定位当前
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowLogs(true)}
+                        className="flex-1 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
+                      >
+                        打开日志
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1588,10 +1903,80 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                     <RefreshCw className={`w-4 h-4 ${executing ? 'animate-spin' : ''} text-blue-600 dark:text-blue-400`} />
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">执行日志</h3>
                     <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-                      {executionLogs.length} 条
+                      {visibleExecutionLogs.length} 条
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <input
+                      value={logQuery}
+                      onChange={(e) => setLogQuery(e.target.value)}
+                      placeholder="搜索"
+                      className="w-32 px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = visibleExecutionLogs
+                          .map((log) => {
+                            const ts = new Date(log.timestamp).toLocaleString();
+                            const body = log.data?.output ? String(log.data.output) : String(log.message ?? '');
+                            return `[${ts}] [${log.type}] ${body}`;
+                          })
+                          .join('\n\n');
+                        copyText(text);
+                      }}
+                      disabled={visibleExecutionLogs.length === 0}
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      复制
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!window.confirm('确定清空执行日志？')) return;
+                        setExecutionLogs([]);
+                        setLogQuery('');
+                      }}
+                      disabled={executionLogs.length === 0}
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      清空
+                    </button>
+                    <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setLogFilter('all')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logFilter === 'all'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        全部
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogFilter('error')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logFilter === 'error'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        错误
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogFilter('output')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logFilter === 'output'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        输出
+                      </button>
+                    </div>
                     <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
                       <button
                         type="button"
@@ -1637,10 +2022,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                   </div>
                 </div>
                 <div className="px-4 py-3 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900">
-                  {executionLogs.length === 0 ? (
+                  {visibleExecutionLogs.length === 0 ? (
                     <p className="text-gray-500 dark:text-gray-400 text-sm">暂无日志</p>
                   ) : (
-                    executionLogs.map((log, index) => (
+                    visibleExecutionLogs.map((log, index) => (
                       <div
                         key={index}
                         className={`mb-3 text-sm ${
@@ -1659,6 +2044,32 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                               {String(log.message ?? '')}
                             </MarkdownRenderer>
                           </div>
+                          {(log.type === 'success' || log.type === 'error') && log.data?.nodeId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const node = nodesRef.current.find((n) => n.id === log.data.nodeId);
+                                if (!node) return;
+                                focusNode(node);
+                                setSelectedNode(node);
+                                setShowPropertiesPanel(true);
+                              }}
+                              className="mt-0.5 px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors text-[11px]"
+                            >
+                              定位
+                            </button>
+                          )}
+                          {log.type === 'success' && log.data?.output && (
+                            <button
+                              type="button"
+                              onClick={() => copyText(log.data.output)}
+                              className="mt-0.5 w-8 h-8 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors flex items-center justify-center"
+                              aria-label="复制输出"
+                              title="复制输出"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1783,6 +2194,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           setWorkflowName(tpl.name);
           setNodes(graph.nodes);
           setEdges(graph.edges);
+          history.reset({ nodes: graph.nodes, edges: graph.edges });
           setShowPropertiesPanel(false);
           setSelectedNode(null);
           setShowLogs(false);

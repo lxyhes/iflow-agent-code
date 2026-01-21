@@ -94,6 +94,68 @@
   }
 }
 
+@layer utilities {
+  .iflow-workflow-3d {
+    perspective: 1100px;
+  }
+
+  .iflow-workflow-3d .react-flow__viewport {
+    transform-style: preserve-3d;
+  }
+
+  .iflow-workflow-3d .react-flow {
+    background:
+      radial-gradient(900px 560px at 18% 18%, rgba(99, 102, 241, 0.12), transparent 55%),
+      radial-gradient(900px 560px at 82% 22%, rgba(168, 85, 247, 0.10), transparent 55%),
+      radial-gradient(900px 560px at 55% 86%, rgba(16, 185, 129, 0.08), transparent 55%);
+  }
+
+  .iflow-workflow-3d .react-flow__edge-path,
+  .iflow-workflow-3d .react-flow__connection-path {
+    filter: drop-shadow(0 6px 10px rgba(15, 23, 42, 0.20));
+  }
+
+  .iflow-workflow-3d .iflow-node-frame {
+    transform: translateZ(0);
+    transform-style: preserve-3d;
+    box-shadow:
+      0 18px 30px rgba(15, 23, 42, 0.18),
+      0 6px 10px rgba(15, 23, 42, 0.10);
+    transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  }
+
+  .iflow-workflow-3d .iflow-node-frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1rem;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+    mix-blend-mode: overlay;
+    opacity: 0.55;
+  }
+
+  .dark .iflow-workflow-3d .iflow-node-frame::before {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+    opacity: 0.35;
+  }
+
+  .iflow-workflow-3d .iflow-node-frame:hover {
+    transform: translateZ(18px) rotateX(6deg) rotateY(-7deg) translateY(-1px);
+    box-shadow:
+      0 26px 46px rgba(15, 23, 42, 0.22),
+      0 10px 18px rgba(15, 23, 42, 0.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .iflow-workflow-3d .iflow-node-frame,
+    .iflow-workflow-3d .iflow-node-frame:hover {
+      transition: none;
+      transform: translateZ(0);
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

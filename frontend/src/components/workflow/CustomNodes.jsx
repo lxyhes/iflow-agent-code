@@ -49,7 +49,7 @@ const NodeFrame = ({ status, accent, children, className }) => {
   return (
     <div
       className={cx(
-        'relative rounded-2xl px-4 py-3 shadow-sm transition-all',
+        'iflow-node-frame relative rounded-2xl px-4 py-3 shadow-sm transition-all',
         'bg-white dark:bg-gray-900',
         'border border-gray-200 dark:border-gray-700',
         ringClass,

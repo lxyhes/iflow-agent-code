@@ -1,0 +1,105 @@
+{
+  "id": "workflow_20260121_215843",
+  "name": "New Workflow",
+  "nodes": [
+    {
+      "id": "1",
+      "type": "start",
+      "position": {
+        "x": 250,
+        "y": 50
+      },
+      "data": {
+        "label": "开始"
+      },
+      "width": 150,
+      "height": 46
+    },
+    {
+      "id": "2",
+      "type": "prompt",
+      "position": {
+        "x": 250,
+        "y": 150
+      },
+      "data": {
+        "label": "分析代码",
+        "prompt": "请分析以下代码的质量和潜在问题"
+      },
+      "width": 241,
+      "height": 66
+    },
+    {
+      "id": "3",
+      "type": "condition",
+      "position": {
+        "x": 250,
+        "y": 280
+      },
+      "data": {
+        "label": "是否有问题?",
+        "condition": "issues_found"
+      },
+      "width": 200,
+      "height": 66
+    },
+    {
+      "id": "4",
+      "type": "action",
+      "position": {
+        "x": 100,
+        "y": 400
+      },
+      "data": {
+        "label": "生成修复建议",
+        "action": "generate_fix"
+      },
+      "width": 160,
+      "height": 46
+    },
+    {
+      "id": "5",
+      "type": "end",
+      "position": {
+        "x": 400,
+        "y": 400
+      },
+      "data": {
+        "label": "结束"
+      },
+      "width": 150,
+      "height": 46
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1-2",
+      "source": "1",
+      "target": "2",
+      "animated": true
+    },
+    {
+      "id": "e2-3",
+      "source": "2",
+      "target": "3",
+      "animated": true
+    },
+    {
+      "id": "e3-4",
+      "source": "3",
+      "target": "4",
+      "animated": true,
+      "label": "是"
+    },
+    {
+      "id": "e3-5",
+      "source": "3",
+      "target": "5",
+      "animated": true,
+      "label": "否"
+    }
+  ],
+  "project_name": "workflows",
+  "created_at": "2026-01-21T21:58:43.143691",
+  "updated_at": "2026-01-21T21:58:43.143775"
+}

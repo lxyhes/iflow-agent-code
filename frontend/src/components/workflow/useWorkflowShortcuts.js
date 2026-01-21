@@ -17,6 +17,7 @@ export function useWorkflowShortcuts({
   onToggleLibrary,
   onDeleteSelection,
   onDuplicate,
+  onFind,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -51,6 +52,12 @@ export function useWorkflowShortcuts({
         return;
       }
 
+      if (mod && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        onFind?.();
+        return;
+      }
+
       if (mod && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         onDuplicate?.();
@@ -65,5 +72,5 @@ export function useWorkflowShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, onSave, onUndo, onRedo, onToggleLibrary, onDeleteSelection, onDuplicate]);
+  }, [enabled, onSave, onUndo, onRedo, onToggleLibrary, onDeleteSelection, onDuplicate, onFind]);
 }

@@ -60,7 +60,7 @@ const WorkflowValidationPanel = ({ validationResult, onClose }) => {
   const SummaryIcon = summary.icon;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[140] p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* 头部 */}
         <div className={`flex items-center justify-between px-6 py-4 ${summary.bgColor} rounded-t-xl border-b ${summary.borderColor}`}>
