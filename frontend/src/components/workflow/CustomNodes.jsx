@@ -24,6 +24,23 @@ const baseNodeStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
+  position: 'relative',
+};
+
+// 状态指示器
+const StatusBadge = ({ status }) => {
+  if (!status) return null;
+  
+  const colors = {
+    executing: '#3b82f6', // blue
+    success: '#22c55e',   // green
+    error: '#ef4444',     // red
+  };
+  
+  return (
+    <div className={`absolute -top-2 -right-2 w-4 h-4 rounded-full border-2 border-gray-900 shadow-lg ${status === 'executing' ? 'animate-pulse' : ''}`}
+         style={{ background: colors[status] || '#9ca3af' }} />
+  );
 };
 
 // 开始节点
@@ -31,9 +48,10 @@ export const StartNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#22c55e',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#22c55e'),
       background: 'linear-gradient(135deg, #1f2937 0%, #14532d 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#22c55e' }} />
       <Play className="w-4 h-4 text-green-400" />
       <span>{data.label}</span>
@@ -46,9 +64,10 @@ export const EndNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#ef4444',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#ef4444'),
       background: 'linear-gradient(135deg, #1f2937 0%, #7f1d1d 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#ef4444' }} />
       <StopCircle className="w-4 h-4 text-red-400" />
       <span>{data.label}</span>
@@ -61,10 +80,11 @@ export const PromptNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#a855f7',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#a855f7'),
       background: 'linear-gradient(135deg, #1f2937 0%, #581c87 100%)',
       minWidth: '200px',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#a855f7' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#a855f7' }} />
       <div className="flex items-start gap-2 w-full">
@@ -85,10 +105,11 @@ export const ConditionNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#3b82f6',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#3b82f6'),
       background: 'linear-gradient(135deg, #1f2937 0%, #1e3a8a 100%)',
       minWidth: '180px',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#3b82f6' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#3b82f6' }} />
       <GitBranch className="w-4 h-4 text-blue-400" />
@@ -107,9 +128,10 @@ export const ActionNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#f97316',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#f97316'),
       background: 'linear-gradient(135deg, #1f2937 0%, #7c2d12 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#f97316' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#f97316' }} />
       <Zap className="w-4 h-4 text-orange-400" />
@@ -123,9 +145,10 @@ export const AskUserNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#eab308',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#eab308'),
       background: 'linear-gradient(135deg, #1f2937 0%, #713f12 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#eab308' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#eab308' }} />
       <HelpCircle className="w-4 h-4 text-yellow-400" />
@@ -139,9 +162,10 @@ export const SubAgentNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#c084fc',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#c084fc'),
       background: 'linear-gradient(135deg, #1f2937 0%, #6b21a8 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#c084fc' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#c084fc' }} />
       <Bot className="w-4 h-4 text-purple-300" />
@@ -155,9 +179,10 @@ export const McpNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#06b6d4',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#06b6d4'),
       background: 'linear-gradient(135deg, #1f2937 0%, #164e63 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#06b6d4' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#06b6d4' }} />
       <Cpu className="w-4 h-4 text-cyan-400" />
@@ -171,9 +196,10 @@ export const SkillNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#ec4899',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#ec4899'),
       background: 'linear-gradient(135deg, #1f2937 0%, #831843 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#ec4899' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#ec4899' }} />
       <Sparkles className="w-4 h-4 text-pink-400" />
@@ -187,12 +213,13 @@ export const ReadFileNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#14b8a6',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#14b8a6'),
       background: 'linear-gradient(135deg, #1f2937 0%, #134e4a 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#14b8a6' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#14b8a6' }} />
-      <FileText className="w-4 h-4 text-teal-400" />
+      <FileText className="w-5 h-5 text-teal-400" />
       <span>{data.label}</span>
     </div>
   );
@@ -203,12 +230,13 @@ export const WriteFileNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#0d9488',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#0d9488'),
       background: 'linear-gradient(135deg, #1f2937 0%, #115e59 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#0d9488' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#0d9488' }} />
-      <Edit3 className="w-4 h-4 text-teal-500" />
+      <Edit3 className="w-5 h-5 text-teal-500" />
       <span>{data.label}</span>
     </div>
   );
@@ -219,9 +247,10 @@ export const SearchFilesNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#0f766e',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#0f766e'),
       background: 'linear-gradient(135deg, #1f2937 0%, #0f5132 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#0f766e' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#0f766e' }} />
       <Search className="w-4 h-4 text-teal-600" />
@@ -235,9 +264,10 @@ export const GitCommitNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#10b981',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#10b981'),
       background: 'linear-gradient(135deg, #1f2937 0%, #064e3b 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#10b981' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#10b981' }} />
       <GitPullRequest className="w-4 h-4 text-emerald-400" />
@@ -251,9 +281,10 @@ export const GitBranchNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#059669',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#059669'),
       background: 'linear-gradient(135deg, #1f2937 0%, #065f46 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#059669' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#059669' }} />
       <GitBranch className="w-4 h-4 text-emerald-500" />
@@ -267,9 +298,10 @@ export const ShellNode = ({ data }) => {
   return (
     <div style={{
       ...baseNodeStyle,
-      borderColor: '#6b7280',
+      borderColor: data.status === 'success' ? '#22c55e' : (data.status === 'executing' ? '#3b82f6' : '#6b7280'),
       background: 'linear-gradient(135deg, #1f2937 0%, #374151 100%)',
     }}>
+      <StatusBadge status={data.status} />
       <Handle type="target" position={Position.Top} style={{ background: '#6b7280' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#6b7280' }} />
       <Terminal className="w-4 h-4 text-gray-400" />

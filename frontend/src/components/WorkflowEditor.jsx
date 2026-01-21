@@ -18,8 +18,10 @@ import 'reactflow/dist/style.css';
 
 import {
   Plus, Save, Play, Trash2, RefreshCw,
-  Sparkles, Download, Upload, Settings, ChevronDown, CheckCircle
+  Sparkles, Download, Upload, Settings, ChevronDown, CheckCircle,
+  X, ChevronRight, Terminal, FileText, Layout, PlayCircle
 } from 'lucide-react';
+import MarkdownRenderer from './markdown/MarkdownRenderer';
 import NodeLibrary from './workflow/NodeLibrary';
 import { nodeTypes } from './workflow/CustomNodes';
 import NodePropertiesPanel from './workflow/NodePropertiesPanel';
@@ -50,6 +52,15 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [executing, setExecuting] = useState(false);
   const [executionLogs, setExecutionLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
+  const [finalResult, setFinalResult] = useState(null);
+  const logEndRef = useRef(null);
+
+  // 自动滚动日志到底部
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [executionLogs]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const reactFlowWrapper = useRef(null);
@@ -194,17 +205,29 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const handleSave = async () => {
     try {
       setLoading(true);
+
+      const workflowData = {
+        project_name: projectName || 'default',
+        workflow_name: workflowName || 'Untitled Workflow',
+        nodes: nodes,
+        edges: edges,
+      };
+
+      console.log('Saving workflow:', workflowData);
+
       const response = await authenticatedFetch('/api/workflows/save', {
         method: 'POST',
-        body: JSON.stringify({
-          project_name: projectName,
-          workflow_name: workflowName,
-          nodes: nodes,
-          edges: edges,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workflowData),
       });
 
+      console.log('Response status:', response.status);
+
       const data = await response.json();
+      console.log('Response data:', data);
+
       if (data.success) {
         alert('工作流保存成功！');
       } else {
@@ -395,36 +418,101 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       }
 
       const workflowId = saveData.workflow_id;
+      const projectNameStr = selectedProject.name;
 
-      // 执行工作流
-      const executeResponse = await authenticatedFetch(`/api/workflows/${workflowId}/execute`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
+      // 使用 SSE 执行工作流
+      const eventSource = new EventSource(`/api/workflows/${workflowId}/execute-stream?project_name=${encodeURIComponent(projectNameStr)}`);
 
-      const executeData = await executeResponse.json();
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const now = new Date().toISOString();
 
-      if (executeData.success) {
-        setExecutionLogs([
-          { type: 'info', message: '工作流执行成功', timestamp: new Date().toISOString() },
-          { type: 'success', message: `完成 ${executeData.steps_completed}/${executeData.steps_total} 个步骤`, timestamp: new Date().toISOString() },
-          ...(executeData.logs || []).map(log => ({
-            type: 'info',
-            message: `步骤 ${log.step}: ${log.result.message || '完成'}`,
-            timestamp: log.timestamp
-          }))
+        if (data.type === 'start') {
+          setFinalResult(null);
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'info', message: '工作流开始执行...', timestamp: now }
+          ]);
+        } else if (data.type === 'plan') {
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'info', message: `计划执行 ${data.steps_total} 个步骤`, timestamp: now }
+          ]);
+        } else if (data.type === 'step_start') {
+          // 更新节点状态为执行中
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id === data.node_id) {
+                return { ...node, data: { ...node.data, status: 'executing' } };
+              }
+              return node;
+            })
+          );
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'info', message: `开始执行节点: ${data.step_type}`, timestamp: now }
+          ]);
+        } else if (data.type === 'chunk') {
+          // 实时显示输出片段
+          setExecutionLogs((prev) => {
+            const lastLog = prev[prev.length - 1];
+            if (lastLog && lastLog.type === 'chunk') {
+              return [
+                ...prev.slice(0, -1),
+                { ...lastLog, message: lastLog.message + data.content }
+              ];
+            }
+            return [...prev, { type: 'chunk', message: data.content, timestamp: now }];
+          });
+        } else if (data.type === 'step_output') {
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'success', message: data.output, timestamp: now }
+          ]);
+          // 如果是最后一个节点或有重要输出，保存为最终结果
+          setFinalResult(data.output);
+        } else if (data.type === 'step_complete') {
+          // 更新节点状态为完成
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id === data.node_id) {
+                return { ...node, data: { ...node.data, status: 'success' } };
+              }
+              return node;
+            })
+          );
+        } else if (data.type === 'complete') {
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'info', message: '工作流执行成功完成！', timestamp: now }
+          ]);
+          setExecuting(false);
+          eventSource.close();
+        } else if (data.type === 'error') {
+          setExecutionLogs((prev) => [
+            ...prev,
+            { type: 'error', message: `执行出错: ${data.error}`, timestamp: now }
+          ]);
+          setExecuting(false);
+          eventSource.close();
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE Error:', error);
+        setExecutionLogs((prev) => [
+          ...prev,
+          { type: 'error', message: '连接中断或服务器错误', timestamp: new Date().toISOString() }
         ]);
-      } else {
-        setExecutionLogs([
-          { type: 'error', message: `工作流执行失败: ${executeData.error}`, timestamp: new Date().toISOString() }
-        ]);
-      }
+        setExecuting(false);
+        eventSource.close();
+      };
+
     } catch (error) {
       console.error('Workflow execution error:', error);
       setExecutionLogs([
         { type: 'error', message: `执行错误: ${error.message}`, timestamp: new Date().toISOString() }
       ]);
-    } finally {
       setExecuting(false);
     }
   };
@@ -641,41 +729,91 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
       {/* 执行日志面板 */}
       {showLogs && (
-        <div className="mx-6 mt-4 p-4 bg-gray-900/30 border border-gray-600 rounded-lg">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <RefreshCw className={`w-5 h-5 ${executing ? 'animate-spin' : ''} text-blue-400`} />
-              <h3 className="text-white font-medium">执行日志</h3>
-              <span className="text-xs text-gray-400">
-                {executionLogs.length} 条记录
-              </span>
+        <div className="mx-6 mt-4 flex flex-col bg-gray-900/40 border border-gray-700 rounded-xl overflow-hidden shadow-2xl backdrop-blur-sm">
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-800/80 border-b border-gray-700">
+            <div className="flex items-center space-x-3">
+              <div className={`p-1.5 rounded-lg ${executing ? 'bg-blue-500/20' : 'bg-gray-700'}`}>
+                <Terminal className={`w-4 h-4 ${executing ? 'text-blue-400 animate-pulse' : 'text-gray-400'}`} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white">执行控制台</h3>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+                  {executing ? 'Status: Running' : 'Status: Idle'} • {executionLogs.length} Events
+                </p>
+              </div>
             </div>
-            <button
-              onClick={() => setShowLogs(false)}
-              className="text-gray-400 hover:text-white transition-colors"
-            >
-              ×
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setExecutionLogs([])}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-all"
+                title="清空日志"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowLogs(false)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
-            {executionLogs.length === 0 ? (
-              <p className="text-gray-400 text-sm">暂无日志</p>
-            ) : (
-              executionLogs.map((log, index) => (
-                <div
-                  key={index}
-                  className={`mb-2 text-sm ${
-                    log.type === 'error' ? 'text-red-400' :
-                    log.type === 'success' ? 'text-green-400' :
-                    'text-gray-300'
-                  }`}
-                >
-                  <span className="text-gray-500 text-xs mr-2">
-                    {new Date(log.timestamp).toLocaleTimeString()}
-                  </span>
-                  {log.message}
+
+          <div className="flex-1 flex overflow-hidden h-[400px]">
+            {/* 左侧：实时日志流 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-sm scrollbar-thin scrollbar-thumb-gray-700">
+              {executionLogs.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-2 opacity-50">
+                  <Terminal className="w-8 h-8" />
+                  <p>等待工作流启动...</p>
                 </div>
-              ))
+              ) : (
+                executionLogs.map((log, index) => (
+                  <div key={index} className="group animate-in fade-in slide-in-from-left-2 duration-300">
+                    <div className="flex items-start space-x-3">
+                      <span className="flex-shrink-0 text-[10px] text-gray-600 mt-1 tabular-nums">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                      
+                      <div className="flex-1 min-w-0">
+                        {log.type === 'chunk' || log.type === 'success' ? (
+                          <div className={`p-3 rounded-lg border ${log.type === 'success' ? 'bg-green-500/5 border-green-500/20' : 'bg-gray-800/50 border-gray-700'}`}>
+                            <MarkdownRenderer className="text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none">
+                              {log.message}
+                            </MarkdownRenderer>
+                          </div>
+                        ) : (
+                          <div className={`flex items-center space-x-2 ${
+                            log.type === 'error' ? 'text-red-400' :
+                            log.type === 'info' ? 'text-blue-400' :
+                            'text-gray-400'
+                          }`}>
+                            {log.type === 'info' && <ChevronRight className="w-3 h-3 flex-shrink-0" />}
+                            {log.type === 'error' && <X className="w-3 h-3 flex-shrink-0" />}
+                            <span className="font-medium">{log.message}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={logEndRef} />
+            </div>
+
+            {/* 右侧：最终结果摘要（如果有） */}
+            {finalResult && (
+              <div className="w-80 border-l border-gray-700 bg-gray-800/30 p-4 overflow-y-auto animate-in slide-in-from-right duration-500">
+                <div className="flex items-center space-x-2 mb-4">
+                  <PlayCircle className="w-4 h-4 text-green-400" />
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">最终执行结果</h4>
+                </div>
+                <div className="bg-gray-900/60 rounded-xl p-4 border border-green-500/20 shadow-inner">
+                  <MarkdownRenderer className="text-sm text-gray-200 prose prose-invert prose-sm">
+                    {finalResult}
+                  </MarkdownRenderer>
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -852,9 +852,9 @@ async def validate_path(path: str = Query(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.post("/api/create-workspace")
-async def create_workspace(req: CreateWorkspaceRequest):
-    """创建或添加工作空间"""
+@app.post("/api/create-workspace-simple")
+async def create_workspace_simple(req: CreateWorkspaceRequest):
+    """创建或添加工作空间（简易版）"""
     logger.info(f"=== 创建工作空间请求 ===")
     logger.info(f"  类型: {req.workspaceType}")
     logger.info(f"  路径: {req.path}")
@@ -5629,24 +5629,6 @@ async def get_project_databases(project_name: str):
         logger.error(f"Error getting project databases: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# --- Catch-all 路由 ---
-
-@app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def catch_all(path_name: str, request: Request):
-    """Catch-all 路由 - 处理未实现的 API 端点"""
-    logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
-
-    # MCP 相关的 API
-    if path_name.startswith("mcp-utils/"):
-        return JSONResponse(content={
-            "status": "not-implemented",
-            "message": f"MCP endpoint '{path_name}' is not implemented"
-        }, status_code=200)
-
-    # 默认响应
-    return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
-
-
 # --- Workflow API ---
 
 class WorkflowSaveRequest(BaseModel):
@@ -5750,6 +5732,35 @@ async def generate_workflow(req: WorkflowGenerateRequest):
         logger.error(f"Error generating workflow: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.get("/api/workflows/{workflow_id}/execute-stream")
+async def execute_workflow_stream(workflow_id: str, project_name: str = Query(...)):
+    """流式执行工作流"""
+    async def event_generator():
+        try:
+            workflow = workflow_service.get_workflow(workflow_id)
+            if not workflow:
+                yield f"data: {json.dumps({'type': 'error', 'error': 'Workflow not found'}, ensure_ascii=False)}\n\n"
+                return
+
+            project_path = project_registry.get_project_path(project_name)
+            if not project_path:
+                yield f"data: {json.dumps({'type': 'error', 'error': f'Project path not found for {project_name}'}, ensure_ascii=False)}\n\n"
+                return
+
+            async for update in workflow_executor.execute_workflow_stream(
+                workflow_id,
+                {'nodes': workflow.nodes, 'edges': workflow.edges},
+                project_path
+            ):
+                data_json = json.dumps(update, ensure_ascii=False)
+                yield f"data: {data_json}\n\n"
+        except Exception as e:
+            logger.error(f"SSE execution error: {e}")
+            err_json = json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)
+            yield f"data: {err_json}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @app.post("/api/workflows/{workflow_id}/execute")
 async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
     """执行工作流"""
@@ -5785,6 +5796,24 @@ async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
     except Exception as e:
         logger.error(f"Error executing workflow: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# --- Catch-all 路由 ---
+
+@app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def catch_all(path_name: str, request: Request):
+    """Catch-all 路由 - 处理未实现的 API 端点"""
+    logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
+
+    # MCP 相关的 API
+    if path_name.startswith("mcp-utils/"):
+        return JSONResponse(content={
+            "status": "not-implemented",
+            "message": f"MCP endpoint '{path_name}' is not implemented"
+        }, status_code=200)
+
+    # 默认响应
+    return JSONResponse(content={"status": "mocked", "sessions": [], "hasMore": False}, status_code=200)
 
 
 if __name__ == "__main__":

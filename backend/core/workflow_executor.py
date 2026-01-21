@@ -171,9 +171,11 @@ class WorkflowExecutor:
 
             # 执行每个步骤
             for index, step in enumerate(execution_plan):
+                node_id = step.get('id')
                 yield {
                     'type': 'step_start',
                     'step_index': index,
+                    'node_id': node_id,
                     'step_type': step.get('type'),
                     'timestamp': datetime.now().isoformat()
                 }
@@ -185,6 +187,7 @@ class WorkflowExecutor:
                 yield {
                     'type': 'step_complete',
                     'step_index': index,
+                    'node_id': node_id,
                     'step_type': step.get('type'),
                     'timestamp': datetime.now().isoformat()
                 }
@@ -290,7 +293,11 @@ class WorkflowExecutor:
 
             elif step_type == 'action':
                 action = step_data.get('action', '')
-                result = await agent.chat(f"Execute action: {action}")
+                if action == 'generate_fix':
+                    # 专门处理生成修复建议的逻辑
+                    result = await agent.chat("请分析当前项目中的问题并生成结构化的修复建议。请以 JSON 格式返回，包含 'issues' 列表，每个 issue 包含 'file', 'line', 'description', 'suggestion'。")
+                else:
+                    result = await agent.chat(f"Execute action: {action}")
                 return {'success': True, 'output': result}
 
             elif step_type == 'askUser':
@@ -411,6 +418,11 @@ class WorkflowExecutor:
 
     def _build_step_prompt(self, step_type: str, step_data: Dict[str, Any]) -> str:
         """构建步骤提示词"""
+        base_instruction = "\n请务必使用中文进行回答。"
+        
+        if step_type == 'action' and step_data.get('action') == 'generate_fix':
+            return "请分析当前项目中的问题并生成结构化的修复建议。请以 JSON 格式返回，包含 'issues' 列表，每个 issue 包含 'file', 'line', 'description', 'suggestion'。" + base_instruction
+
         prompts = {
             'prompt': step_data.get('prompt', ''),
             'condition': f"Evaluate condition: {step_data.get('condition', '')}",
@@ -424,7 +436,11 @@ class WorkflowExecutor:
             'search': f"Search code: {step_data.get('searchQuery', '')}",
             'codeEdit': f"Edit code: {step_data.get('editType', '')}"
         }
-        return prompts.get(step_type, '')
+        
+        prompt = prompts.get(step_type, '')
+        if prompt:
+            return prompt + base_instruction
+        return prompt
 
     def _collect_output(self, execution_plan: List[Dict[str, Any]]) -> Dict[str, Any]:
         """收集执行输出"""

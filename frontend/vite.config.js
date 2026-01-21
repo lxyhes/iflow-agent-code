@@ -12,6 +12,12 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       proxy: {
+        // 工作流相关 API - 优先匹配
+        '^/api/workflows(/|$)': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: false
+        },
         // 前端服务器 API 路由（认证、项目、设置、用户）
         '^/api/auth(/|$)': {
           target: 'http://localhost:3001',
