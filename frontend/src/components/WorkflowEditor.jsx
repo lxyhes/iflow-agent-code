@@ -109,7 +109,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [showAiRefinementDialog, setShowAiRefinementDialog] = useState(false);
   const [showValidationPanel, setShowValidationPanel] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [mcpServers, setMcpServers] = useState([]);
   const [executing, setExecuting] = useState(false);
   const [executionLogs, setExecutionLogs] = useState([]);
@@ -131,7 +131,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   });
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
-  const exportMenuRef = useRef(null);
+  const actionsMenuRef = useRef(null);
   const eventSourceRef = useRef(null);
   const lastExecutingNodeIdRef = useRef(null);
   const currentExecutingNodeIdRef = useRef(null);
@@ -229,16 +229,16 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   }, [toast]);
 
   useEffect(() => {
-    if (!showExportMenu) return;
+    if (!showActionsMenu) return;
     const onPointerDown = (e) => {
-      if (!exportMenuRef.current) return;
-      if (!exportMenuRef.current.contains(e.target)) {
-        setShowExportMenu(false);
+      if (!actionsMenuRef.current) return;
+      if (!actionsMenuRef.current.contains(e.target)) {
+        setShowActionsMenu(false);
       }
     };
     window.addEventListener('mousedown', onPointerDown);
     return () => window.removeEventListener('mousedown', onPointerDown);
-  }, [showExportMenu]);
+  }, [showActionsMenu]);
 
   // 节点点击处理
   const onNodeClick = useCallback((_event, node) => {
@@ -504,6 +504,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
   // 导出工作流（JSON 格式）
   const handleExportJSON = () => {
+    setShowActionsMenu(false);
     const workflowData = {
       name: workflowName,
       version: 1,
@@ -525,12 +526,12 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setShowExportMenu(false);
     toast.success('已导出 JSON');
   };
 
   // 导出为 iFlow Agent 格式
   const handleExportAgent = () => {
+    setShowActionsMenu(false);
     const workflowData = {
       name: workflowName,
       nodes,
@@ -567,12 +568,12 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     }
 
     downloadIFlowFile(workflowData, selectedProject?.name || 'default', 'agent');
-    setShowExportMenu(false);
     toast.success('已导出 iFlow Agent');
   };
 
   // 导出为 iFlow Command 格式
   const handleExportCommand = () => {
+    setShowActionsMenu(false);
     const workflowData = {
       name: workflowName,
       nodes,
@@ -609,7 +610,6 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     }
 
     downloadIFlowFile(workflowData, selectedProject?.name || 'default', 'command');
-    setShowExportMenu(false);
     toast.success('已导出 iFlow Command');
   };
 
@@ -1031,25 +1031,9 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setShowTemplateModal(true)}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 shadow-sm transition-colors dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 dark:border-gray-700"
-            title="选择工作流模板"
-          >
-            <LayoutGrid className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <span>模板</span>
-          </button>
-          <button
-            onClick={() => setShowExecutionHistory(true)}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
-            title="查看执行历史"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>历史</span>
-          </button>
-          <button
             onClick={() => setShowLibrary(true)}
             className="lg:hidden inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
-            title="打开节点库"
+            title="打开节点库 (Ctrl/Cmd+K)"
           >
             <PanelLeft className="w-4 h-4" />
             <span className="hidden sm:inline">节点库</span>
@@ -1074,39 +1058,6 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           </button>
 
           <button
-            onClick={handleFitView}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
-            title="适配视图"
-          >
-            <LayoutGrid className="w-4 h-4" />
-            <span>居中</span>
-          </button>
-
-          <button
-            onClick={() => setShowAiPanel(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">AI 生成</span>
-          </button>
-
-          <button
-            onClick={handleAiRefinement}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>AI 优化</span>
-          </button>
-
-          <button
-            onClick={handleValidate}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <CheckCircle className="w-4 h-4" />
-            <span>验证</span>
-          </button>
-
-          <button
             onClick={handleExecute}
             disabled={executing || !selectedProject}
             className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
@@ -1124,79 +1075,217 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             <span>{loading ? '保存中...' : '保存'}</span>
           </button>
 
-          <div className="relative" ref={exportMenuRef}>
+          <div className="relative" ref={actionsMenuRef}>
             <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
+              onClick={() => setShowActionsMenu((v) => !v)}
               className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 hover:bg-gray-950 text-white rounded-lg text-sm font-medium transition-colors dark:bg-gray-700 dark:hover:bg-gray-600"
+              aria-expanded={showActionsMenu}
             >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">导出</span>
               <ChevronDown className="w-4 h-4" />
+              <span className="hidden sm:inline">更多</span>
             </button>
 
-            {/* 导出下拉菜单 */}
-            {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
+            {showActionsMenu && (
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+                <div className="px-3 py-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-950/40 border-b border-gray-200 dark:border-gray-800">
+                  快速操作
+                </div>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowTemplateModal(true);
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <LayoutGrid className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="flex-1">模板库</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowExecutionHistory(true);
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span className="flex-1">执行历史</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleFitView();
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <LayoutGrid className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">居中</span>
+                </button>
+
+                <div className="h-px bg-gray-200 dark:bg-gray-800" />
+
+                <div className="px-3 py-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-950/40 border-b border-gray-200 dark:border-gray-800">
+                  AI 与校验
+                </div>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowAiPanel(true);
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="flex-1">AI 生成</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleAiRefinement();
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <Sparkles className="w-4 h-4 text-pink-600 dark:text-pink-400" />
+                  <span className="flex-1">AI 优化</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleValidate();
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <CheckCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span className="flex-1">验证</span>
+                </button>
+
+                <div className="h-px bg-gray-200 dark:bg-gray-800" />
+
+                <div className="px-3 py-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-950/40 border-b border-gray-200 dark:border-gray-800">
+                  导入 / 导出
+                </div>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleImport();
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <Upload className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导入 JSON</span>
+                </button>
                 <button
                   onClick={handleExportJSON}
-                  className="w-full px-4 py-2.5 text-left text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  导出为 JSON
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导出 JSON</span>
                 </button>
                 <button
                   onClick={handleExportAgent}
-                  className="w-full px-4 py-2.5 text-left text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  导出为 iFlow Agent
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导出 iFlow Agent</span>
                 </button>
                 <button
                   onClick={handleExportCommand}
-                  className="w-full px-4 py-2.5 text-left text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  导出为 iFlow Command
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导出 iFlow Command</span>
                 </button>
-                <div className="border-t border-gray-200 dark:border-gray-700" />
                 <button
                   onClick={() => {
+                    setShowActionsMenu(false);
                     const workflowData = { name: workflowName, nodes, edges };
                     downloadClaudeAgentFile(workflowData, selectedProject?.name || 'default');
-                    setShowExportMenu(false);
                     toast.success('已导出 Claude Agent');
                   }}
-                  className="w-full px-4 py-2.5 text-left text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  导出为 Claude Agent (.claude)
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导出 Claude Agent</span>
                 </button>
                 <button
                   onClick={() => {
+                    setShowActionsMenu(false);
                     const workflowData = { name: workflowName, nodes, edges };
                     downloadClaudeCommandFile(workflowData, selectedProject?.name || 'default');
-                    setShowExportMenu(false);
                     toast.success('已导出 Claude Command');
                   }}
-                  className="w-full px-4 py-2.5 text-left text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
-                  导出为 Claude Command (.claude)
+                  <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">导出 Claude Command</span>
+                </button>
+
+                <div className="h-px bg-gray-200 dark:bg-gray-800" />
+
+                <div className="px-3 py-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-950/40 border-b border-gray-200 dark:border-gray-800">
+                  编辑
+                </div>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleUndo();
+                  }}
+                  disabled={!history.canUndo}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Undo2 className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">撤销</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">⌘Z</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleRedo();
+                  }}
+                  disabled={!history.canRedo}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Redo2 className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">重做</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">⇧⌘Z</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleDuplicate();
+                  }}
+                  disabled={!selectedNode && (!selection.nodes || selection.nodes.length === 0)}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Sparkles className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">复制节点</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">⌘D</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleDeleteSelection();
+                  }}
+                  disabled={(!selection.nodes || selection.nodes.length === 0) && (!selection.edges || selection.edges.length === 0)}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                  <span className="flex-1">删除选中</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">Del</span>
+                </button>
+
+                <div className="h-px bg-gray-200 dark:bg-gray-800" />
+                <button
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    handleClear();
+                  }}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="flex-1">清空画布</span>
                 </button>
               </div>
             )}
           </div>
-
-          <button
-            onClick={handleImport}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-sm font-medium transition-colors border border-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600"
-          >
-            <Upload className="w-4 h-4" />
-            <span>导入</span>
-          </button>
-
-          <button
-            onClick={handleClear}
-            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>清空</span>
-          </button>
         </div>
       </div>
 
