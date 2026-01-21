@@ -3,7 +3,7 @@
  * 可视化工作流编辑器，支持拖拽节点、连线、AI 辅助生成
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -18,11 +18,21 @@ import 'reactflow/dist/style.css';
 
 import {
   Plus, Save, Play, Trash2, RefreshCw,
-  Sparkles, Download, Upload, Settings, ChevronDown
+  Sparkles, Download, Upload, Settings, ChevronDown, CheckCircle
 } from 'lucide-react';
 import NodeLibrary from './workflow/NodeLibrary';
+import { nodeTypes } from './workflow/CustomNodes';
+import NodePropertiesPanel from './workflow/NodePropertiesPanel';
+import AiRefinementDialog from './workflow/AiRefinementDialog';
+import WorkflowValidationPanel from './workflow/WorkflowValidationPanel';
 import { authenticatedFetch } from '../utils/api';
-import { downloadIFlowFile, validateWorkflow } from '../utils/iflowWorkflowExporter';
+import {
+  downloadIFlowFile,
+  validateWorkflow,
+  downloadClaudeAgentFile,
+  downloadClaudeCommandFile
+} from '../utils/iflowWorkflowExporter';
+import { validateWorkflow as validateWorkflowStructure } from '../utils/workflowValidator';
 
 const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -32,11 +42,16 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [loading, setLoading] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showAiRefinementDialog, setShowAiRefinementDialog] = useState(false);
+  const [showValidationPanel, setShowValidationPanel] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [mcpServers, setMcpServers] = useState([]);
   const [executing, setExecuting] = useState(false);
   const [executionLogs, setExecutionLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const reactFlowWrapper = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
 
@@ -112,6 +127,27 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     loadMcpServers();
   }, []);
 
+  // 节点点击处理
+  const onNodeClick = useCallback((event, node) => {
+    setSelectedNode(node);
+    setShowPropertiesPanel(true);
+  }, []);
+
+  // 连接节点
+  const handleNodesChange = useCallback((changes) => {
+    // 如果节点被删除，关闭属性面板
+    if (changes.some(change => change.type === 'remove' && change.id === selectedNode?.id)) {
+      setShowPropertiesPanel(false);
+      setSelectedNode(null);
+    }
+    onNodesChange(changes);
+  }, [selectedNode, onNodesChange]);
+
+  // 节点更新处理
+  const handleNodeUpdate = (updatedNode) => {
+    setNodes((nds) => nds.map((n) => (n.id === updatedNode.id ? updatedNode : n)));
+  };
+
   // 连接节点
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge({
@@ -127,6 +163,10 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   // 添加节点
   const onDrop = useCallback((event) => {
     event.preventDefault();
+
+    if (!reactFlowWrapper.current) {
+      return;
+    }
 
     const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
     const type = event.dataTransfer.getData('application/reactflow');
@@ -176,6 +216,23 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // AI 迭代优化
+  const handleAiRefinement = () => {
+    setShowAiRefinementDialog(true);
+  };
+
+  const handleApplyAiRefinement = (updatedWorkflow) => {
+    setNodes(updatedWorkflow.nodes);
+    setEdges(updatedWorkflow.edges);
+  };
+
+  // 验证工作流
+  const handleValidate = () => {
+    const result = validateWorkflowStructure(nodes, edges);
+    setValidationResult(result);
+    setShowValidationPanel(true);
   };
 
   // AI 生成工作流
@@ -436,6 +493,22 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           </button>
 
           <button
+            onClick={handleAiRefinement}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded text-sm font-medium transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>AI 优化</span>
+          </button>
+
+          <button
+            onClick={handleValidate}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors"
+          >
+            <CheckCircle className="w-4 h-4" />
+            <span>验证</span>
+          </button>
+
+          <button
             onClick={handleExecute}
             disabled={executing || !selectedProject}
             className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-medium transition-colors disabled:opacity-50"
@@ -480,9 +553,30 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                 </button>
                 <button
                   onClick={handleExportCommand}
-                  className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 rounded-b-lg text-sm"
+                  className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm"
                 >
                   导出为 iFlow Command
+                </button>
+                <div className="border-t border-gray-600 my-1"></div>
+                <button
+                  onClick={() => {
+                    const workflowData = { name: workflowName, nodes, edges };
+                    downloadClaudeAgentFile(workflowData, selectedProject?.name || 'default');
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm"
+                >
+                  导出为 Claude Agent (.claude)
+                </button>
+                <button
+                  onClick={() => {
+                    const workflowData = { name: workflowName, nodes, edges };
+                    downloadClaudeCommandFile(workflowData, selectedProject?.name || 'default');
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 rounded-b-lg text-sm"
+                >
+                  导出为 Claude Command (.claude)
                 </button>
               </div>
             )}
@@ -595,16 +689,19 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         </div>
 
         {/* 右侧：画布区域 */}
-        <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 overflow-hidden" ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={() => setShowPropertiesPanel(false)}
             onInit={setReactFlowInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            nodeTypes={nodeTypes}
             fitView
             snapToGrid
             snapGrid={[15, 15]}
@@ -619,7 +716,37 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             />
           </ReactFlow>
         </div>
+
+        {/* 右侧属性面板 */}
+        {showPropertiesPanel && selectedNode && (
+          <NodePropertiesPanel
+            node={selectedNode}
+            onUpdate={handleNodeUpdate}
+            onClose={() => {
+              setShowPropertiesPanel(false);
+              setSelectedNode(null);
+            }}
+            mcpServers={mcpServers}
+          />
+        )}
       </div>
+
+      {/* AI 优化对话框 */}
+      <AiRefinementDialog
+        isOpen={showAiRefinementDialog}
+        onClose={() => setShowAiRefinementDialog(false)}
+        currentWorkflow={{ nodes, edges }}
+        onApply={handleApplyAiRefinement}
+        loading={loading}
+      />
+
+      {/* 工作流验证面板 */}
+      {showValidationPanel && validationResult && (
+        <WorkflowValidationPanel
+          validationResult={validationResult}
+          onClose={() => setShowValidationPanel(false)}
+        />
+      )}
     </div>
   );
 };

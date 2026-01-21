@@ -494,3 +494,204 @@ function detectCycle(nodes, edges) {
 
   return false;
 }
+
+/**
+ * 导出为 Claude Agent 格式 (.claude/agents/*.md)
+ * @param {Object} workflow - 工作流对象
+ * @param {string} projectName - 项目名称
+ * @returns {string} Markdown 格式的内容
+ */
+export function exportToClaudeAgent(workflow, projectName) {
+  const { nodes, edges, name } = workflow;
+  const steps = buildStepsSequence(nodes, edges);
+
+  const content = `---
+name: ${name}
+description: Generated from workflow editor
+tools: ${extractTools(nodes).map(t => t.type).join(', ')}
+mcp_servers: ${extractMCPServers(nodes).map(s => s.name).join(', ')}
+---
+
+# ${name}
+
+## Description
+This agent was generated from the workflow "${name}" in the iFlow Workflow Editor.
+
+## Workflow Steps
+
+${steps.map((step, index) => {
+  const label = step.data?.label || step.data?.description || `Step ${index + 1}`;
+  let stepContent = `### ${index + 1}. ${label}\n\n`;
+
+  switch (step.type) {
+    case 'prompt':
+      stepContent += `**Type:** Prompt\n\n`;
+      if (step.data?.prompt) {
+        stepContent += `**Prompt:** ${step.data.prompt}\n\n`;
+      }
+      if (step.data?.variables && step.data.variables.length > 0) {
+        stepContent += `**Variables:**\n`;
+        step.data.variables.forEach(v => {
+          stepContent += `- \`\`${v.name}\`\`: ${v.defaultValue || 'No default'}\n`;
+        });
+        stepContent += '\n';
+      }
+      break;
+    case 'condition':
+      stepContent += `**Type:** Condition\n\n`;
+      if (step.data?.condition) {
+        stepContent += `**Condition:** \`${step.data.condition}\`\n\n`;
+      }
+      break;
+    case 'action':
+      stepContent += `**Type:** Action\n\n`;
+      if (step.data?.action) {
+        stepContent += `**Action:** ${step.data.action}\n\n`;
+      }
+      break;
+    case 'askUser':
+      stepContent += `**Type:** Ask User\n\n`;
+      stepContent += `Wait for user input before proceeding.\n\n`;
+      break;
+    case 'mcp':
+      stepContent += `**Type:** MCP Tool\n\n`;
+      if (step.data?.mcpServer) {
+        stepContent += `**Server:** ${step.data.mcpServer}\n\n`;
+      }
+      if (step.data?.mcpTool) {
+        stepContent += `**Tool:** ${step.data.mcpTool}\n\n`;
+      }
+      break;
+    case 'skill':
+      stepContent += `**Type:** Skill\n\n`;
+      if (step.data?.skill) {
+        stepContent += `**Skill:** ${step.data.skill}\n\n`;
+      }
+      break;
+    default:
+      stepContent += `**Type:** ${step.type}\n\n`;
+  }
+
+  return stepContent;
+}).join('---\n\n')}
+
+## Tools Used
+
+${extractTools(nodes).map(tool => `- **${tool.type}**: ${tool.name || 'default'}`).join('\n')}
+
+## MCP Servers
+
+${extractMCPServers(nodes).length > 0
+  ? extractMCPServers(nodes).map(server => `- ${server.name}`).join('\n')
+  : 'None'}
+
+## Usage
+
+To use this agent, add this file to your \`.claude/agents/\` directory and reference it in your workflow.
+`;
+
+  return content;
+}
+
+/**
+ * 导出为 Claude Command 格式 (.claude/commands/*.md)
+ * @param {Object} workflow - 工作流对象
+ * @param {string} projectName - 项目名称
+ * @returns {string} Markdown 格式的内容
+ */
+export function exportToClaudeCommand(workflow, projectName) {
+  const { nodes, edges, name } = workflow;
+  const steps = buildStepsSequence(nodes, edges);
+
+  const commandName = name.toLowerCase().replace(/\s+/g, '-');
+
+  const content = `---
+name: ${commandName}
+description: Execute workflow: ${name}
+parameters: ${extractParameters(nodes).map(p => p.name).join(', ')}
+tools: ${extractTools(nodes).map(t => t.type).join(', ')}
+mcp_servers: ${extractMCPServers(nodes).map(s => s.name).join(', ')}
+---
+
+# ${commandName}
+
+Execute the "${name}" workflow.
+
+## Description
+This command executes the workflow "${name}" which was created in the iFlow Workflow Editor.
+
+## Parameters
+
+${extractParameters(nodes).map(param => {
+  return `### ${param.name}
+- **Type:** ${param.type}
+- **Default:** ${param.default || 'None'}
+- **Required:** ${param.required ? 'Yes' : 'No'}
+- **Description:** ${param.description}
+`;
+}).join('\n')}
+
+## Workflow Steps
+
+${steps.map((step, index) => {
+  const label = step.data?.label || step.data?.description || `Step ${index + 1}`;
+  return `${index + 1}. ${label}`;
+}).join('\n')}
+
+## Tools Required
+
+${extractTools(nodes).map(tool => `- **${tool.type}**: ${tool.name || 'default'}`).join('\n')}
+
+## MCP Servers Required
+
+${extractMCPServers(nodes).length > 0
+  ? extractMCPServers(nodes).map(server => `- ${server.name}`).join('\n')
+  : 'None'}
+
+## Usage
+
+To use this command, add this file to your \`.claude/commands/\` directory and invoke it with \`/${commandName}\`.
+`;
+
+  return content;
+}
+
+/**
+ * 下载 Claude Agent 文件
+ * @param {Object} workflow - 工作流对象
+ * @param {string} projectName - 项目名称
+ */
+export function downloadClaudeAgentFile(workflow, projectName) {
+  const content = exportToClaudeAgent(workflow, projectName);
+  const filename = `${workflow.name.toLowerCase().replace(/\s+/g, '-')}.md`;
+
+  const blob = new Blob([content], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * 下载 Claude Command 文件
+ * @param {Object} workflow - 工作流对象
+ * @param {string} projectName - 项目名称
+ */
+export function downloadClaudeCommandFile(workflow, projectName) {
+  const content = exportToClaudeCommand(workflow, projectName);
+  const filename = `${workflow.name.toLowerCase().replace(/\s+/g, '-')}.md`;
+
+  const blob = new Blob([content], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
