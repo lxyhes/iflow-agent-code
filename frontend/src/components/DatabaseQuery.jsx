@@ -25,6 +25,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
   const [dbPath, setDbPath] = useState('');
   const [connectionName, setConnectionName] = useState('');
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
   
   // 新增：项目相关状态
   const [projects, setProjects] = useState([]);
@@ -357,26 +358,53 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
     }
   };
 
-  const handleExecuteQuery = async () => {
+  const executeQuery = async (sqlOverride) => {
     if (!selectedConnection) {
       setError('请先选择数据库连接');
       return;
     }
 
-    if (!sqlQuery.trim()) {
+    const sql = String(sqlOverride ?? sqlQuery ?? '');
+    if (!sql.trim()) {
       setError('请输入 SQL 查询语句');
       return;
     }
 
+    const normalized = sql.trim().replace(/\s+/g, ' ').toLowerCase();
+    const statements = normalized.split(';').map((s) => s.trim()).filter(Boolean);
+    const first = statements[0] || '';
+    const isWrite =
+      /^(insert|update|delete|create|alter|drop|truncate|replace)\b/.test(first) ||
+      /\b(drop|truncate)\b/.test(first);
+    const isMulti = statements.length > 1;
+    const isDeleteWithoutWhere = /^delete\b/.test(first) && !/\bwhere\b/.test(first);
+    const isUpdateWithoutWhere = /^update\b/.test(first) && !/\bwhere\b/.test(first);
+
+    if (isMulti || isWrite || isDeleteWithoutWhere || isUpdateWithoutWhere) {
+      const msg = [
+        '检测到可能有风险的 SQL：',
+        isMulti ? '- 多语句执行' : null,
+        isWrite ? '- 写入/DDL 操作' : null,
+        isDeleteWithoutWhere ? '- DELETE 无 WHERE' : null,
+        isUpdateWithoutWhere ? '- UPDATE 无 WHERE' : null,
+        '',
+        '仍要继续执行吗？'
+      ]
+        .filter(Boolean)
+        .join('\n');
+      if (!window.confirm(msg)) return;
+    }
+
     setIsQueryLoading(true);
     setError(null);
+    setNotice(null);
 
     try {
       const response = await authenticatedFetch('/api/database/query', {
         method: 'POST',
         body: JSON.stringify({
           connection_name: selectedConnection,
-          sql: sqlQuery
+          sql
         })
       });
 
@@ -395,6 +423,32 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
     } finally {
       setIsQueryLoading(false);
     }
+  };
+
+  const handleExecuteQuery = async () => executeQuery();
+
+  const handleSaveTemplate = async (payload) => {
+    try {
+      const response = await authenticatedFetch('/api/database/templates', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || '保存失败');
+      }
+      await loadTemplates();
+      setNotice(`已保存模板：${payload?.name || ''}`.trim());
+      setTimeout(() => setNotice(null), 1800);
+    } catch (e) {
+      setError('保存模板失败: ' + String(e?.message || e));
+    }
+  };
+
+  const applySqlAndRun = async (sql) => {
+    const s = String(sql || '');
+    setSqlQuery(s);
+    await executeQuery(s);
   };
 
   const handleExport = async (format) => {
@@ -497,6 +551,19 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
         </div>
       )}
 
+      {notice && (
+        <div className="mx-6 mt-4 px-4 py-3 bg-emerald-600/20 border border-emerald-600 rounded flex items-center space-x-2">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+          <p className="text-sm text-emerald-200">{notice}</p>
+          <button
+            onClick={() => setNotice(null)}
+            className="ml-auto text-emerald-200 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 主内容区 */}
       <div className="flex-1 flex overflow-hidden p-6 gap-6">
         {/* 左侧：表浏览器 */}
@@ -507,6 +574,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             onTableSelect={handleSelectTable}
             tableInfo={tableInfo}
             onRefresh={handleRefreshTables}
+            onInsertSql={(sql) => setSqlQuery(sql)}
+            onInsertAndExecuteSql={(sql) => applySqlAndRun(sql)}
+            aiContext={{
+              dbType,
+              selectedConnection
+            }}
           />
         </div>
 
@@ -517,10 +590,20 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             <SqlEditor
               value={sqlQuery}
               onChange={setSqlQuery}
-              onExecute={handleExecuteQuery}
+              onExecute={(sql) => executeQuery(sql)}
+              onSave={handleSaveTemplate}
               templates={templates}
               history={history}
               placeholder="输入 SQL 查询语句，例如: SELECT * FROM users LIMIT 10;"
+              aiContext={{
+                dbType,
+                selectedConnection,
+                tables,
+                selectedTable,
+                tableInfo,
+                queryResult,
+                executeSql: (sql) => applySqlAndRun(sql)
+              }}
             />
           </div>
 
@@ -530,6 +613,15 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
               result={queryResult}
               onExport={handleExport}
               isLoading={isQueryLoading}
+              sqlQuery={sqlQuery}
+              onApplySql={(sql) => setSqlQuery(sql)}
+              onExecuteSql={(sql) => applySqlAndRun(sql)}
+              aiContext={{
+                dbType,
+                selectedConnection,
+                selectedTable,
+                tableInfo
+              }}
             />
           </div>
         </div>
