@@ -28,6 +28,7 @@ import AiRefinementDialog from './workflow/AiRefinementDialog';
 import WorkflowValidationPanel from './workflow/WorkflowValidationPanel';
 import { authenticatedFetch } from '../utils/api';
 import { useToast } from '../contexts/ToastContext';
+import MarkdownRenderer from './markdown/MarkdownRenderer';
 import {
   downloadIFlowFile,
   validateWorkflow,
@@ -119,6 +120,8 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const exportMenuRef = useRef(null);
   const eventSourceRef = useRef(null);
   const lastExecutingNodeIdRef = useRef(null);
+  const currentExecutingNodeIdRef = useRef(null);
+  const [logsDock, setLogsDock] = useState('side');
 
   useEffect(() => {
     if (hasInitialized) return;
@@ -532,6 +535,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         } else if (data.type === 'step_start') {
           const nodeId = data.node_id || null;
           const nodeLabel = data.node_label || null;
+          currentExecutingNodeIdRef.current = nodeId;
           setExecutionStats((prev) => ({
             ...prev,
             currentStepIndex: typeof data.step_index === 'number' ? data.step_index : prev.currentStepIndex,
@@ -543,7 +547,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           setNodes((nds) =>
             nds.map((node) => {
               if (nodeId && node.id === nodeId) {
-                return { ...node, data: { ...node.data, status: 'executing' } };
+                return { ...node, data: { ...node.data, status: 'executing', liveOutput: '', lastOutput: '' } };
               }
               return node;
             })
@@ -576,6 +580,20 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             { type: 'info', message: `开始执行节点: ${data.step_type}${nodeLabel ? `（${nodeLabel}）` : ''}`, timestamp: now }
           ]);
         } else if (data.type === 'chunk') {
+          const nodeId = data.node_id || currentExecutingNodeIdRef.current;
+
+          if (nodeId) {
+            const content = String(data.content ?? '');
+            setNodes((nds) =>
+              nds.map((node) => {
+                if (node.id !== nodeId) return node;
+                const prevLive = String(node.data?.liveOutput ?? '');
+                const nextLive = (prevLive + content).slice(-1200);
+                return { ...node, data: { ...node.data, liveOutput: nextLive } };
+              })
+            );
+          }
+
           // 实时显示输出片段
           setExecutionLogs((prev) => {
             const lastLog = prev[prev.length - 1];
@@ -588,6 +606,17 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             return [...prev, { type: 'chunk', message: data.content, timestamp: now }];
           });
         } else if (data.type === 'step_output') {
+          const nodeId = data.node_id || currentExecutingNodeIdRef.current;
+          if (nodeId) {
+            const output = String(data.output ?? '');
+            setNodes((nds) =>
+              nds.map((node) => {
+                if (node.id !== nodeId) return node;
+                return { ...node, data: { ...node.data, liveOutput: '', lastOutput: output.slice(0, 6000) } };
+              })
+            );
+          }
+
           setExecutionLogs((prev) => [
             ...prev,
             { type: 'success', message: `节点输出: ${data.output}`, timestamp: now }
@@ -615,6 +644,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           setExecuting(false);
           eventSourceRef.current?.close?.();
           eventSourceRef.current = null;
+          currentExecutingNodeIdRef.current = null;
 
           setExecutionStats((prev) => ({
             ...prev,
@@ -636,6 +666,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           setExecuting(false);
           eventSourceRef.current?.close?.();
           eventSourceRef.current = null;
+          currentExecutingNodeIdRef.current = null;
         }
       };
 
@@ -647,6 +678,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         setExecuting(false);
         eventSourceRef.current?.close?.();
         eventSourceRef.current = null;
+        currentExecutingNodeIdRef.current = null;
       };
 
     } catch (error) {
@@ -692,6 +724,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     return () => {
       eventSourceRef.current?.close?.();
       eventSourceRef.current = null;
+      currentExecutingNodeIdRef.current = null;
     };
   }, []);
 
@@ -973,43 +1006,98 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         </div>
       )}
 
-      {/* 执行日志面板 */}
-      {showLogs && (
-        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:bottom-6 md:w-[560px] z-[90]">
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 backdrop-blur shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center gap-2">
+      {showLogs && logsDock !== 'side' && (
+        <div
+          className={
+            logsDock === 'bottom'
+              ? 'fixed left-4 right-4 bottom-4 z-[90]'
+              : 'fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:bottom-6 md:w-[560px] z-[90]'
+          }
+        >
+          <div
+            className={
+              logsDock === 'bottom'
+                ? 'rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 backdrop-blur shadow-2xl overflow-hidden'
+                : 'rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 backdrop-blur shadow-2xl overflow-hidden'
+            }
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2 min-w-0">
                 <RefreshCw className={`w-4 h-4 ${executing ? 'animate-spin' : ''} text-blue-600 dark:text-blue-400`} />
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">执行日志</h3>
                 <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
                   {executionLogs.length} 条
                 </span>
               </div>
-              <button
-                onClick={() => setShowLogs(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                aria-label="Close logs"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setLogsDock('side')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logsDock === 'side'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    侧边
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogsDock('bottom')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logsDock === 'bottom'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    底部
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogsDock('floating')}
+                    className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                      logsDock === 'floating'
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    悬浮
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowLogs(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                  aria-label="Close logs"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="px-4 py-3 max-h-64 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+            <div className={logsDock === 'bottom' ? 'px-4 py-3 h-56 overflow-y-auto bg-gray-50 dark:bg-gray-900' : 'px-4 py-3 max-h-64 overflow-y-auto bg-gray-50 dark:bg-gray-900'}>
               {executionLogs.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm">暂无日志</p>
               ) : (
                 executionLogs.map((log, index) => (
                   <div
                     key={index}
-                    className={`mb-2 text-sm ${
+                    className={`mb-3 text-sm ${
                       log.type === 'error' ? 'text-red-600 dark:text-red-400' :
-                      log.type === 'success' ? 'text-green-600 dark:text-green-400' :
+                      log.type === 'success' ? 'text-green-700 dark:text-green-400' :
+                      log.type === 'chunk' ? 'text-gray-800 dark:text-gray-200' :
                       'text-gray-700 dark:text-gray-200'
                     }`}
                   >
-                    <span className="text-gray-400 dark:text-gray-500 text-[11px] mr-2 font-mono">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </span>
-                    <span className="whitespace-pre-wrap break-words">{log.message}</span>
+                    <div className="flex items-start gap-2">
+                      <span className="text-gray-400 dark:text-gray-500 text-[11px] font-mono whitespace-nowrap mt-0.5">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none">
+                          {String(log.message ?? '')}
+                        </MarkdownRenderer>
+                      </div>
+                    </div>
                   </div>
                 ))
               )}
@@ -1112,6 +1200,13 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                 <RefreshCw className={`w-4 h-4 ${executing ? 'animate-spin' : ''}`} />
               </button>
               <button
+                onClick={() => setLogsDock((prev) => (prev === 'side' ? 'bottom' : prev === 'bottom' ? 'floating' : 'side'))}
+                className="hidden md:inline-flex items-center justify-center h-10 px-3 rounded-xl bg-white/80 dark:bg-gray-900/70 backdrop-blur border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-900 transition-colors text-xs font-medium"
+                title="切换日志位置"
+              >
+                {logsDock === 'side' ? '侧边' : logsDock === 'bottom' ? '底部' : '悬浮'}
+              </button>
+              <button
                 onClick={handleFitView}
                 className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/80 dark:bg-gray-900/70 backdrop-blur border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-900 transition-colors"
                 title="适配视图"
@@ -1120,6 +1215,94 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
               </button>
             </div>
           </div>
+
+          {showLogs && logsDock === 'side' && (
+            <div className="hidden xl:block w-[420px] flex-shrink-0">
+              <div className="h-full rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RefreshCw className={`w-4 h-4 ${executing ? 'animate-spin' : ''} text-blue-600 dark:text-blue-400`} />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">执行日志</h3>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+                      {executionLogs.length} 条
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setLogsDock('side')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logsDock === 'side'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        侧边
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogsDock('bottom')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logsDock === 'bottom'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        底部
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogsDock('floating')}
+                        className={`px-2 py-1 text-[11px] rounded-lg transition-colors ${
+                          logsDock === 'floating'
+                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        悬浮
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setShowLogs(false)}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                      aria-label="Close logs"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="px-4 py-3 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900">
+                  {executionLogs.length === 0 ? (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">暂无日志</p>
+                  ) : (
+                    executionLogs.map((log, index) => (
+                      <div
+                        key={index}
+                        className={`mb-3 text-sm ${
+                          log.type === 'error' ? 'text-red-600 dark:text-red-400' :
+                          log.type === 'success' ? 'text-green-700 dark:text-green-400' :
+                          log.type === 'chunk' ? 'text-gray-800 dark:text-gray-200' :
+                          'text-gray-700 dark:text-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="text-gray-400 dark:text-gray-500 text-[11px] font-mono whitespace-nowrap mt-0.5">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none">
+                              {String(log.message ?? '')}
+                            </MarkdownRenderer>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {showPropertiesPanel && selectedNode && (
             <div className="hidden xl:block w-80 flex-shrink-0">
