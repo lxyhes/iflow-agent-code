@@ -852,9 +852,9 @@ async def validate_path(path: str = Query(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.post("/api/create-workspace-simple")
-async def create_workspace_simple(req: CreateWorkspaceRequest):
-    """创建或添加工作空间（简易版）"""
+@app.post("/api/create-workspace")
+async def create_workspace(req: CreateWorkspaceRequest):
+    """创建或添加工作空间"""
     logger.info(f"=== 创建工作空间请求 ===")
     logger.info(f"  类型: {req.workspaceType}")
     logger.info(f"  路径: {req.path}")
@@ -5732,35 +5732,6 @@ async def generate_workflow(req: WorkflowGenerateRequest):
         logger.error(f"Error generating workflow: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-@app.get("/api/workflows/{workflow_id}/execute-stream")
-async def execute_workflow_stream(workflow_id: str, project_name: str = Query(...)):
-    """流式执行工作流"""
-    async def event_generator():
-        try:
-            workflow = workflow_service.get_workflow(workflow_id)
-            if not workflow:
-                yield f"data: {json.dumps({'type': 'error', 'error': 'Workflow not found'}, ensure_ascii=False)}\n\n"
-                return
-
-            project_path = project_registry.get_project_path(project_name)
-            if not project_path:
-                yield f"data: {json.dumps({'type': 'error', 'error': f'Project path not found for {project_name}'}, ensure_ascii=False)}\n\n"
-                return
-
-            async for update in workflow_executor.execute_workflow_stream(
-                workflow_id,
-                {'nodes': workflow.nodes, 'edges': workflow.edges},
-                project_path
-            ):
-                data_json = json.dumps(update, ensure_ascii=False)
-                yield f"data: {data_json}\n\n"
-        except Exception as e:
-            logger.error(f"SSE execution error: {e}")
-            err_json = json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)
-            yield f"data: {err_json}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
 @app.post("/api/workflows/{workflow_id}/execute")
 async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
     """执行工作流"""
@@ -5774,13 +5745,30 @@ async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
         if not project_path:
             return JSONResponse({"error": "Project path not found"}, status_code=404)
 
+        def normalize_workflow_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> Dict[str, Any]:
+            type_mapping = {
+                "readFile": "fileRead",
+                "writeFile": "fileWrite",
+                "searchFiles": "search",
+                "gitCommit": "git",
+                "gitBranch": "git",
+            }
+            normalized_nodes = []
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                node_type = node.get("type")
+                mapped_type = type_mapping.get(node_type, node_type)
+                if mapped_type == node_type:
+                    normalized_nodes.append(node)
+                else:
+                    normalized_nodes.append({**node, "type": mapped_type})
+            return {"nodes": normalized_nodes, "edges": edges}
+
         # 执行工作流
         result = await workflow_executor.execute_workflow(
             workflow_id,
-            {
-                'nodes': workflow.nodes,
-                'edges': workflow.edges
-            },
+            normalize_workflow_graph(workflow.nodes, workflow.edges),
             project_path,
             context
         )
@@ -5796,6 +5784,79 @@ async def execute_workflow(workflow_id: str, context: Dict[str, Any] = None):
     except Exception as e:
         logger.error(f"Error executing workflow: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+async def execute_workflow_stream(workflow_id: str, project_name: str = Query(None)):
+    """流式执行工作流（SSE）- 内部实现（用不冲突的路由调用）"""
+    def normalize_workflow_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> Dict[str, Any]:
+        type_mapping = {
+            "readFile": "fileRead",
+            "writeFile": "fileWrite",
+            "searchFiles": "search",
+            "gitCommit": "git",
+            "gitBranch": "git",
+        }
+        normalized_nodes = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            node_type = node.get("type")
+            mapped_type = type_mapping.get(node_type, node_type)
+            if mapped_type == node_type:
+                normalized_nodes.append(node)
+            else:
+                normalized_nodes.append({**node, "type": mapped_type})
+        return {"nodes": normalized_nodes, "edges": edges}
+
+    async def event_generator():
+        try:
+            workflow = workflow_service.get_workflow(workflow_id)
+            workflow_data = None
+            if workflow:
+                workflow_data = {
+                    "project_name": workflow.project_name,
+                    "nodes": workflow.nodes,
+                    "edges": workflow.edges
+                }
+            else:
+                file_path = os.path.join(workflow_service.storage_dir, f"{workflow_id}.json")
+                if os.path.exists(file_path):
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    workflow_data = {
+                        "project_name": data.get("project_name"),
+                        "nodes": data.get("nodes", []),
+                        "edges": data.get("edges", [])
+                    }
+
+            if not workflow_data:
+                yield f"data: {json.dumps({'type': 'error', 'error': 'Workflow not found'}, ensure_ascii=False)}\n\n"
+                return
+
+            resolved_project_name = project_name or workflow_data.get("project_name")
+            project_path = get_project_path(resolved_project_name)
+
+            normalized_graph = normalize_workflow_graph(workflow_data.get("nodes", []), workflow_data.get("edges", []))
+
+            async for update in workflow_executor.execute_workflow_stream(
+                workflow_id,
+                normalized_graph,
+                project_path,
+                context={"project_name": resolved_project_name}
+            ):
+                yield f"data: {json.dumps(update, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error(f"Error executing workflow stream: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+@app.get("/api/workflows/stream/{workflow_id}/execute")
+async def execute_workflow_stream_route(workflow_id: str, project_name: str = Query(None)):
+    return await execute_workflow_stream(workflow_id, project_name)
 
 
 # --- Catch-all 路由 ---

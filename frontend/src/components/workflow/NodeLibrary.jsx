@@ -3,16 +3,20 @@
  * 节点库，提供可拖拽的节点类型
  */
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Play, GitBranch, MessageSquare,
-  Settings, HelpCircle, Bot,
-  Zap, Code, Database, FileText,
-  Terminal, Search, Edit3, Folder,
-  GitPullRequest, Cpu, StopCircle, Sparkles
+  HelpCircle, Bot,
+  Zap, FileText,
+  Terminal, Search, Edit3,
+  GitPullRequest, Cpu, StopCircle, Sparkles,
+  ChevronDown, ChevronRight, Info
 } from 'lucide-react';
 
-const NodeLibrary = () => {
+const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedCategories, setCollapsedCategories] = useState({});
+
   const onDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
@@ -148,91 +152,159 @@ const NodeLibrary = () => {
     },
   ];
 
-  // 按类别分组节点
-  const categorizedNodes = nodeTypes.reduce((acc, node) => {
-    if (!acc[node.category]) {
-      acc[node.category] = [];
-    }
-    acc[node.category].push(node);
-    return acc;
-  }, {});
+  const filteredNodeTypes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return nodeTypes;
+    return nodeTypes.filter((node) => {
+      return (
+        node.label.toLowerCase().includes(q) ||
+        node.description.toLowerCase().includes(q) ||
+        node.category.toLowerCase().includes(q) ||
+        node.type.toLowerCase().includes(q)
+      );
+    });
+  }, [nodeTypes, searchQuery]);
+
+  const categorizedNodes = useMemo(() => {
+    return filteredNodeTypes.reduce((acc, node) => {
+      if (!acc[node.category]) {
+        acc[node.category] = [];
+      }
+      acc[node.category].push(node);
+      return acc;
+    }, {});
+  }, [filteredNodeTypes]);
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 bg-gray-800 border-b border-gray-700">
-        <h2 className="text-lg font-semibold text-white mb-1">节点库</h2>
-        <p className="text-xs text-gray-400">拖拽节点到画布</p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {Object.entries(categorizedNodes).map(([category, nodes]) => (
-          <div key={category} className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden">
-            <div className="px-4 py-3 bg-gray-800 border-b border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-300 flex items-center">
-                <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                {category}
-              </h3>
+      {showHeader && (
+        <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">节点库</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">拖拽节点到画布</p>
             </div>
-            <div className="p-3 space-y-2">
-              {nodes.map((node) => {
-                const Icon = node.icon;
-                return (
-                  <div
-                    key={node.type}
-                    onDragStart={(event) => onDragStart(event, node.type)}
-                    draggable
-                    className="p-3 bg-gray-700/50 hover:bg-gray-700 rounded-lg cursor-grab transition-all duration-200 border border-gray-600 hover:border-gray-500 hover:shadow-md"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-2 rounded-lg ${node.color} shadow-sm`}>
-                        <Icon className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {node.label}
-                        </div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {node.description}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+              {filteredNodeTypes.length} 项
             </div>
           </div>
-        ))}
+
+          <div className="mt-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索节点..."
+                className="w-full pl-10 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {Object.keys(categorizedNodes).length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center px-6">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </div>
+              <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">没有匹配的节点</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">试试换个关键词</p>
+            </div>
+          </div>
+        ) : (
+          Object.entries(categorizedNodes).map(([category, nodes]) => {
+            const isCollapsed = collapsedCategories[category];
+            return (
+              <div key={category} className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsedCategories((prev) => ({ ...prev, [category]: !prev[category] }))
+                  }
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )}
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{category}</h3>
+                  </div>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono px-2 py-0.5 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+                    {nodes.length}
+                  </span>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="p-3 space-y-2">
+                    {nodes.map((node) => {
+                      const Icon = node.icon;
+                      return (
+                        <div
+                          key={node.type}
+                          onDragStart={(event) => onDragStart(event, node.type)}
+                          draggable
+                          className="p-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 rounded-xl cursor-grab transition-all duration-200 dark:bg-gray-900/40 dark:hover:bg-gray-900/70 dark:border-gray-700 dark:hover:border-gray-600"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl ${node.color} shadow-sm`}>
+                              <Icon className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                {node.label}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {node.description}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* 快捷提示 */}
-      <div className="p-4 bg-gray-800 border-t border-gray-700">
-        <h3 className="text-sm font-semibold text-white mb-2 flex items-center">
-          <span className="text-blue-400 mr-2">💡</span>
-          快捷提示
-        </h3>
-        <ul className="text-xs text-gray-400 space-y-1">
-          <li className="flex items-start">
-            <span className="text-blue-400 mr-2">•</span>
-            <span>拖拽节点到画布添加</span>
-          </li>
-          <li className="flex items-start">
-            <span className="text-blue-400 mr-2">•</span>
-            <span>点击节点编辑属性</span>
-          </li>
-          <li className="flex items-start">
-            <span className="text-blue-400 mr-2">•</span>
-            <span>从节点边缘拖拽创建连线</span>
-          </li>
-          <li className="flex items-start">
-            <span className="text-blue-400 mr-2">•</span>
-            <span>Delete 键删除选中节点</span>
-          </li>
-          <li className="flex items-start">
-            <span className="text-blue-400 mr-2">•</span>
-            <span>使用 AI 优化功能迭代改进</span>
-          </li>
-        </ul>
-      </div>
+      {showFooter && (
+        <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            快捷提示
+          </h3>
+          <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+            <li className="flex items-start">
+              <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
+              <span>拖拽节点到画布添加</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
+              <span>点击节点编辑属性</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
+              <span>从节点边缘拖拽创建连线</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
+              <span>Delete 键删除选中节点</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-blue-600 dark:text-blue-400 mr-2">•</span>
+              <span>使用 AI 优化功能迭代改进</span>
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

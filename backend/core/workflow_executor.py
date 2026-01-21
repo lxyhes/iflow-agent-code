@@ -172,23 +172,36 @@ class WorkflowExecutor:
             # 执行每个步骤
             for index, step in enumerate(execution_plan):
                 node_id = step.get('id')
+                node_label = (step.get('data') or {}).get('label') if isinstance(step.get('data'), dict) else None
+
                 yield {
                     'type': 'step_start',
                     'step_index': index,
-                    'node_id': node_id,
                     'step_type': step.get('type'),
+                    'node_id': node_id,
+                    'node_label': node_label,
                     'timestamp': datetime.now().isoformat()
                 }
 
                 # 流式执行步骤
                 async for update in self._execute_step_stream(agent, step, context):
-                    yield update
+                    if isinstance(update, dict):
+                        yield {
+                            **update,
+                            'step_index': index,
+                            'step_type': step.get('type'),
+                            'node_id': node_id,
+                            'node_label': node_label
+                        }
+                    else:
+                        yield update
 
                 yield {
                     'type': 'step_complete',
                     'step_index': index,
-                    'node_id': node_id,
                     'step_type': step.get('type'),
+                    'node_id': node_id,
+                    'node_label': node_label,
                     'timestamp': datetime.now().isoformat()
                 }
 
@@ -295,10 +308,28 @@ class WorkflowExecutor:
                 action = step_data.get('action', '')
                 if action == 'generate_fix':
                     # 专门处理生成修复建议的逻辑
-                    result = await agent.chat("请分析当前项目中的问题并生成结构化的修复建议。请以 JSON 格式返回，包含 'issues' 列表，每个 issue 包含 'file', 'line', 'description', 'suggestion'。")
+                    # 使用结构化提示获取JSON格式的修复建议
+                    prompt = """请分析当前项目中的代码问题并生成结构化的修复建议。
+请以JSON格式返回，包含以下结构：
+{
+  "issues": [
+    {
+      "file": "文件路径",
+      "line": 行号,
+      "description": "问题描述",
+      "suggestion": "修复建议",
+      "severity": "严重程度（low/medium/high）"
+    }
+  ],
+  "summary": "总体摘要"
+}
+
+请务必返回有效的JSON格式，不要包含其他文本。"""
+                    result = await agent.chat(prompt)
+                    return {'success': True, 'output': result}
                 else:
                     result = await agent.chat(f"Execute action: {action}")
-                return {'success': True, 'output': result}
+                    return {'success': True, 'output': result}
 
             elif step_type == 'askUser':
                 # 等待用户输入（需要前端实现）
@@ -403,8 +434,8 @@ class WorkflowExecutor:
                 }
             else:
                 yield {
-                    'type': 'step_complete',
-                    'message': f'Step {step_type} completed',
+                    'type': 'chunk',
+                    'content': f'[{step_type}] 完成\n',
                     'timestamp': datetime.now().isoformat()
                 }
 
@@ -418,10 +449,24 @@ class WorkflowExecutor:
 
     def _build_step_prompt(self, step_type: str, step_data: Dict[str, Any]) -> str:
         """构建步骤提示词"""
-        base_instruction = "\n请务必使用中文进行回答。"
-        
+        # 特殊处理 generate_fix action
         if step_type == 'action' and step_data.get('action') == 'generate_fix':
-            return "请分析当前项目中的问题并生成结构化的修复建议。请以 JSON 格式返回，包含 'issues' 列表，每个 issue 包含 'file', 'line', 'description', 'suggestion'。" + base_instruction
+            return """请分析当前项目中的代码问题并生成结构化的修复建议。
+请以JSON格式返回，包含以下结构：
+{
+  "issues": [
+    {
+      "file": "文件路径",
+      "line": 行号,
+      "description": "问题描述",
+      "suggestion": "修复建议",
+      "severity": "严重程度（low/medium/high）"
+    }
+  ],
+  "summary": "总体摘要"
+}
+
+请务必返回有效的JSON格式，不要包含其他文本。"""
 
         prompts = {
             'prompt': step_data.get('prompt', ''),
@@ -436,11 +481,7 @@ class WorkflowExecutor:
             'search': f"Search code: {step_data.get('searchQuery', '')}",
             'codeEdit': f"Edit code: {step_data.get('editType', '')}"
         }
-        
-        prompt = prompts.get(step_type, '')
-        if prompt:
-            return prompt + base_instruction
-        return prompt
+        return prompts.get(step_type, '')
 
     def _collect_output(self, execution_plan: List[Dict[str, Any]]) -> Dict[str, Any]:
         """收集执行输出"""

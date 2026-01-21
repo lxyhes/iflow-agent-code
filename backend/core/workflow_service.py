@@ -77,7 +77,22 @@ class WorkflowService:
     
     def get_workflow(self, workflow_id: str) -> Optional[Workflow]:
         """获取工作流"""
-        return self.workflows.get(workflow_id)
+        workflow = self.workflows.get(workflow_id)
+        if workflow:
+            return workflow
+
+        try:
+            file_path = os.path.join(self.storage_dir, f"{workflow_id}.json")
+            if not os.path.exists(file_path):
+                return None
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            workflow = Workflow(**data)
+            self.workflows[workflow.id] = workflow
+            return workflow
+        except Exception as e:
+            logger.error(f"Failed to load workflow {workflow_id}: {e}")
+            return None
     
     def get_workflows_by_project(self, project_name: str) -> List[Workflow]:
         """获取项目的所有工作流"""
