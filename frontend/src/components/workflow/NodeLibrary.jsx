@@ -3,7 +3,7 @@
  * 节点库，提供可拖拽的节点类型
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play, GitBranch, MessageSquare,
   HelpCircle, Bot,
@@ -13,9 +13,17 @@ import {
   ChevronDown, ChevronRight, Info
 } from 'lucide-react';
 
-const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
+const NodeLibrary = ({ showHeader = true, showFooter = true, showSearch = true, autoFocusSearch = false }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState({});
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!autoFocusSearch) return;
+    if (!searchInputRef.current) return;
+    const t = setTimeout(() => searchInputRef.current?.focus?.(), 50);
+    return () => clearTimeout(t);
+  }, [autoFocusSearch]);
 
   const onDragStart = (event, nodeType) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
@@ -189,16 +197,34 @@ const NodeLibrary = ({ showHeader = true, showFooter = true }) => {
             </div>
           </div>
 
-          <div className="mt-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索节点..."
-                className="w-full pl-10 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          {showSearch && (
+            <div className="mt-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索节点..."
+                  className="w-full pl-10 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {!showHeader && showSearch && (
+        <div className="p-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索节点..."
+              className="w-full pl-10 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
       )}

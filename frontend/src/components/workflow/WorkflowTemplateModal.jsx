@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, Sparkles, Layers, ArrowRight } from 'lucide-react';
 import { workflowTemplates } from './workflowTemplates';
 import { cn } from '../../lib/utils';
@@ -74,6 +74,24 @@ const TemplateCard = ({ t, onPick }) => {
 const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('全部');
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => searchInputRef.current?.focus?.(), 50);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
 
   const categories = useMemo(() => {
     const s = new Set(workflowTemplates.map((t) => t.category || '其他'));
@@ -103,7 +121,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
       <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-label="Close templates" />
-      <div className="relative w-full max-w-5xl rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-5xl max-h-[85vh] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl overflow-hidden flex flex-col">
         <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -124,6 +142,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
+                ref={searchInputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="搜索模板：例如 bug / release / incident / api"
@@ -144,7 +163,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
           </div>
         </div>
 
-        <div className="p-6 bg-gray-50 dark:bg-gray-950/30">
+        <div className="p-6 bg-gray-50 dark:bg-gray-950/30 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
               <div className="w-12 h-12 mx-auto rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-center">
@@ -174,4 +193,3 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
 };
 
 export default WorkflowTemplateModal;
-

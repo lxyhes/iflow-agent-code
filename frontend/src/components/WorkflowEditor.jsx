@@ -3,13 +3,15 @@
  * 可视化工作流编辑器，支持拖拽节点、连线、AI 辅助生成
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
+  applyNodeChanges,
+  applyEdgeChanges,
   addEdge,
   BackgroundVariant,
   MarkerType,
@@ -19,7 +21,7 @@ import 'reactflow/dist/style.css';
 import {
   Save, Play, Trash2, RefreshCw,
   Sparkles, Download, Upload, ChevronDown, CheckCircle,
-  LayoutGrid, PanelLeft, X
+  LayoutGrid, PanelLeft, X, Undo2, Redo2
 } from 'lucide-react';
 import NodeLibrary from './workflow/NodeLibrary';
 import { nodeTypes } from './workflow/CustomNodes';
@@ -28,6 +30,12 @@ import AiRefinementDialog from './workflow/AiRefinementDialog';
 import WorkflowValidationPanel from './workflow/WorkflowValidationPanel';
 import ExecutionHistoryPanel from './workflow/ExecutionHistoryPanel';
 import WorkflowTemplateModal from './workflow/WorkflowTemplateModal';
+import WorkflowDraftBanner from './workflow/WorkflowDraftBanner';
+import { useWorkflowHistory } from './workflow/useWorkflowHistory';
+import { useWorkflowAutosave } from './workflow/useWorkflowAutosave';
+import { useWorkflowShortcuts } from './workflow/useWorkflowShortcuts';
+import { normalizeImportedWorkflow } from './workflow/workflowImportExport';
+import { computeGraphSignature } from './workflow/workflowGraphUtils';
 import { authenticatedFetch } from '../utils/api';
 import { useToast } from '../contexts/ToastContext';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
@@ -91,8 +99,8 @@ const SAMPLE_EDGES = [
 
 const WorkflowEditor = ({ projectName, selectedProject }) => {
   const toast = useToast();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes] = useNodesState([]);
+  const [edges, setEdges] = useEdgesState([]);
   const [workflowName, setWorkflowName] = useState('New Workflow');
   const [isEditingName, setIsEditingName] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -107,6 +115,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const [executionLogs, setExecutionLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [selection, setSelection] = useState({ nodes: [], edges: [] });
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showExecutionHistory, setShowExecutionHistory] = useState(false);
@@ -127,16 +136,81 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const lastExecutingNodeIdRef = useRef(null);
   const currentExecutingNodeIdRef = useRef(null);
   const [logsDock, setLogsDock] = useState('side');
-  const [lastExecutionId, setLastExecutionId] = useState(null);
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+
+  const history = useWorkflowHistory({ initialNodes: [], initialEdges: [] });
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  useEffect(() => {
+    history.replacePresent({ nodes, edges });
+  }, [history, nodes, edges]);
+
+  const autosaveProjectKey = selectedProject?.name || projectName || 'default';
+  const { meta: autosaveMeta, draft: workflowDraft, restoreDraft, discardDraft, markSaved } = useWorkflowAutosave({
+    projectName: autosaveProjectKey,
+    workflowName,
+    nodes,
+    edges,
+    enabled: true,
+  });
+
+  const currentSignature = computeGraphSignature({ workflowName, nodes, edges });
+  const draftSignature = workflowDraft
+    ? computeGraphSignature({ workflowName: workflowDraft.workflow_name, nodes: workflowDraft.nodes, edges: workflowDraft.edges })
+    : null;
+  const showDraftBanner = autosaveMeta.hadDraftOnInit && !draftBannerDismissed && workflowDraft && draftSignature !== currentSignature;
+
+  const applyGraph = useCallback((graph) => {
+    setNodes(graph.nodes || []);
+    setEdges(graph.edges || []);
+    setShowPropertiesPanel(false);
+    setSelectedNode(null);
+  }, [setEdges, setNodes]);
+
+  const commitGraph = useCallback((graph) => {
+    history.commit({ nodes: graph.nodes || [], edges: graph.edges || [] });
+    applyGraph(graph);
+  }, [applyGraph, history]);
+
+  const handleUndo = useCallback(() => {
+    const graph = history.undo();
+    applyGraph(graph);
+  }, [applyGraph, history]);
+
+  const handleRedo = useCallback(() => {
+    const graph = history.redo();
+    applyGraph(graph);
+  }, [applyGraph, history]);
+
+  const handleSelectionChange = useCallback((sel) => {
+    if (!sel) {
+      setSelection({ nodes: [], edges: [] });
+      return;
+    }
+    setSelection({
+      nodes: Array.isArray(sel.nodes) ? sel.nodes : [],
+      edges: Array.isArray(sel.edges) ? sel.edges : [],
+    });
+  }, []);
 
   useEffect(() => {
     if (hasInitialized) return;
     if (nodes.length === 0 && edges.length === 0) {
       setNodes(SAMPLE_NODES);
       setEdges(SAMPLE_EDGES);
+      history.reset({ nodes: SAMPLE_NODES, edges: SAMPLE_EDGES });
     }
     setHasInitialized(true);
-  }, [hasInitialized, nodes.length, edges.length, setNodes, setEdges]);
+  }, [edges.length, hasInitialized, history, nodes.length, setEdges, setNodes]);
 
   // 加载 MCP 服务器列表
   useEffect(() => {
@@ -167,37 +241,74 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   }, [showExportMenu]);
 
   // 节点点击处理
-  const onNodeClick = useCallback((event, node) => {
+  const onNodeClick = useCallback((_event, node) => {
     setSelectedNode(node);
     setShowPropertiesPanel(true);
   }, []);
 
-  // 连接节点
+  const shouldCommitNodeChanges = useCallback((changes) => {
+    return changes.some((c) => {
+      if (c.type === 'add' || c.type === 'remove') return true;
+      if (c.type === 'position' && c.dragging === false) return true;
+      if (c.type === 'dimensions') return true;
+      return false;
+    });
+  }, []);
+
+  const shouldCommitEdgeChanges = useCallback((changes) => {
+    return changes.some((c) => c.type === 'add' || c.type === 'remove');
+  }, []);
+
   const handleNodesChange = useCallback((changes) => {
-    // 如果节点被删除，关闭属性面板
-    if (changes.some(change => change.type === 'remove' && change.id === selectedNode?.id)) {
+    if (changes.some((change) => change.type === 'remove' && change.id === selectedNode?.id)) {
       setShowPropertiesPanel(false);
       setSelectedNode(null);
     }
-    onNodesChange(changes);
-  }, [selectedNode, onNodesChange]);
+
+    const shouldCommit = shouldCommitNodeChanges(changes);
+    setNodes((current) => {
+      const next = applyNodeChanges(changes, current);
+      if (shouldCommit) {
+        history.commit({ nodes: next, edges: edgesRef.current });
+      }
+      return next;
+    });
+  }, [history, selectedNode?.id, setNodes, shouldCommitNodeChanges]);
 
   // 节点更新处理
   const handleNodeUpdate = (updatedNode) => {
-    setNodes((nds) => nds.map((n) => (n.id === updatedNode.id ? updatedNode : n)));
+    setNodes((current) => {
+      const next = current.map((n) => (n.id === updatedNode.id ? updatedNode : n));
+      history.commit({ nodes: next, edges: edgesRef.current });
+      return next;
+    });
   };
 
-  // 连接节点
+  const handleEdgesChange = useCallback((changes) => {
+    const shouldCommit = shouldCommitEdgeChanges(changes);
+    setEdges((current) => {
+      const next = applyEdgeChanges(changes, current);
+      if (shouldCommit) {
+        history.commit({ nodes: nodesRef.current, edges: next });
+      }
+      return next;
+    });
+  }, [history, setEdges, shouldCommitEdgeChanges]);
+
   const onConnect = useCallback((params) => {
-    setEdges((eds) => addEdge({
-      ...params,
-      animated: true,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: '#3b82f6',
-      },
-    }, eds));
-  }, [setEdges]);
+    setEdges((current) => {
+      const next = addEdge({
+        ...params,
+        animated: true,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: '#3b82f6',
+        },
+      }, current);
+      history.commit({ nodes: nodesRef.current, edges: next });
+      return next;
+    });
+  }, [history, setEdges]);
 
   // 添加节点
   const onDrop = useCallback((event) => {
@@ -221,8 +332,12 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       data: { label: getNodeLabel(type) },
     };
 
-    setNodes((nds) => nds.concat(newNode));
-  }, [setNodes]);
+    setNodes((current) => {
+      const next = current.concat(newNode);
+      history.commit({ nodes: next, edges: edgesRef.current });
+      return next;
+    });
+  }, [history, setNodes]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -252,6 +367,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       const data = await response.json();
 
       if (data.success) {
+        markSaved();
         toast.success('工作流保存成功');
       } else {
         toast.error(`保存失败：${data.error || '未知错误'}`);
@@ -263,14 +379,74 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     }
   };
 
+  const handleDeleteSelection = useCallback(() => {
+    const selectedNodes = selection.nodes || [];
+    const selectedEdges = selection.edges || [];
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
+
+    const removedNodeIds = new Set(selectedNodes.map((n) => n.id));
+    const removedEdgeIds = new Set(selectedEdges.map((e) => e.id));
+
+    const nextNodes = nodesRef.current.filter((n) => !removedNodeIds.has(n.id));
+    const nextEdges = edgesRef.current.filter((e) => {
+      if (removedEdgeIds.has(e.id)) return false;
+      if (removedNodeIds.has(e.source) || removedNodeIds.has(e.target)) return false;
+      return true;
+    });
+
+    history.commit({ nodes: nextNodes, edges: nextEdges });
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    if (selectedNode && removedNodeIds.has(selectedNode.id)) {
+      setSelectedNode(null);
+      setShowPropertiesPanel(false);
+    }
+  }, [history, selectedNode, selection.edges, selection.nodes, setEdges, setNodes]);
+
+  const handleDuplicate = useCallback(() => {
+    const base = selection.nodes?.[0] || selectedNode;
+    if (!base) return;
+
+    const newId = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+    const dataClone = typeof globalThis.structuredClone === 'function'
+      ? globalThis.structuredClone(base.data)
+      : JSON.parse(JSON.stringify(base.data || {}));
+
+    const newNode = {
+      ...base,
+      id: newId,
+      position: { x: (base.position?.x || 0) + 40, y: (base.position?.y || 0) + 40 },
+      data: dataClone,
+      selected: true,
+    };
+
+    const nextNodes = nodesRef.current
+      .map((n) => ({ ...n, selected: false }))
+      .concat(newNode);
+
+    history.commit({ nodes: nextNodes, edges: edgesRef.current });
+    setNodes(nextNodes);
+    setSelectedNode(newNode);
+    setShowPropertiesPanel(true);
+  }, [history, selectedNode, selection.nodes, setNodes]);
+
+  useWorkflowShortcuts({
+    enabled: true,
+    onSave: handleSave,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onToggleLibrary: () => setShowLibrary((v) => !v),
+    onDeleteSelection: handleDeleteSelection,
+    onDuplicate: handleDuplicate,
+  });
+
   // AI 迭代优化
   const handleAiRefinement = () => {
     setShowAiRefinementDialog(true);
   };
 
   const handleApplyAiRefinement = (updatedWorkflow) => {
-    setNodes(updatedWorkflow.nodes);
-    setEdges(updatedWorkflow.edges);
+    commitGraph({ nodes: updatedWorkflow.nodes, edges: updatedWorkflow.edges });
   };
 
   // 验证工作流
@@ -298,8 +474,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
       const data = await response.json();
       if (data.success) {
-        setNodes(data.nodes);
-        setEdges(data.edges);
+        commitGraph({ nodes: data.nodes, edges: data.edges });
         setShowAiPanel(false);
         setAiPrompt('');
         toast.success('已生成工作流');
@@ -321,10 +496,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       confirmText: '清空',
       confirmVariant: 'danger',
       onConfirm: () => {
-        setNodes([]);
-        setEdges([]);
-        setShowPropertiesPanel(false);
-        setSelectedNode(null);
+        commitGraph({ nodes: [], edges: [] });
         toast.info('画布已清空');
       },
     });
@@ -334,9 +506,12 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
   const handleExportJSON = () => {
     const workflowData = {
       name: workflowName,
+      version: 1,
+      project_name: selectedProject?.name || projectName || 'default',
+      workflow_name: workflowName,
       nodes,
       edges,
-      created_at: new Date().toISOString(),
+      exported_at: new Date().toISOString(),
     };
 
     const blob = new Blob([JSON.stringify(workflowData, null, 2)], {
@@ -525,7 +700,6 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         const now = new Date().toISOString();
 
         if (data.type === 'start') {
-          if (data.execution_id) setLastExecutionId(data.execution_id);
           setExecutionLogs((prev) => [
             ...prev,
             { type: 'info', message: '工作流开始执行...', timestamp: now }
@@ -660,7 +834,6 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             currentNodeLabel: null,
           }));
         } else if (data.type === 'error') {
-          if (data.execution_id) setLastExecutionId(data.execution_id);
           const nodeId = data.node_id || null;
           if (nodeId) {
             setNodes((nds) =>
@@ -678,7 +851,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         }
       };
 
-      eventSource.onerror = (error) => {
+      eventSource.onerror = (_error) => {
         setExecutionLogs((prev) => [
           ...prev,
           { type: 'error', message: '连接中断或服务器错误', timestamp: new Date().toISOString() }
@@ -710,10 +883,38 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         reader.onload = (event) => {
           try {
             const data = JSON.parse(event.target.result);
-            setNodes(data.nodes || []);
-            setEdges(data.edges || []);
-            setWorkflowName(data.name || 'Imported Workflow');
-            toast.success('已导入工作流');
+            const normalized = normalizeImportedWorkflow(data);
+
+            if (normalized.errors.length > 0) {
+              setConfirmDialog({
+                title: '导入失败',
+                message: normalized.errors.join('\n'),
+                confirmText: '知道了',
+                confirmVariant: 'primary',
+                onConfirm: () => {},
+              });
+              return;
+            }
+
+            const applyImported = () => {
+              setWorkflowName(normalized.workflowName || 'Imported Workflow');
+              commitGraph({ nodes: normalized.nodes, edges: normalized.edges });
+              toast.success('已导入工作流');
+            };
+
+            if (normalized.warnings.length > 0) {
+              setConfirmDialog({
+                title: '导入完成（有提醒）',
+                message: normalized.warnings.join('\n'),
+                confirmText: '继续导入',
+                cancelText: '取消',
+                confirmVariant: 'primary',
+                onConfirm: applyImported,
+              });
+              return;
+            }
+
+            applyImported();
           } catch (error) {
             toast.error('导入失败：无效的文件格式');
           }
@@ -820,6 +1021,11 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
             <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600">
               {edges.length} 连线
             </span>
+            {autosaveMeta.lastSavedAtText && (
+              <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600">
+                草稿 {autosaveMeta.lastSavedAtText}
+              </span>
+            )}
           </span>
         </div>
 
@@ -847,6 +1053,24 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           >
             <PanelLeft className="w-4 h-4" />
             <span className="hidden sm:inline">节点库</span>
+          </button>
+
+          <button
+            onClick={handleUndo}
+            disabled={!history.canUndo}
+            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="撤销 (Ctrl/Cmd+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={handleRedo}
+            disabled={!history.canRedo}
+            className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 transition-colors dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-100 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="重做 (Ctrl/Cmd+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
           </button>
 
           <button
@@ -975,6 +1199,29 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
           </button>
         </div>
       </div>
+
+      {showDraftBanner && (
+        <div className="px-4 md:px-6 pt-3">
+          <WorkflowDraftBanner
+            draft={workflowDraft}
+            onRestore={() => {
+              const draft = restoreDraft();
+              if (!draft) return;
+              setWorkflowName(draft.workflow_name || 'Untitled Workflow');
+              setNodes(draft.nodes || []);
+              setEdges(draft.edges || []);
+              history.reset({ nodes: draft.nodes || [], edges: draft.edges || [] });
+              setDraftBannerDismissed(true);
+              toast.success('已恢复草稿');
+            }}
+            onDiscard={() => {
+              discardDraft();
+              setDraftBannerDismissed(true);
+              toast.info('已丢弃草稿');
+            }}
+          />
+        </div>
+      )}
 
       {/* AI 生成面板 */}
       {showAiPanel && (
@@ -1142,10 +1389,14 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
               nodes={nodes}
               edges={edges}
               onNodesChange={handleNodesChange}
-              onEdgesChange={onEdgesChange}
+              onEdgesChange={handleEdgesChange}
               onConnect={onConnect}
               onNodeClick={onNodeClick}
-              onPaneClick={() => setShowPropertiesPanel(false)}
+              onSelectionChange={handleSelectionChange}
+              onPaneClick={() => {
+                setShowPropertiesPanel(false);
+                setSelectedNode(null);
+              }}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
               onDragOver={onDragOver}
@@ -1368,7 +1619,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                   </button>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <NodeLibrary showHeader={false} />
+                  <NodeLibrary showHeader={false} showSearch autoFocusSearch />
                 </div>
               </div>
             </div>
