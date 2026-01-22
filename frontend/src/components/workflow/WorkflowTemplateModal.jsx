@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, Sparkles, Layers, ArrowRight, Star, Clock, Pencil, Trash2, Download, Upload } from 'lucide-react';
 import { workflowTemplates } from './workflowTemplates';
 import { cn } from '../../lib/utils';
-import { loadCustomTemplates, removeCustomTemplate, saveCustomTemplates } from './workflowTemplateStorage';
+import { loadCustomTemplatesForProject, removeCustomTemplateForProject, saveCustomTemplatesForProject } from './workflowTemplateStorage';
+import { scopedKey } from '../../utils/projectScope';
 
 const categoryColor = (category) => {
   switch (category) {
@@ -141,7 +142,7 @@ const TemplateCard = ({ t, isFavorite, isRecent, onPick, onToggleFavorite, onRen
   );
 };
 
-const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
+const WorkflowTemplateModal = ({ open, onClose, onPickTemplate, project }) => {
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('全部');
   const [view, setView] = useState('all');
@@ -164,17 +165,17 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
   useEffect(() => {
     if (!open) return;
     try {
-      const fav = JSON.parse(localStorage.getItem('iflow:workflow:template:favorites') || '[]');
+      const fav = JSON.parse(localStorage.getItem(scopedKey(project, 'iflow:workflow:template:favorites')) || '[]');
       if (Array.isArray(fav)) setFavoriteIds(fav.map(String));
     } catch {
     }
     try {
-      const rec = JSON.parse(localStorage.getItem('iflow:workflow:template:recent') || '[]');
+      const rec = JSON.parse(localStorage.getItem(scopedKey(project, 'iflow:workflow:template:recent')) || '[]');
       if (Array.isArray(rec)) setRecentIds(rec.map(String));
     } catch {
     }
-    setCustomTemplates(loadCustomTemplates());
-  }, [open]);
+    setCustomTemplates(loadCustomTemplatesForProject(project));
+  }, [open, project]);
 
   useEffect(() => {
     if (!open) return;
@@ -210,7 +211,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
       else nextSet.add(id);
       const next = Array.from(nextSet);
       try {
-        localStorage.setItem('iflow:workflow:template:favorites', JSON.stringify(next));
+        localStorage.setItem(scopedKey(project, 'iflow:workflow:template:favorites'), JSON.stringify(next));
       } catch {
       }
       return next;
@@ -223,7 +224,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
     setRecentIds((prev) => {
       const next = [id, ...prev.filter((x) => String(x) !== id)].slice(0, 12);
       try {
-        localStorage.setItem('iflow:workflow:template:recent', JSON.stringify(next));
+        localStorage.setItem(scopedKey(project, 'iflow:workflow:template:recent'), JSON.stringify(next));
       } catch {
       }
       return next;
@@ -352,8 +353,8 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
     }
 
     if (imported > 0) {
-      saveCustomTemplates(nextCustom);
-      setCustomTemplates(loadCustomTemplates());
+      saveCustomTemplatesForProject(project, nextCustom);
+      setCustomTemplates(loadCustomTemplatesForProject(project));
       setView('mine');
       setImportFlash(`已导入 ${imported} 个模板`);
     } else {
@@ -371,13 +372,13 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
     const id = String(tpl?.id || '');
     if (!id) return;
     if (!window.confirm(`确定删除模板「${String(tpl?.name || '')}」？此操作不可撤销。`)) return;
-    removeCustomTemplate(id);
-    const next = loadCustomTemplates();
+    removeCustomTemplateForProject(project, id);
+    const next = loadCustomTemplatesForProject(project);
     setCustomTemplates(next);
     setFavoriteIds((prev) => {
       const updated = prev.filter((x) => String(x) !== id);
       try {
-        localStorage.setItem('iflow:workflow:template:favorites', JSON.stringify(updated));
+        localStorage.setItem(scopedKey(project, 'iflow:workflow:template:favorites'), JSON.stringify(updated));
       } catch {
       }
       return updated;
@@ -385,7 +386,7 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
     setRecentIds((prev) => {
       const updated = prev.filter((x) => String(x) !== id);
       try {
-        localStorage.setItem('iflow:workflow:template:recent', JSON.stringify(updated));
+        localStorage.setItem(scopedKey(project, 'iflow:workflow:template:recent'), JSON.stringify(updated));
       } catch {
       }
       return updated;
@@ -406,12 +407,12 @@ const WorkflowTemplateModal = ({ open, onClose, onPickTemplate }) => {
       return;
     }
     const id = String(target.id);
-    const list = loadCustomTemplates();
+    const list = loadCustomTemplatesForProject(project);
     const idx = list.findIndex((t) => String(t.id) === id);
     if (idx >= 0) {
       const updated = [...list];
       updated[idx] = { ...updated[idx], name: nextName, updated_at: new Date().toISOString() };
-      saveCustomTemplates(updated);
+      saveCustomTemplatesForProject(project, updated);
       setCustomTemplates(updated);
     }
     setRenameTarget(null);

@@ -48,6 +48,8 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
   const [showSaveConfig, setShowSaveConfig] = useState(false);
   const [configName, setConfigName] = useState('');
   const [projectConfigs, setProjectConfigs] = useState([]); // 项目配置文件中的数据库连接
+
+  const selectedProjectObj = projects.find((p) => p?.name === selectedProject) || initialSelectedProject || null;
   
   // 数据库类型配置
   const databaseTypes = [
@@ -493,21 +495,21 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
-      {/* 顶部栏 */}
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-800 border-b border-gray-700">
+<div className="h-full flex flex-col bg-white dark:bg-gray-900">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
-          <Database className="w-6 h-6 text-blue-400" />
-          <h1 className="text-xl font-bold text-white">数据库查询工具</h1>
+          <Database className="w-6 h-6 text-blue-500 dark:text-blue-400" />
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">数据库查询工具</h1>
         </div>
 
         <div className="flex items-center space-x-3">
           {selectedConnection && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600/20 border border-blue-600 rounded">
-              <span className="text-sm text-blue-400">{selectedConnection}</span>
+            <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-500/10 dark:bg-blue-600/20 border border-blue-500 dark:border-blue-600 rounded">
+              <span className="text-sm text-blue-600 dark:text-blue-400">{selectedConnection}</span>
               <button
                 onClick={() => handleDisconnect(selectedConnection)}
-                className="text-blue-400 hover:text-white transition-colors"
+                className="text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-white transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -518,7 +520,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             <select
               value=""
               onChange={(e) => e.target.value && handleSelectConnection(e.target.value)}
-              className="bg-gray-700 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">选择连接...</option>
               {connections.map(conn => (
@@ -539,12 +541,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
 
       {/* 错误提示 */}
       {error && (
-        <div className="mx-6 mt-4 px-4 py-3 bg-red-600/20 border border-red-600 rounded flex items-center space-x-2">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
+        <div className="mx-6 mt-4 px-4 py-3 bg-red-100 dark:bg-red-600/20 border border-red-500 dark:border-red-600 rounded flex items-center space-x-2">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
           <button
             onClick={() => setError(null)}
-            className="ml-auto text-red-400 hover:text-white transition-colors"
+            className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -552,12 +554,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
       )}
 
       {notice && (
-        <div className="mx-6 mt-4 px-4 py-3 bg-emerald-600/20 border border-emerald-600 rounded flex items-center space-x-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-          <p className="text-sm text-emerald-200">{notice}</p>
+        <div className="mx-6 mt-4 px-4 py-3 bg-emerald-100 dark:bg-emerald-600/20 border border-emerald-500 dark:border-emerald-600 rounded flex items-center space-x-2">
+          <div className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 flex-shrink-0" />
+          <p className="text-sm text-emerald-700 dark:text-emerald-200">{notice}</p>
           <button
             onClick={() => setNotice(null)}
-            className="ml-auto text-emerald-200 hover:text-white transition-colors"
+            className="ml-auto text-emerald-600 dark:text-emerald-200 hover:text-emerald-800 dark:hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -598,6 +600,8 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
               aiContext={{
                 dbType,
                 selectedConnection,
+                projectName: selectedProjectObj?.name || null,
+                projectPath: selectedProjectObj?.fullPath || selectedProjectObj?.path || null,
                 tables,
                 selectedTable,
                 tableInfo,
@@ -630,12 +634,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
       {/* 连接对话框 */}
       {showConnectDialog && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">连接数据库</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">连接数据库</h2>
               <button
                 onClick={() => setShowConnectDialog(false)}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -644,7 +648,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             <div className="p-6 space-y-6">
               {/* 数据库类型选择器 */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                   数据库类型
                 </label>
                 <div className="grid grid-cols-5 gap-3">
@@ -659,8 +663,8 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       }}
                       className={`p-3 rounded-lg border-2 transition-all ${
                         dbType === type.value
-                          ? 'border-blue-500 bg-blue-500/20 text-blue-400'
-                          : 'border-gray-600 bg-gray-700 text-gray-400 hover:border-gray-500'
+                          ? 'border-blue-500 bg-blue-500/10 dark:bg-blue-600/20'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                       }`}
                     >
                       <div className="text-2xl mb-1">{type.icon}</div>
@@ -708,11 +712,10 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                   </label>
                   <div className="space-y-2">
                     {savedConfigs.map((config) => (
-                      <div key={config.name} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-white">{config.name}</div>
-                          <div className="text-xs text-gray-400">
-                            {config.db_type.toUpperCase()} - {new Date(config.created_at).toLocaleString()}
+                      <div key={config.name} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                          <div className="flex-1">
+                                            <div className="text-sm font-medium text-gray-900 dark:text-white">{config.name}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">                            {config.db_type.toUpperCase()} - {new Date(config.created_at).toLocaleString()}
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -745,7 +748,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                     {projectConfigs.map((conn, index) => (
                       <div 
                         key={index}
-                        className="p-3 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors"
+                        className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                         onClick={() => {
                           console.log('=== 点击配置连接 ===');
                           console.log('完整连接对象:', JSON.stringify(conn, null, 2));
@@ -785,11 +788,11 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2">
-                              <div className="text-sm font-medium text-white">
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
                                 {conn.name}
                               </div>
                               {conn.source_type && (
-                                <span className="px-2 py-0.5 bg-gray-600 text-gray-300 text-xs rounded">
+                                <span className="px-2 py-0.5 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded">
                                   {conn.source_type.toUpperCase()}
                                 </span>
                               )}
@@ -837,7 +840,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                         选择项目数据库
                       </label>
                       {isLoadingProjectDatabases ? (
-                        <div className="text-sm text-gray-400">加载中...</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">加载中...</div>
                       ) : projectDatabases.length > 0 ? (
                         <select
                           value={dbPath}
@@ -874,7 +877,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbPath}
                       onChange={(e) => setDbPath(e.target.value)}
                       placeholder="例如: /path/to/database.db"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </>
@@ -1008,14 +1011,14 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             
             {/* 保存配置对话框 */}
             {showSaveConfig && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 w-full max-w-md">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-                    <h2 className="text-lg font-semibold text-white">保存数据库配置</h2>
-                    <button
-                      onClick={() => setShowSaveConfig(false)}
-                      className="text-gray-400 hover:text-white transition-colors"
-                    >
+  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">保存数据库配置</h2>
+            <button
+              onClick={() => setShowSaveModal(false)}
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+            >
                       <X className="w-5 h-5" />
                     </button>
                   </div>

@@ -4,6 +4,7 @@ import { getRAGStats, indexProjectRAG, retrieveRAG, resetRAG, uploadDocumentToRA
 import { retrieveRAGAdvanced, getDocumentVersions, getDocumentVersion, recordDocumentVersion } from '../utils/ragEnhanced';
 import ChatComponent from './ChatComponent';
 import VoicePairProgramming from './VoicePairProgramming';
+import { scopedKey } from '../utils/projectScope';
 
 /**
  * RAG 面板组件
@@ -128,16 +129,16 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
 
   // 从 localStorage 加载自动索引设置
   useEffect(() => {
-    const saved = localStorage.getItem('rag-auto-index');
+    const saved = localStorage.getItem(scopedKey({ path: projectPath, name: projectName }, 'rag-auto-index'));
     if (saved !== null) {
       setAutoIndexEnabled(saved === 'true');
     }
-  }, []);
+  }, [projectName, projectPath]);
 
   // 保存自动索引设置
   useEffect(() => {
-    localStorage.setItem('rag-auto-index', autoIndexEnabled.toString());
-  }, [autoIndexEnabled]);
+    localStorage.setItem(scopedKey({ path: projectPath, name: projectName }, 'rag-auto-index'), autoIndexEnabled.toString());
+  }, [autoIndexEnabled, projectName, projectPath]);
 
   const checkAndAutoIndex = async () => {
     if (!projectPath || isIndexing) return;
@@ -544,20 +545,19 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
   if (!visible) return null;
 
   return (
-    <div className="h-full flex flex-col bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 overflow-hidden font-sans">
       {/* 顶部标题栏 - 玻璃拟态效果 */}
-      <header className="flex-shrink-0 px-6 py-4 bg-slate-900/50 backdrop-blur-md border-b border-white/5 flex items-center justify-between z-10">
+      <header className="flex-shrink-0 px-6 py-4 bg-gray-50 dark:bg-slate-900/50 backdrop-blur-md border-b border-gray-200 dark:border-white/5 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-600/20 rounded-xl ring-1 ring-indigo-500/30">
             <Database className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-              RAG 知识库
-              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">Pro</span>
-            </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">智能文档检索与增强生成系统</p>
-          </div>
+            <h2 className="text-base font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                        RAG 知识库
+                        <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">Pro</span>
+                      </h2>
+                      <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">智能文档检索与增强生成系统</p>          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -583,17 +583,15 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
 
       {/* 设置面板 - 下拉动画 */}
       {showSettings && (
-        <div className="flex-shrink-0 px-6 py-4 bg-slate-800/40 border-b border-white/5 animate-slideDown">
-          <div className="max-w-xl mx-auto space-y-4">
-            <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-white/5">
-              <div className="flex items-center gap-3">
+        <div className="flex-shrink-0 px-6 py-4 bg-gray-50 dark:bg-slate-800/40 border-b border-gray-200 dark:border-white/5 animate-slideDown">
+                <div className="max-w-xl mx-auto space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-slate-900/50 rounded-xl border border-gray-200 dark:border-white/5">              <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-500/10 rounded-lg">
                   <Zap className="w-4 h-4 text-amber-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-white">自动索引模式</p>
-                  <p className="text-xs text-slate-400">打开项目时自动扫描并更新知识库</p>
-                </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">自动索引模式</p>
+                                  <p className="text-xs text-gray-500 dark:text-slate-400">打开项目时自动扫描并更新知识库</p>                </div>
               </div>
               <button
                 onClick={handleAutoIndexToggle}
@@ -611,7 +609,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
       {/* 主体内容区 - 选项卡与布局 */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* 选项卡导航 */}
-        <div className="flex-shrink-0 px-6 py-2 bg-slate-900/30 flex items-center justify-between border-b border-white/5">
+        <div className="flex-shrink-0 px-6 py-2 bg-gray-50 dark:bg-slate-900/30 flex items-center justify-between border-b border-gray-200 dark:border-white/5">
           <nav className="flex gap-1">
             {[
               { id: 'chat', label: 'AI 问答', icon: MessageSquare, color: 'emerald' },
@@ -645,17 +643,17 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                   {activeTab === 'chat' && (
                     <div className="h-full flex flex-col md:flex-row min-h-0 animate-fadeIn">
                       {/* 对话主区域 */}
-                      <div className="flex-1 flex flex-col min-w-0 bg-slate-900/20">
+                      <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-slate-900/20">
                         {!stats || stats.document_count === 0 ? (
                           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                             <div className="relative mb-6">
                               <div className="absolute inset-0 bg-indigo-600/20 blur-3xl rounded-full" />
-                              <div className="relative w-24 h-24 bg-slate-800 rounded-3xl flex items-center justify-center border border-white/10 shadow-2xl ring-1 ring-white/5">
-                                <MessageSquare className="w-10 h-10 text-slate-500" />
+                              <div className="relative w-24 h-24 bg-gray-200 dark:bg-slate-800 rounded-3xl flex items-center justify-center border border-gray-300 dark:border-white/10 shadow-2xl ring-1 ring-gray-300 dark:ring-white/5">
+                                <MessageSquare className="w-10 h-10 text-gray-500 dark:text-slate-500" />
                               </div>
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">知识库尚未就绪</h3>
-                            <p className="text-slate-400 max-w-sm mb-8 leading-relaxed">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">知识库尚未就绪</h3>
+                            <p className="text-gray-500 dark:text-slate-400 max-w-sm mb-8 leading-relaxed">
                               我们需要先扫描并索引您的项目文档，才能提供基于代码上下文的智能回答。
                             </p>
                             <button
@@ -668,8 +666,8 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                           </div>
                         ) : (
                           <div className="flex-1 flex flex-col min-h-0">
-                            <div className="px-6 py-3 bg-white/5 border-b border-white/5 flex items-center justify-between">
-                               <span className="text-xs font-medium text-slate-400 flex items-center gap-2">
+                            <div className="px-6 py-3 bg-gray-100 dark:bg-white/5 border-b border-gray-200 dark:border-white/5 flex items-center justify-between">
+                               <span className="text-xs font-medium text-gray-500 dark:text-slate-400 flex items-center gap-2">
                                   <Sparkles className="w-3 h-3 text-emerald-400" />
                                   已连接智能检索后端 (基于 {stats.document_count} 个分片)
                                </span>
@@ -694,7 +692,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                             localStorage.removeItem(storageKey);
                                           }
                                         }}
-                                        className="text-[10px] text-slate-500 hover:text-rose-400 transition-colors uppercase font-bold tracking-wider px-2"
+                                        className="text-[10px] text-gray-500 dark:text-slate-500 hover:text-rose-400 transition-colors uppercase font-bold tracking-wider px-2"
                                     >
                                         清空上下文
                                     </button>
@@ -704,7 +702,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                             
                             {/* 语音面板集成 */}
                             {showVoicePanel && (
-                              <div className="px-6 py-4 bg-indigo-600/5 border-b border-indigo-500/10 animate-slideDown">
+                              <div className="px-6 py-4 bg-indigo-50 dark:bg-indigo-600/5 border-b border-indigo-200 dark:border-indigo-500/10 animate-slideDown">
                                 <VoicePairProgramming
                                   onVoiceInput={handleVoiceInput}
                                   onToggleVoiceOutput={handleToggleVoiceOutput}
@@ -733,16 +731,16 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                   {activeTab === 'manage' && (
                     <div className="h-full grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden animate-fadeIn">
                       {/* 左侧控制栏 */}
-                      <div className="lg:col-span-4 border-r border-white/5 bg-slate-900/40 p-6 overflow-y-auto custom-scrollbar space-y-6">
+                      <div className="lg:col-span-4 border-r border-gray-200 dark:border-white/5 bg-gray-100 dark:bg-slate-900/40 p-6 overflow-y-auto custom-scrollbar space-y-6">
                         {/* 核心操作卡片 */}
                         <div className="space-y-4">
                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">数据同步</h4>
-                           <div className="bg-slate-800/50 rounded-2xl border border-white/5 p-5 space-y-4 shadow-inner">
+                           <div className="bg-gray-200 dark:bg-slate-800/50 rounded-2xl border border-gray-300 dark:border-white/5 p-5 space-y-4 shadow-inner">
                               {stats ? (
                                 <div className="grid grid-cols-2 gap-4">
-                                   <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/10">
+                                   <div className="p-3 bg-indigo-100 dark:bg-indigo-500/10 rounded-xl border border-indigo-200 dark:border-indigo-500/10">
                                       <p className="text-[10px] text-indigo-400 uppercase font-bold mb-1">文档块</p>
-                                      <p className="text-2xl font-bold text-white">{stats.document_count || 0}</p>
+                                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.document_count || 0}</p>
                                    </div>
                                    <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/10">
                                       <p className="text-[10px] text-emerald-400 uppercase font-bold mb-1">索引大小</p>
@@ -753,9 +751,8 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                 </div>
                               ) : (
                                 <div className="py-8 text-center">
-                                   <Database className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-                                   <p className="text-sm text-slate-500 font-medium">知识库未初始化</p>
-                                </div>
+                                   <Database className="w-10 h-10 text-gray-400 dark:text-slate-700 mx-auto mb-3" />
+                                                     <p className="text-sm text-gray-500 dark:text-slate-500 font-medium">知识库未初始化</p>                                </div>
                               )}
         
                               <div className="space-y-2 pt-2">
@@ -784,7 +781,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                    <button
                                      onClick={() => handleIndexProject(true)}
                                      disabled={isIndexing}
-                                     className="py-2 px-3 rounded-xl text-xs font-bold bg-slate-800 text-orange-400 border border-orange-500/10 hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+                                     className="py-2 px-3 rounded-xl text-xs font-bold bg-gray-200 dark:bg-slate-800 text-orange-600 dark:text-orange-400 border border-orange-300 dark:border-orange-500/10 hover:bg-gray-300 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
                                    >
                                      <RefreshCw className="w-4 h-4" /> 强制重建
                                    </button>
@@ -800,7 +797,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                               <span className="text-xs font-bold text-indigo-400 uppercase truncate mr-2">{indexMessage || '正在处理文档...'}</span>
                               <span className="text-xs font-mono text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded-full">{indexProgress}%</span>
                             </div>
-                            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div className="w-full bg-gray-300 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                               <div
                                 className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full transition-all duration-500 ease-out"
                                 style={{ width: `${indexProgress}%` }}
@@ -811,13 +808,13 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
         
                         {/* 上传区域 */}
                         {showUpload && (
-                          <div className="bg-slate-800/50 rounded-2xl border-2 border-dashed border-white/10 p-5 space-y-4 animate-fadeIn">
+                          <div className="bg-gray-200 dark:bg-slate-800/50 rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/10 p-5 space-y-4 animate-fadeIn">
                             <div className="flex items-center justify-between">
-                              <h5 className="text-sm font-bold text-white">添加外部文档</h5>
+                              <h5 className="text-sm font-bold text-gray-900 dark:text-white">添加外部文档</h5>
                               <button onClick={() => setShowUpload(false)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400"><X className="w-4 h-4" /></button>
                             </div>
                             
-                            <div className="flex bg-slate-900/50 p-1 rounded-xl">
+                            <div className="flex bg-gray-300 dark:bg-slate-900/50 p-1 rounded-xl">
                                <button 
                                   onClick={() => setUploadMode('upload')}
                                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${uploadMode === 'upload' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
@@ -840,22 +837,21 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                 />
                                 <label 
                                    htmlFor="rag-file-upload-new"
-                                   className="py-10 border-2 border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all group"
+                                   className="py-10 border-2 border-dashed border-gray-400 dark:border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/5 transition-all group"
                                 >
-                                   <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                   <div className="w-12 h-12 bg-gray-300 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                                       <Upload className="w-6 h-6 text-slate-400" />
                                    </div>
-                                   <p className="text-xs font-bold text-slate-300">点击选择文件</p>
-                                   <p className="text-[10px] text-slate-500 mt-1 text-center px-4">支持代码、Markdown、PDF 等</p>
-                                </label>
+                                   <p className="text-xs font-bold text-gray-700 dark:text-slate-300">点击选择文件</p>
+                                                     <p className="text-[10px] text-gray-500 dark:text-slate-500 mt-1 text-center px-4">支持代码、Markdown、PDF 等</p>                                </label>
                                 
                                 {uploadedFiles.length > 0 && (
                                   <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                                     {uploadedFiles.map((file, idx) => (
-                                      <div key={idx} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-white/5">
+                                      <div key={idx} className="flex items-center justify-between bg-gray-300 dark:bg-slate-900/50 p-2 rounded-lg border border-gray-400 dark:border-white/5">
                                          <div className="flex items-center gap-2 min-w-0">
                                             <FileCode className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                                            <span className="text-[11px] text-slate-300 truncate font-mono">{file.name}</span>
+                                            <span className="text-[11px] text-gray-700 dark:text-slate-300 truncate font-mono">{file.name}</span>
                                          </div>
                                          <button onClick={() => handleRemoveFile(idx)} className="text-slate-500 hover:text-rose-400 p-1"><X className="w-3 h-3" /></button>
                                       </div>
@@ -905,11 +901,11 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                       </div>
         
                       {/* 右侧搜索预览栏 */}
-                      <div className="lg:col-span-8 flex flex-col min-h-0 bg-slate-900/10">
+                      <div className="lg:col-span-8 flex flex-col min-h-0 bg-gray-50 dark:bg-slate-900/10">
                          {/* 搜索与高级检索 */}
-                         <div className="px-8 py-6 border-b border-white/5 space-y-4">
+                         <div className="px-8 py-6 border-b border-gray-200 dark:border-white/5 space-y-4">
                             <div className="flex items-center justify-between">
-                               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                               <h3 className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                   <SearchCode className="w-4 h-4" /> 文档检索系统
                                </h3>
                                <button
@@ -924,7 +920,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
         
                             <div className="relative group max-w-3xl">
                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                  <SearchCode className="h-5 w-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+                                  <SearchCode className="h-5 w-5 text-gray-500 dark:text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                                </div>
                                <input
                                  type="text"
@@ -932,7 +928,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                  onChange={(e) => setSearchQuery(e.target.value)}
                                  onKeyPress={handleKeyPress}
                                  placeholder="输入关键词进行语义检索..."
-                                 className="block w-full bg-slate-800/50 border border-white/10 rounded-2xl pl-12 pr-24 py-4 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 focus:outline-none transition-all shadow-inner"
+                                 className="block w-full bg-gray-100 dark:bg-slate-800/50 border border-gray-300 dark:border-white/10 rounded-2xl pl-12 pr-24 py-4 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 focus:outline-none transition-all shadow-inner"
                                />
                                <div className="absolute inset-y-2 right-2 flex items-center">
                                   <button
@@ -946,7 +942,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                             </div>
         
                             {showAdvancedSearch && (
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 animate-slideDown">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-100 dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/5 animate-slideDown">
                                 <div className="space-y-2">
                                   <label className="text-[10px] font-bold text-slate-500 uppercase">相似度阈值: {searchOptions.similarityThreshold}</label>
                                   <input
@@ -998,7 +994,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                             {searchResults.length > 0 ? (
                               <div className="space-y-6 max-w-5xl mx-auto">
                                 <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                                   <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2 uppercase tracking-wider">
+                                   <h3 className="text-sm font-bold text-gray-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-wider">
                                       <List className="w-4 h-4 text-indigo-400" />
                                       匹配结果集 ({searchResults.length})
                                    </h3>
@@ -1007,20 +1003,20 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                   {searchResults.map((result, idx) => (
                                     <article
                                       key={result.id || idx}
-                                      className="group bg-slate-800/30 hover:bg-slate-800/60 rounded-2xl p-6 border border-white/5 hover:border-indigo-500/30 transition-all duration-300 shadow-sm"
+                                      className="group bg-gray-200 dark:bg-slate-800/30 hover:bg-gray-300 dark:hover:bg-slate-800/50 rounded-2xl p-6 border border-gray-300 dark:border-white/5 hover:border-indigo-500/30 transition-all duration-300 shadow-sm"
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                                         <div className="flex items-center gap-3">
-                                           <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
+                                           <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-200 dark:group-hover:bg-indigo-500/20 transition-colors">
                                               <FileCode className="w-5 h-5 text-indigo-400" />
                                            </div>
                                            <div>
-                                             <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded border border-indigo-500/10">
+                                             <span className="text-[11px] font-mono font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-500/5 px-2 py-1 rounded border border-indigo-300 dark:border-indigo-500/10">
                                                 {result.metadata?.file_path || 'unknown_file'}
                                              </span>
                                              <div className="flex items-center gap-2 mt-1">
                                                 {result.metadata?.language && (
-                                                  <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">
+                                                  <span className="text-[9px] uppercase font-bold text-gray-500 dark:text-slate-500 tracking-wider">
                                                     {result.metadata.language}
                                                   </span>
                                                 )}
@@ -1059,7 +1055,7 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                                            </div>
                                          )}
                                          <div className="relative group/code">
-                                           <pre className="text-[13px] text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-slate-950/40 p-5 rounded-2xl border border-white/5 group-hover/code:border-white/10 transition-colors max-h-96 overflow-y-auto custom-scrollbar">
+                                           <pre className="text-[13px] text-gray-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-gray-100 dark:bg-slate-950/40 p-5 rounded-2xl border border-gray-300 dark:border-white/5 group-hover/code:border-gray-400 dark:group-hover/code:border-white/10 transition-colors max-h-96 overflow-y-auto custom-scrollbar">
                                              {result.content}
                                            </pre>
                                          </div>
@@ -1083,12 +1079,11 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                               </div>
                             ) : (
                               <div className="h-full flex flex-col items-center justify-center text-center py-20 animate-fadeIn">
-                                 <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6 ring-1 ring-white/5 shadow-xl">
-                                    <Search className="w-10 h-10 text-slate-600" />
-                                 </div>
-                                 <h4 className="text-lg font-bold text-slate-400">等待检索指令</h4>
-                                 <p className="text-sm text-slate-600 max-w-xs mt-2 leading-relaxed">输入关键词，我们将基于语义向量引擎，在毫秒内为您定位最相关的文档片段。</p>
-                              </div>
+                                 <div className="w-20 h-20 bg-gray-200 dark:bg-slate-800/50 rounded-full flex items-center justify-center mb-6 ring-1 ring-gray-300 dark:ring-white/5 shadow-xl">
+                                               <Search className="w-10 h-10 text-gray-400 dark:text-slate-600" />
+                                             </div>
+                                             <h4 className="text-lg font-bold text-gray-500 dark:text-slate-400">等待检索指令</h4>
+                                             <p className="text-sm text-gray-400 dark:text-slate-600 max-w-xs mt-2 leading-relaxed">输入关键词，我们将基于语义向量引擎，在毫秒内为您定位最相关的文档片段。</p>                              </div>
                             )}
                          </div>
                       </div>
@@ -1126,17 +1121,16 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
       {showVersionPanel && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
           <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowVersionPanel(false)} />
-          <div className="relative bg-slate-900 border border-white/10 w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-white/10 w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
             {/* Modal 头部 */}
-            <div className="px-6 py-5 bg-white/5 border-b border-white/5 flex items-center justify-between">
+            <div className="px-6 py-5 bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-indigo-600/20 rounded-xl flex items-center justify-center">
                    <RefreshCw className="w-5 h-5 text-indigo-400" />
                 </div>
                 <div>
-                   <h3 className="text-lg font-bold text-white leading-none">版本演进历史</h3>
-                   <p className="text-xs text-slate-500 mt-1.5 font-mono">{selectedFileForVersions}</p>
-                </div>
+                   <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-none">版本演进历史</h3>
+                                 <p className="text-xs text-gray-500 dark:text-slate-500 mt-1.5 font-mono">{selectedFileForVersions}</p>                </div>
               </div>
               <button
                 onClick={() => {
@@ -1154,9 +1148,9 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
             {/* 内容区域 */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
               {/* 版本列表侧边栏 */}
-              <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-white/5 flex flex-col min-h-0 bg-slate-900/50">
-                <div className="p-4 flex items-center justify-between bg-white/5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">已记录版本 ({fileVersions.length})</span>
+              <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/5 flex flex-col min-h-0 bg-gray-100 dark:bg-slate-900/50">
+                <div className="p-4 flex items-center justify-between bg-gray-200 dark:bg-white/5">
+                  <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase tracking-widest">已记录版本 ({fileVersions.length})</span>
                   <button
                     onClick={handleRecordVersion}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-lg shadow-indigo-600/20"
@@ -1186,9 +1180,8 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                           <span className="text-xs text-slate-300 font-medium">{new Date(version.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                           <span className="text-[10px] text-slate-600 uppercase font-bold">{(version.size / 1024).toFixed(1)} KB</span>
-                        </div>
+                           <span className="text-xs text-gray-700 dark:text-slate-300 font-medium">{new Date(version.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                         <span className="text-[10px] text-gray-500 dark:text-slate-600 uppercase font-bold">{(version.size / 1024).toFixed(1)} KB</span>                        </div>
                       </div>
                     ))
                   ) : (
@@ -1201,10 +1194,10 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
               </div>
               
               {/* 内容预览主区域 */}
-              <div className="flex-1 overflow-hidden flex flex-col bg-slate-950/20">
+              <div className="flex-1 overflow-hidden flex flex-col bg-gray-100 dark:bg-slate-950/20">
                 {selectedVersion ? (
                   <div className="flex-1 flex flex-col min-h-0">
-                    <div className="px-6 py-3 bg-white/5 border-b border-white/5 flex items-center justify-between">
+                    <div className="px-6 py-3 bg-gray-200 dark:bg-white/5 border-b border-gray-300 dark:border-white/5 flex items-center justify-between">
                        <div className="flex items-center gap-4">
                           <div className="flex items-center gap-1.5">
                              <span className="text-[10px] text-slate-500 uppercase font-bold">版本摘要:</span>
@@ -1219,16 +1212,16 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                     </div>
                     
                     <div className="flex-1 p-6 overflow-hidden">
-                       <div className="h-full rounded-2xl bg-slate-950 border border-white/5 flex flex-col shadow-2xl">
-                          <div className="px-4 py-2 bg-white/5 border-b border-white/5 flex items-center gap-2">
+                       <div className="h-full rounded-2xl bg-gray-100 dark:bg-slate-950 border border-gray-300 dark:border-white/5 flex flex-col shadow-2xl">
+                          <div className="px-4 py-2 bg-gray-200 dark:bg-white/5 border-b border-gray-300 dark:border-white/5 flex items-center gap-2">
                              <div className="flex gap-1.5">
                                 <div className="w-2.5 h-2.5 rounded-full bg-rose-500/50" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/50" />
                              </div>
-                             <span className="text-[10px] font-bold text-slate-500 uppercase ml-2 tracking-widest">SOURCE PREVIEW</span>
+                             <span className="text-[10px] font-bold text-gray-500 dark:text-slate-500 uppercase ml-2 tracking-widest">SOURCE PREVIEW</span>
                           </div>
-                          <pre className="flex-1 overflow-auto p-5 text-[13px] leading-relaxed text-slate-300 font-mono custom-scrollbar">
+                          <pre className="flex-1 overflow-auto p-5 text-[13px] leading-relaxed text-gray-700 dark:text-slate-300 font-mono custom-scrollbar">
                              {selectedVersion.content}
                           </pre>
                        </div>
@@ -1236,12 +1229,11 @@ export default function RAGPanel({ projectName, projectPath, visible }) {
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-10">
-                    <div className="w-16 h-16 bg-slate-800 rounded-3xl flex items-center justify-center mb-4 text-slate-600 ring-1 ring-white/5">
-                       <FileText className="w-8 h-8" />
-                    </div>
-                    <h4 className="text-white font-bold">查看版本详情</h4>
-                    <p className="text-sm text-slate-500 max-w-xs mt-2">从左侧选择一个特定的历史快照，即可在这里查看当时的文档完整内容。</p>
-                  </div>
+                    <div className="w-16 h-16 bg-gray-200 dark:bg-slate-800 rounded-3xl flex items-center justify-center mb-4 text-gray-500 dark:text-slate-600 ring-1 ring-gray-300 dark:ring-white/5">
+                                  <FileText className="w-8 h-8" />
+                                </div>
+                                <h4 className="text-gray-900 dark:text-white font-bold">查看版本详情</h4>
+                                <p className="text-sm text-gray-500 dark:text-slate-500 max-w-xs mt-2">从左侧选择一个特定的历史快照，即可在这里查看当时的文档完整内容。</p>                  </div>
                 )}
               </div>
             </div>

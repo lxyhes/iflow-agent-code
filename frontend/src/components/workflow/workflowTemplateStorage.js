@@ -1,3 +1,5 @@
+import { scopedKey } from '../../utils/projectScope';
+
 const STORAGE_KEY = 'iflow:workflow:template:custom';
 
 function safeParse(value, fallback) {
@@ -33,10 +35,33 @@ export function loadCustomTemplates() {
   return raw.map(normalizeTemplate).filter(Boolean);
 }
 
+export function loadCustomTemplatesForProject(project) {
+  if (typeof localStorage === 'undefined') return [];
+  const key = scopedKey(project, STORAGE_KEY);
+  const raw = safeParse(localStorage.getItem(key) || '[]', []);
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map(normalizeTemplate).filter(Boolean);
+  }
+  const legacy = loadCustomTemplates();
+  if (legacy.length > 0) {
+    try {
+      localStorage.setItem(key, JSON.stringify(legacy));
+    } catch {}
+  }
+  return legacy;
+}
+
 export function saveCustomTemplates(list) {
   if (typeof localStorage === 'undefined') return;
   const safeList = Array.isArray(list) ? list.map(normalizeTemplate).filter(Boolean) : [];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(safeList));
+}
+
+export function saveCustomTemplatesForProject(project, list) {
+  if (typeof localStorage === 'undefined') return;
+  const key = scopedKey(project, STORAGE_KEY);
+  const safeList = Array.isArray(list) ? list.map(normalizeTemplate).filter(Boolean) : [];
+  localStorage.setItem(key, JSON.stringify(safeList));
 }
 
 export function upsertCustomTemplate(template) {
@@ -51,10 +76,29 @@ export function upsertCustomTemplate(template) {
   return t;
 }
 
+export function upsertCustomTemplateForProject(project, template) {
+  const t = normalizeTemplate(template);
+  if (!t) return null;
+  const list = loadCustomTemplatesForProject(project);
+  const idx = list.findIndex((x) => x.id === t.id);
+  const next = [...list];
+  if (idx >= 0) next[idx] = { ...list[idx], ...t, updated_at: new Date().toISOString() };
+  else next.unshift({ ...t, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  saveCustomTemplatesForProject(project, next);
+  return t;
+}
+
 export function removeCustomTemplate(id) {
   const templateId = String(id || '');
   if (!templateId) return;
   const list = loadCustomTemplates().filter((t) => t.id !== templateId);
   saveCustomTemplates(list);
+}
+
+export function removeCustomTemplateForProject(project, id) {
+  const templateId = String(id || '');
+  if (!templateId) return;
+  const list = loadCustomTemplatesForProject(project).filter((t) => t.id !== templateId);
+  saveCustomTemplatesForProject(project, list);
 }
 

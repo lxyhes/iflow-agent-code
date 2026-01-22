@@ -1,4 +1,4 @@
-/**
+﻿/**
  * useChatState Hook
  * 管理聊天的核心状态
  */
@@ -141,7 +141,7 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
   // 切换权限模式
   const handleModeSwitch = useCallback(() => {
     setPermissionMode(prev => {
-      const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
+      const modes = ['default', 'auto_edit', 'yolo', 'plan'];
       return modes[(modes.indexOf(prev) + 1) % modes.length];
     });
   }, []);

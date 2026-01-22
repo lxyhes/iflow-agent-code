@@ -172,7 +172,8 @@ global_config = {
     "model": "GLM-4.7", # Set to recommended model
     "mcp_servers": [],
     "iflow_path": "iflow", # Default command
-    "rag_mode": "tfidf" # RAG 模式: "chromadb" (需要下载模型) 或 "tfidf" (轻量级)
+    "rag_mode": "tfidf", # RAG 模式: "chromadb" (需要下载模型) 或 "tfidf" (轻量级)
+    "chat_only_mode": False # 仅聊天模式：AI 只能聊天，不能修改文件
 }
 
 # --- HELPERS ---
@@ -524,11 +525,12 @@ async def get_projects():
     return safe_projects
 
 @app.get("/stream")
-async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, project: str = None, model: str = None, persona: str = "partner", auth_method_id: str = None, auth_method_info: str = None):
+async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, project: str = None, model: str = None, persona: str = "partner", auth_method_id: str = None, auth_method_info: str = None, mode: str = None):
     logger.info(f"=== /stream request ===")
     logger.info(f"  message: {message[:100]}...")
     logger.info(f"  model: {model}")
     logger.info(f"  persona: {persona}")
+    logger.info(f"  mode: {mode}")
     logger.info(f"  auth_method_id: {auth_method_id}")
 
     target_cwd = cwd or os.getcwd()
@@ -545,10 +547,13 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
 
     # Use provided model or fallback to global config
     target_model = model or global_config.get("model")
+    
+    # Use provided mode or fallback to global config
+    target_mode = mode or global_config.get("mode", "default")
 
     agent = get_agent(
         target_cwd,
-        global_config["mode"],
+        target_mode,
         target_model,
         global_config.get("mcp_servers"),
         persona=persona,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, Package, GitPullRequest, Users } from 'lucide-react';
+import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, Package, GitPullRequest, Users, MessageSquare } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import IFlowLogo from './IFlowLogo';
 import CursorLogo from './CursorLogo';
@@ -22,6 +22,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
   const [skipPermissions, setSkipPermissions] = useState(false);
+  const [chatOnlyMode, setChatOnlyMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
@@ -426,12 +427,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         setAllowedTools(settings.allowedTools || []);
         setDisallowedTools(settings.disallowedTools || []);
         setSkipPermissions(settings.skipPermissions || false);
+        setChatOnlyMode(settings.chatOnlyMode || false);
         setProjectSortOrder(settings.projectSortOrder || 'name');
       } else {
         // Set defaults
         setAllowedTools([]);
         setDisallowedTools([]);
         setSkipPermissions(false);
+        setChatOnlyMode(false);
         setProjectSortOrder('name');
       }
 
@@ -562,6 +565,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
         allowedTools,
         disallowedTools,
         skipPermissions,
+        chatOnlyMode,
         projectSortOrder,
         lastUpdated: new Date().toISOString()
       };
@@ -588,6 +592,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       setSaveStatus('error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const updateGlobalConfig = async (config) => {
+    try {
+      await authenticatedFetch('/api/config', {
+        method: 'POST',
+        body: JSON.stringify(config),
+      });
+    } catch (error) {
+      console.error('Failed to update global config:', error);
     }
   };
 
@@ -1406,6 +1421,38 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                             </div>
                             <div className="text-sm text-orange-700 dark:text-orange-300">
                               Equivalent to --dangerously-skip-permissions flag
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Chat Only Mode */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <MessageSquare className="w-5 h-5 text-green-500" />
+                        <h3 className="text-lg font-medium text-foreground">
+                          Chat Only Mode
+                        </h3>
+                      </div>
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={chatOnlyMode}
+                            onChange={(e) => {
+                              setChatOnlyMode(e.target.checked);
+                              // Update global config
+                              updateGlobalConfig({ chat_only_mode: e.target.checked });
+                            }}
+                            className="w-4 h-4 text-green-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-green-500 focus:ring-2 checked:bg-green-600 dark:checked:bg-green-600"
+                          />
+                          <div>
+                            <div className="font-medium text-green-900 dark:text-green-100">
+                              Chat only mode (AI cannot modify files)
+                            </div>
+                            <div className="text-sm text-green-700 dark:text-green-300">
+                              AI will only be able to chat and answer questions, without file modification permissions
                             </div>
                           </div>
                         </label>

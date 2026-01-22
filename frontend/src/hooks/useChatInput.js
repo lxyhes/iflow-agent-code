@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import safeLocalStorage from '../utils/safeStorage';
+import { scopedKey } from '../utils/projectScope';
 
 export const useChatInput = (selectedProject, selectedSession, currentSessionId, isLoading, sendByCtrlEnter, onSubmit) => {
   const [input, setInput] = useState('');
@@ -20,7 +21,7 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
   useEffect(() => {
     if (selectedProject) {
       const sessionId = selectedSession?.id || currentSessionId || 'default';
-      const draftKey = `draft_input_${sessionId}`;
+      const draftKey = scopedKey(selectedProject, `draft_input_${sessionId}`);
       const savedDraft = safeLocalStorage.getItem(draftKey);
       if (savedDraft) setInput(savedDraft);
     }
@@ -30,7 +31,7 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
   useEffect(() => {
     if (selectedProject && input) {
       const sessionId = selectedSession?.id || currentSessionId || 'default';
-      const draftKey = `draft_input_${sessionId}`;
+      const draftKey = scopedKey(selectedProject, `draft_input_${sessionId}`);
       const timer = setTimeout(() => safeLocalStorage.setItem(draftKey, input), 1000);
       return () => clearTimeout(timer);
     }
@@ -67,6 +68,18 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
     setCursorPosition(e.target.selectionStart);
   }, []);
 
+  // 提交消息
+  const handleSubmit = useCallback((e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const messageContent = input.trim();
+    setInput('');
+    setAttachedImages([]);
+
+    onSubmit(messageContent, attachedImages);
+  }, [input, isLoading, attachedImages, onSubmit]);
+
   // 处理键盘事件
   const handleKeyDown = useCallback((e) => {
     if (e.nativeEvent.isComposing) return;
@@ -78,7 +91,12 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
     }
     
     if (e.key === 'Enter') {
-      if (sendByCtrlEnter ? (e.ctrlKey || e.metaKey) : !e.shiftKey) {
+      const isCommand = input.trim().startsWith('/');
+      const shouldSend = isCommand
+        ? !e.shiftKey
+        : (sendByCtrlEnter ? (e.ctrlKey || e.metaKey) : !e.shiftKey);
+
+      if (shouldSend) {
         e.preventDefault();
         handleSubmit();
       }
@@ -95,7 +113,7 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
       // 关闭菜单
       return;
     }
-  }, [sendByCtrlEnter, onSubmit]);
+  }, [input, sendByCtrlEnter, handleSubmit]);
 
   // 处理粘贴
   const handlePaste = useCallback((e) => {
@@ -117,18 +135,6 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
       }
     }
   }, []);
-
-  // 提交消息
-  const handleSubmit = useCallback((e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const messageContent = input.trim();
-    setInput('');
-    setAttachedImages([]);
-
-    onSubmit(messageContent, attachedImages);
-  }, [input, isLoading, attachedImages, onSubmit]);
 
   // 清空输入
   const clearInput = useCallback(() => {

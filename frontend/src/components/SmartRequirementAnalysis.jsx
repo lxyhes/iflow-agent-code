@@ -49,6 +49,7 @@ import ApiDocViewer from './visualizations/ApiDocViewer';
 import ImpactMatrix from './visualizations/ImpactMatrix';
 import TestScenarios from './visualizations/TestScenarios';
 import EffortEstimation from './visualizations/EffortEstimation';
+import { scopedKey } from '../utils/projectScope';
 
 const SmartRequirementAnalysis = ({ project }) => {
   const { refreshTasks } = useTaskMaster();
@@ -97,7 +98,9 @@ const SmartRequirementAnalysis = ({ project }) => {
 
   // Load history from localStorage
   useEffect(() => {
-    const savedHistory = localStorage.getItem('smartReqHistoryV2');
+    const v2Key = scopedKey(project, 'smartReqHistoryV2');
+    const v1Key = scopedKey(project, 'smartReqHistory');
+    const savedHistory = localStorage.getItem(v2Key);
     if (savedHistory) {
       try {
         setHistory(JSON.parse(savedHistory));
@@ -106,7 +109,7 @@ const SmartRequirementAnalysis = ({ project }) => {
       }
     } else {
         // Migration from V1 (text only)
-        const oldHistory = localStorage.getItem('smartReqHistory');
+        const oldHistory = localStorage.getItem(v1Key);
         if (oldHistory) {
             try {
                 const parsed = JSON.parse(oldHistory);
@@ -120,28 +123,28 @@ const SmartRequirementAnalysis = ({ project }) => {
                         versions: []
                     }));
                     setHistory(newFormat);
-                    localStorage.setItem('smartReqHistoryV2', JSON.stringify(newFormat));
+                    localStorage.setItem(v2Key, JSON.stringify(newFormat));
                 }
             } catch (e) {
                 console.error('Migration failed', e);
             }
         }
     }
-  }, []);
+  }, [project]);
 
   const saveHistoryItem = (item) => {
       // Update item with current versions
       const itemWithVersions = { ...item, versions: currentVersions };
       const newHistory = [itemWithVersions, ...history.filter(h => h.id !== item.id)].slice(0, 10); // Limit to 10 items
       setHistory(newHistory);
-      localStorage.setItem('smartReqHistoryV2', JSON.stringify(newHistory));
+      localStorage.setItem(scopedKey(project, 'smartReqHistoryV2'), JSON.stringify(newHistory));
   };
 
   const deleteHistoryItem = (id, e) => {
       e.stopPropagation();
       const newHistory = history.filter(h => h.id !== id);
       setHistory(newHistory);
-      localStorage.setItem('smartReqHistoryV2', JSON.stringify(newHistory));
+      localStorage.setItem(scopedKey(project, 'smartReqHistoryV2'), JSON.stringify(newHistory));
   };
 
   const loadHistoryItem = (item) => {

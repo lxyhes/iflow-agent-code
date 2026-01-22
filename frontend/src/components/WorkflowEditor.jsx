@@ -38,9 +38,10 @@ import { useWorkflowAutosave } from './workflow/useWorkflowAutosave';
 import { useWorkflowShortcuts } from './workflow/useWorkflowShortcuts';
 import { normalizeImportedWorkflow } from './workflow/workflowImportExport';
 import { computeGraphSignature } from './workflow/workflowGraphUtils';
-import { upsertCustomTemplate } from './workflow/workflowTemplateStorage';
+import { upsertCustomTemplateForProject } from './workflow/workflowTemplateStorage';
 import { authenticatedFetch } from '../utils/api';
 import { useToast } from '../contexts/ToastContext';
+import { scopedKey } from '../utils/projectScope';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
 import {
   downloadIFlowFile,
@@ -150,36 +151,36 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
 
   useEffect(() => {
     try {
-      const v = localStorage.getItem('iflow:workflow:logsDock');
+      const v = localStorage.getItem(scopedKey(selectedProject, 'iflow:workflow:logsDock'));
       if (v === 'side' || v === 'bottom' || v === 'floating') {
         setLogsDock(v);
       }
     } catch {
     }
-  }, []);
+  }, [selectedProject]);
 
   useEffect(() => {
     try {
-      const v = localStorage.getItem('iflow:workflow:3dMode');
+      const v = localStorage.getItem(scopedKey(selectedProject, 'iflow:workflow:3dMode'));
       if (v === '1') setIs3DMode(true);
       else if (v === '0') setIs3DMode(false);
     } catch {
     }
-  }, []);
+  }, [selectedProject]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('iflow:workflow:logsDock', logsDock);
+      localStorage.setItem(scopedKey(selectedProject, 'iflow:workflow:logsDock'), logsDock);
     } catch {
     }
-  }, [logsDock]);
+  }, [logsDock, selectedProject]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('iflow:workflow:3dMode', is3DMode ? '1' : '0');
+      localStorage.setItem(scopedKey(selectedProject, 'iflow:workflow:3dMode'), is3DMode ? '1' : '0');
     } catch {
     }
-  }, [is3DMode]);
+  }, [is3DMode, selectedProject]);
 
   const history = useWorkflowHistory({ initialNodes: [], initialEdges: [] });
   const nodesRef = useRef(nodes);
@@ -1497,7 +1498,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         onClose={() => setShowSaveTemplate(false)}
         onSave={(meta) => {
           const id = `custom_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
-          upsertCustomTemplate({
+          upsertCustomTemplateForProject(selectedProject, {
             id,
             name: meta.name,
             category: meta.category,
@@ -2189,6 +2190,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
       <WorkflowTemplateModal
         open={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
+        project={selectedProject}
         onPickTemplate={(tpl) => {
           const graph = cloneWorkflowTemplate(tpl);
           setWorkflowName(tpl.name);

@@ -9,6 +9,7 @@ import CursorLogo from '../CursorLogo.jsx';
 import MarkdownRenderer from '../markdown/MarkdownRenderer';
 import ThinkingBlock from '../markdown/ThinkingBlock';
 import ToolUsageCard from './ToolUsageCard';
+import WorkflowTemplateCards from '../workflow/WorkflowTemplateCards';
 
 const autoParagraphize = (text) => {
   const s = String(text || '');
@@ -174,6 +175,17 @@ const AssistantMessage = ({
 
           {/* Tool Usage Card */}
           <ToolUsageCard message={message} />
+
+          {Array.isArray(message.workflowTemplates) && message.workflowTemplates.length > 0 ? (
+            <div className="my-3">
+              <WorkflowTemplateCards
+                templates={message.workflowTemplates}
+                limit={Number.isFinite(message.workflowTemplatesLimit) ? message.workflowTemplatesLimit : 9}
+                includeCustom={false}
+                title={message.workflowTemplatesTitle || '工作流模板'}
+              />
+            </div>
+          ) : null}
 
           {/* Content */}
           {message.content && (

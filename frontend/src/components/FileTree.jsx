@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
+import { scopedKey } from '../utils/projectScope';
 
 function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   const [files, setFiles] = useState([]);
@@ -17,7 +18,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   useEffect(() => {
     if (selectedProject) {
       try {
-        const saved = localStorage.getItem(`expanded-dirs-${selectedProject.name}`);
+        const saved = localStorage.getItem(scopedKey(selectedProject, 'expanded-dirs'));
         if (saved) {
           setExpandedDirs(new Set(JSON.parse(saved)));
         } else {
@@ -33,7 +34,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   useEffect(() => {
     if (selectedProject) {
       try {
-        localStorage.setItem(`expanded-dirs-${selectedProject.name}`, JSON.stringify([...expandedDirs]));
+        localStorage.setItem(scopedKey(selectedProject, 'expanded-dirs'), JSON.stringify([...expandedDirs]));
       } catch (e) {
         console.error('Failed to save expanded dirs:', e);
       }
@@ -53,11 +54,11 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
 
   // Load view mode preference from localStorage
   useEffect(() => {
-    const savedViewMode = localStorage.getItem('file-tree-view-mode');
+    const savedViewMode = localStorage.getItem(scopedKey(selectedProject, 'file-tree-view-mode'));
     if (savedViewMode && ['simple', 'detailed', 'compact'].includes(savedViewMode)) {
       setViewMode(savedViewMode);
     }
-  }, []);
+  }, [selectedProject]);
 
   // Filter files based on search query
   useEffect(() => {
@@ -139,7 +140,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   // Change view mode and save preference
   const changeViewMode = (mode) => {
     setViewMode(mode);
-    localStorage.setItem('file-tree-view-mode', mode);
+    localStorage.setItem(scopedKey(selectedProject, 'file-tree-view-mode'), mode);
   };
 
   // Format file size

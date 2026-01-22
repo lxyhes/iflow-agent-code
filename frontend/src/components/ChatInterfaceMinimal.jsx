@@ -32,6 +32,8 @@ import IFlowLogo from './IFlowLogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import { retrieveRAG } from '../utils/rag';
+import { workflowTemplates } from './workflow/workflowTemplates';
+import { loadCustomTemplatesForProject } from './workflow/workflowTemplateStorage';
 
 // 导入自定义 hooks
 import { useChatState } from '../hooks/useChatState';
@@ -100,6 +102,9 @@ const ChatInterfaceMinimal = memo(({
   // ============================================
   const chatState = useChatState(selectedProject, selectedSession, messages);
 
+  // 模型选择状态
+  const [model] = React.useState(() => localStorage.getItem('iflow-model') || 'GLM-4.7');
+
   // ============================================
   // 🎯 2. 消息操作 Hook
   // ============================================
@@ -146,6 +151,24 @@ const ChatInterfaceMinimal = memo(({
             chatState.clearChatHistory();
             console.log('[ChatInterfaceMinimal] ✅ Chat history cleared');
           }
+          return;
+        }
+
+        const trimmed = String(content || '').trim();
+        if (trimmed === '/workflow' || trimmed === '/templates' || trimmed === '/模板') {
+          const allTemplates = [...(workflowTemplates || []), ...loadCustomTemplatesForProject(selectedProject)];
+          chatState.setChatMessages(prev => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              type: 'assistant',
+              content: '下面是可用的工作流模板卡片（可一键复制 JSON）：',
+              workflowTemplates: allTemplates,
+              workflowTemplatesTitle: '工作流模板',
+              workflowTemplatesLimit: 12,
+              timestamp: new Date()
+            }
+          ]);
           return;
         }
 
@@ -295,8 +318,9 @@ const ChatInterfaceMinimal = memo(({
         // ============================================
         const sessionId = selectedSession?.id || `session-${Date.now()}`;
         const model = localStorage.getItem('iflow-model') || 'GLM-4.7';
+        const mode = chatState.permissionMode || 'default';
         
-        const streamUrl = `/stream?message=${encodeURIComponent(content + ragContext)}&cwd=${encodeURIComponent(selectedProject.path || selectedProject.fullPath)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(selectedProject.name)}&model=${encodeURIComponent(model)}`;
+        const streamUrl = `/stream?message=${encodeURIComponent(content + ragContext)}&cwd=${encodeURIComponent(selectedProject.path || selectedProject.fullPath)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(selectedProject.name)}&model=${encodeURIComponent(model)}&mode=${encodeURIComponent(mode)}`;
 
         // 创建 AbortController 用于中断请求
         abortControllerRef.current = new AbortController();
@@ -593,7 +617,7 @@ const ChatInterfaceMinimal = memo(({
       <div className="flex-1 overflow-hidden relative">
         {visibleMessages.length === 0 ? (
           // 🎯 空状态
-          <EmptyState provider={chatState.provider} />
+          <EmptyState provider={chatState.provider} selectedProject={selectedProject} />
         ) : (
           // 📝 消息列表
           <MessageList
@@ -651,6 +675,11 @@ const ChatInterfaceMinimal = memo(({
           messages={chatState.chatMessages}
           selectedProject={selectedProject}
           selectedSession={selectedSession}
+          model={model}
+          onModelChange={(newModel) => {
+            localStorage.setItem('iflow-model', newModel);
+            window.location.reload();
+          }}
         />
         <ChatInput
           input={inputState.input}

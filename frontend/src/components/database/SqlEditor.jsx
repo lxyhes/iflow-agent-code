@@ -9,6 +9,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, keymap } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import { Play, Save, History, Trash2, ChevronDown, ChevronRight, Sparkles, X, Loader2, Wand2, Info, Gauge, Bug, IndentIncrease, PlayCircle } from 'lucide-react';
+import { scopedKey } from '../../utils/projectScope';
 
 const SqlEditor = ({
   value,
@@ -64,8 +65,9 @@ const SqlEditor = ({
   const draftKey = useMemo(() => {
     const db = String(aiContext?.dbType || 'db');
     const conn = String(aiContext?.selectedConnection || 'default');
-    return `iflow:db:sqlDraft:${db}:${conn}`;
-  }, [aiContext?.dbType, aiContext?.selectedConnection]);
+    const project = { path: aiContext?.projectPath, name: aiContext?.projectName };
+    return scopedKey(project, `iflow:db:sqlDraft:${db}:${conn}`);
+  }, [aiContext?.dbType, aiContext?.selectedConnection, aiContext?.projectName, aiContext?.projectPath]);
 
   useEffect(() => {
     try {

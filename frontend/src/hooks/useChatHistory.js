@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { chatStorage } from '../utils/indexedDBStorage';
+import { scopedKey, scopedSessionId } from '../utils/projectScope';
 
 // Helper to access localStorage safely
 const safeLocalStorage = {
@@ -43,16 +44,14 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
     saveRef.current = async (messages) => {
       if (!selectedProject || messages.length === 0) return;
 
-      const legacyKey = selectedProject.name;
-      const primaryKey = selectedSession?.id || currentSessionId;
+      const projectLegacyKey = scopedKey(selectedProject, `project:${selectedProject.name}`);
+      const sessionKey = selectedSession?.id || currentSessionId;
+      const projectSessionKey = sessionKey ? scopedSessionId(selectedProject, sessionKey) : null;
       
       try {
-        if (legacyKey) {
-          await chatStorage.saveMessages(legacyKey, messages);
-        }
-        
-        if (primaryKey && primaryKey !== legacyKey) {
-          await chatStorage.saveMessages(primaryKey, messages);
+        await chatStorage.saveMessages(projectLegacyKey, messages);
+        if (projectSessionKey && projectSessionKey !== projectLegacyKey) {
+          await chatStorage.saveMessages(projectSessionKey, messages);
         }
       } catch (e) {
         console.error('Error saving messages:', e);
@@ -71,9 +70,10 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
   useEffect(() => {
     if (!selectedProject) return;
 
-    const primaryKey = selectedSession?.id || currentSessionId;
-    const legacyKey = selectedProject.name;
-    const currentKey = primaryKey || legacyKey;
+    const sessionKey = selectedSession?.id || currentSessionId;
+    const projectLegacyKey = scopedKey(selectedProject, `project:${selectedProject.name}`);
+    const projectSessionKey = sessionKey ? scopedSessionId(selectedProject, sessionKey) : null;
+    const currentKey = projectSessionKey || projectLegacyKey;
 
     // 避免重复加载同一个 key
     if (loadedKeyRef.current === currentKey) return;
@@ -83,11 +83,11 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
     const loadMessages = async () => {
       let loaded = false;
       
-      if (primaryKey && primaryKey !== legacyKey) {
+      if (projectSessionKey && projectSessionKey !== projectLegacyKey) {
         try {
-          const msgs = await chatStorage.getMessages(primaryKey);
+          const msgs = await chatStorage.getMessages(projectSessionKey);
           if (msgs && msgs.length > 0) {
-            console.log('[useChatHistory] Loaded from primary key:', primaryKey, 'messages:', msgs.length);
+            console.log('[useChatHistory] Loaded from primary key:', projectSessionKey, 'messages:', msgs.length);
             setChatMessages(msgs);
             loaded = true;
           }
@@ -96,11 +96,11 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
         }
       }
 
-      if (!loaded && legacyKey) {
+      if (!loaded && projectLegacyKey) {
         try {
-          const msgs = await chatStorage.getMessages(legacyKey);
+          const msgs = await chatStorage.getMessages(projectLegacyKey);
           if (msgs && msgs.length > 0) {
-            console.log('[useChatHistory] Loaded from legacy key:', legacyKey, 'messages:', msgs.length);
+            console.log('[useChatHistory] Loaded from legacy key:', projectLegacyKey, 'messages:', msgs.length);
             setChatMessages(msgs);
             loaded = true;
           }
@@ -109,13 +109,16 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
         }
       }
 
-      if (!loaded && legacyKey) {
-         const saved = safeLocalStorage.getItem(`chat_messages_${legacyKey}`);
+      if (!loaded && selectedProject?.name) {
+         const saved = safeLocalStorage.getItem(`chat_messages_${selectedProject.name}`);
          if (saved) {
            try {
              const msgs = JSON.parse(saved);
-             console.log('[useChatHistory] Loaded from localStorage:', legacyKey, 'messages:', msgs.length);
+             console.log('[useChatHistory] Loaded from localStorage:', selectedProject.name, 'messages:', msgs.length);
              setChatMessages(msgs);
+             try {
+               await chatStorage.saveMessages(projectLegacyKey, msgs);
+             } catch (e) {}
            } catch(e) {}
          }
       }

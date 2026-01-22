@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Download, MoreVertical } from 'lucide-react';
 import { exportToMarkdown, exportToJSON, exportToText } from '../../utils/exportChat';
+import ModelSelector from '../ModelSelector';
 
 const ChatToolbar = ({
   showMoreMenu,
@@ -13,7 +14,9 @@ const ChatToolbar = ({
   onShowDeveloperTools,
   messages,
   selectedProject,
-  selectedSession
+  selectedSession,
+  model,
+  onModelChange
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -30,6 +33,16 @@ const ChatToolbar = ({
 
   return (
     <div className="flex items-center gap-3">
+      {/* 模型选择器 */}
+      {onModelChange && (
+        <ModelSelector
+          value={model}
+          onChange={onModelChange}
+          className="w-40"
+          label=""
+        />
+      )}
+
       <div className="relative">
         <button
           onClick={() => setShowExportMenu(!showExportMenu)}
