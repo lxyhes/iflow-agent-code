@@ -675,11 +675,6 @@ const ChatInterfaceMinimal = memo(({
           messages={chatState.chatMessages}
           selectedProject={selectedProject}
           selectedSession={selectedSession}
-          model={model}
-          onModelChange={(newModel) => {
-            localStorage.setItem('iflow-model', newModel);
-            window.location.reload();
-          }}
         />
         <ChatInput
           input={inputState.input}
@@ -693,6 +688,8 @@ const ChatInterfaceMinimal = memo(({
           handleSubmit={inputState.handleSubmit}
           isInputFocused={inputState.isInputFocused}
           setIsInputFocused={inputState.setIsInputFocused}
+          attachedImages={inputState.attachedImages}
+          removeAttachedImage={inputState.removeAttachedImage}
           provider={chatState.provider}
         />
       </div>

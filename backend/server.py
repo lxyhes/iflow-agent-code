@@ -1,9 +1,18 @@
 import sys
 import os
+import sys
 import mimetypes
 import asyncio
 import json
 import platform
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from core.ocr_service import get_ocr_service
+except ImportError:
+    get_ocr_service = None
 import subprocess
 import logging
 from datetime import datetime
@@ -191,7 +200,13 @@ def get_agent(cwd: str, mode: str = "yolo", model: str = None, mcp_servers: list
     key = (cwd, mode, model, json.dumps(mcp_servers or []), persona, auth_method_id)
     if key not in agent_cache:
         system_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["partner"])
-        agent_cache[key] = Agent(name="IFlowAgent", cwd=cwd, mode=mode, model=model, mcp_servers=mcp_servers, persona=persona, system_prompt=system_prompt, auth_method_id=auth_method_id, auth_method_info=auth_method_info)
+        base = Agent(name="IFlowAgent", cwd=cwd, mode=mode, model=model, mcp_servers=mcp_servers, persona=persona, system_prompt=system_prompt, auth_method_id=auth_method_id, auth_method_info=auth_method_info)
+        try:
+            from backend.core.orchestrator_agent import OrchestratorAgent
+            allow_side_effects = not global_config.get("chat_only_mode", False)
+            agent_cache[key] = OrchestratorAgent(base_agent=base, project_path=cwd, allow_side_effects=allow_side_effects)
+        except Exception:
+            agent_cache[key] = base
     return agent_cache[key]
 
 def get_project_path(project_name: str) -> str:
@@ -6007,6 +6022,162 @@ async def get_workflow_execution(execution_id: str):
 
 
 # --- Catch-all 路由 ---
+
+# OCR API 端点
+@app.get("/api/ocr/technologies")
+async def get_ocr_technologies():
+    """获取支持的 OCR 技术列表"""
+    try:
+        service = get_ocr_service("lighton")
+        technologies = service.get_supported_technologies()
+        return JSONResponse(content={"success": True, "technologies": technologies})
+    except Exception as e:
+        logger.error(f"获取 OCR 技术列表失败: {e}")
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/api/ocr/process")
+async def process_ocr(request: Request):
+    """
+    处理图片 OCR
+    
+    Request body:
+    {
+        "image": "base64 encoded image",
+        "technology": "lighton" | "tesseract" | "paddle" | "easyocr",
+        "max_tokens": 4096,
+        "temperature": 0.2,
+        "top_p": 0.9
+    }
+    """
+    try:
+        data = await request.json()
+        
+        image_data = data.get("image")
+        technology = data.get("technology", "lighton")
+        max_tokens = data.get("max_tokens", 4096)
+        temperature = data.get("temperature", 0.2)
+        top_p = data.get("top_p", 0.9)
+        
+        if not image_data:
+            return JSONResponse(
+                content={"success": False, "error": "缺少图片数据"},
+                status_code=400
+            )
+        
+        # 获取 OCR 服务
+        service = get_ocr_service(technology)
+        
+        # 处理图片
+        result = await service.process_image(
+            image_data=image_data,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p
+        )
+        
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"OCR 处理失败: {e}")
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500
+        )
+
+
+@app.post("/api/ocr/process-pdf")
+async def process_pdf_ocr(request: Request):
+    """
+    处理 PDF 文件 OCR
+    
+    Request body:
+    {
+        "pdf_data": "base64 encoded pdf",
+        "technology": "lighton" | "tesseract" | "paddle" | "easyocr",
+        "page_range": [0, 1, 2],  # 可选,指定要处理的页码
+        "max_tokens": 4096,
+        "temperature": 0.2,
+        "top_p": 0.9
+    }
+    """
+    try:
+        data = await request.json()
+        
+        pdf_data = data.get("pdf_data")
+        technology = data.get("technology", "lighton")
+        page_range = data.get("page_range", [])
+        max_tokens = data.get("max_tokens", 4096)
+        temperature = data.get("temperature", 0.2)
+        top_p = data.get("top_p", 0.9)
+        
+        if not pdf_data:
+            return JSONResponse(
+                content={"success": False, "error": "缺少 PDF 数据"},
+                status_code=400
+            )
+        
+        # 解码 PDF
+        import base64
+        import io
+        import pypdfium2 as pdfium
+        
+        pdf_bytes = base64.b64decode(pdf_data)
+        pdf = pdfium.PdfDocument(pdf_bytes)
+        
+        # 确定要处理的页面
+        if page_range:
+            pages_to_process = [pdf[i] for i in page_range if i < len(pdf)]
+        else:
+            pages_to_process = [pdf[i] for i in range(len(pdf))]
+        
+        # 获取 OCR 服务
+        service = get_ocr_service(technology)
+        
+        # 处理每一页
+        results = []
+        for idx, page in enumerate(pages_to_process):
+            # 渲染页面为图片 (200 DPI)
+            pil_image = page.render(scale=2.77).to_pil()
+            
+            # 转换为 base64
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format="PNG")
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            # 处理 OCR
+            result = await service.process_image(
+                image_data=image_base64,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p
+            )
+            
+            results.append({
+                "page": idx + 1,
+                "text": result.get("text", ""),
+                "success": result.get("success", False)
+            })
+        
+        # 合并所有页面的文本
+        combined_text = "\n\n".join([r["text"] for r in results if r["success"]])
+        
+        return JSONResponse(content={
+            "success": True,
+            "text": combined_text,
+            "pages": results,
+            "technology": technology,
+            "total_pages": len(pages_to_process),
+            "format": "markdown" if technology == "lighton" else "plain"
+        })
+        
+    except Exception as e:
+        logger.error(f"PDF OCR 处理失败: {e}")
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500
+        )
+
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(path_name: str, request: Request):

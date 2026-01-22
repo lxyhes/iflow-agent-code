@@ -24,8 +24,35 @@ const MessageList = memo(({
   const pinnedToBottomRef = useRef(true);
   const lastScrollAtRef = useRef(0);
 
+  // 按时间戳和原始索引排序消息,确保消息顺序正确且稳定
+  const sortedMessages = useMemo(() => {
+    const sorted = [...messages].map((msg, idx) => ({ ...msg, _originalIndex: idx }))
+      .sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        // 先按时间戳排序,如果时间戳相同则按原始索引排序
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+        return a._originalIndex - b._originalIndex;
+      });
+    
+    // 调试:输出消息顺序和类型
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[MessageList] Message order:', sorted.map((m, i) => ({
+        index: i,
+        type: m.type,
+        content: m.content?.substring(0, 30) || '(empty)',
+        timestamp: m.timestamp,
+        isStreaming: m.isStreaming
+      })));
+    }
+    
+    return sorted;
+  }, [messages]);
+
   const lastMessageKey = useMemo(() => {
-    const m = messages[messages.length - 1];
+    const m = sortedMessages[sortedMessages.length - 1];
     if (!m) return '';
     return [
       m.id || '',
@@ -34,7 +61,7 @@ const MessageList = memo(({
       m.toolStatus || '',
       String(m.content || '').length
     ].join('|');
-  }, [messages]);
+  }, [sortedMessages]);
 
   const smoothScrollToBottom = (durationMs = 380) => {
     const el = scrollContainerRef?.current;
@@ -75,7 +102,7 @@ const MessageList = memo(({
     const el = scrollContainerRef?.current;
     if (!el) return;
 
-    const last = messages[messages.length - 1];
+    const last = sortedMessages[sortedMessages.length - 1];
     const shouldForce =
       (last && last.type === 'user') || isLoading || pinnedToBottomRef.current;
 
@@ -85,7 +112,7 @@ const MessageList = memo(({
     if (now - lastScrollAtRef.current < 120) return;
     lastScrollAtRef.current = now;
     setTimeout(() => smoothScrollToBottom(380), 0);
-  }, [lastMessageKey, isLoading, messages, scrollContainerRef]);
+  }, [lastMessageKey, isLoading, sortedMessages, scrollContainerRef]);
 
   return (
     <div 
@@ -93,13 +120,13 @@ const MessageList = memo(({
       style={{ height: '100%', width: '100%', paddingLeft: '16px', paddingRight: '20px' }}
       ref={scrollContainerRef}
     >
-      {messages.length === 0 ? (
+      {sortedMessages.length === 0 ? (
         <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
           <p>暂无消息</p>
         </div>
       ) : (
         <>
-          {messages.map((message, index) => {
+          {sortedMessages.map((message, index) => {
             // 检查是否为配额限制消息
             if (message.content && message.content.includes('IFlow AI usage limit reached')) {
               return <UsageLimitBanner key={index} text={message.content} />;

@@ -1,0 +1,10 @@
+langchain>=0.2
+langchain-core>=0.2
+llama-index>=0.10
+semantic-kernel>=1.0.0
+autogen>=0.2
+crewai>=0.30
+memgpt>=0.3
+guidance>=0.1
+dspy-ai>=2.4
+sweagent>=0.3

@@ -54,6 +54,12 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [highlightedPoints, setHighlightedPoints] = useState([]);
   const [learningPlan, setLearningPlan] = useState([]);
   
+  // 简历面试状态
+  const [resumeFile, setResumeFile] = useState(null);
+  const [resumeContent, setResumeContent] = useState('');
+  const [isResumeMode, setIsResumeMode] = useState(false);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+  
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem('iflow-model') || 'GLM-4.7';
@@ -103,7 +109,12 @@ const InterviewPreparation = ({ selectedProject }) => {
   };
 
   const saveInterviewRecord = () => {
-    if (chatMessages.length === 0) return;
+    console.log('[Interview] 点击保存记录按钮');
+    if (chatMessages.length === 0) {
+      console.warn('[Interview] 没有聊天消息,无法保存记录');
+      alert('请先进行一些对话,然后再保存记录');
+      return;
+    }
 
     const record = {
       id: currentInterviewId || Date.now(),
@@ -122,8 +133,11 @@ const InterviewPreparation = ({ selectedProject }) => {
       localStorage.setItem('interview_history', JSON.stringify(updatedHistory));
       setInterviewHistory(updatedHistory);
       setCurrentInterviewId(record.id);
+      console.log('[Interview] 面试记录保存成功');
+      alert('✅ 面试记录保存成功!');
     } catch (error) {
       console.error('Failed to save interview record:', error);
+      alert('❌ 保存失败: ' + error.message);
     }
   };
 
@@ -133,7 +147,96 @@ const InterviewPreparation = ({ selectedProject }) => {
     setTimer(0);
     setQuestionTimer(0);
     setEvaluation(null);
-    setShowEvaluation(false);
+    setIsResumeMode(false);
+    setResumeFile(null);
+    setResumeContent('');
+  };
+
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploadingResume(true);
+    try {
+      let content = '';
+      
+      // 根据文件类型处理
+      if (file.type === 'application/pdf') {
+        // PDF 文件 - 使用 OCR API
+        const base64 = await readFileAsBase64(file);
+        const response = await authenticatedFetch('/api/ocr/process-pdf', {
+          method: 'POST',
+          body: JSON.stringify({
+            pdf_data: base64,
+            technology: 'lighton',
+            max_tokens: 8192
+          }),
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          content = result.text || result.content || '';
+        } else {
+          const error = await response.json();
+          throw new Error(error.error || 'PDF 处理失败');
+        }
+      } else if (file.type === 'text/plain') {
+        // TXT 文件 - 直接读取
+        content = await readFileAsText(file);
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                 file.type === 'application/msword') {
+        // DOC/DOCX 文件 - 提示用户转换为 PDF 或 TXT
+        throw new Error('请将 Word 文档转换为 PDF 或 TXT 格式后再上传');
+      } else {
+        throw new Error('不支持的文件格式,请上传 PDF 或 TXT 文件');
+      }
+
+      if (!content || content.trim().length === 0) {
+        throw new Error('无法提取简历内容,请确保文件包含可读文本');
+      }
+
+      setResumeContent(content);
+      setResumeFile(file);
+      setIsResumeMode(true);
+      
+      // 添加系统消息
+      setChatMessages([{
+        role: 'ai',
+        content: `✅ 简历已上传成功!\n\n**文件名**: ${file.name}\n\n简历内容:\n${content}\n\n现在我将根据这份简历开始面试。`
+      }]);
+      
+      alert('简历上传成功!现在将根据简历进行面试。');
+    } catch (error) {
+      console.error('简历上传失败:', error);
+      alert('简历上传失败: ' + error.message);
+    } finally {
+      setIsUploadingResume(false);
+    }
+  };
+
+  const readFileAsBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // 移除 data URL 前缀
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const readFileAsText = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file, 'UTF-8');
+    });
   };
 
   const loadInterview = (record) => {
@@ -696,6 +799,125 @@ const InterviewPreparation = ({ selectedProject }) => {
     </div>
   );
 
+  const renderHistory = () => (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <History className="w-5 h-5 text-blue-500" />
+          面试历史记录
+        </h3>
+        {interviewHistory.length > 0 && (
+          <button
+            onClick={() => {
+              if (window.confirm('确定要清空所有历史记录吗?')) {
+                localStorage.removeItem('interview_history');
+                setInterviewHistory([]);
+              }
+            }}
+            className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm transition-colors"
+          >
+            清空记录
+          </button>
+        )}
+      </div>
+      
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {interviewHistory.length === 0 ? (
+          <div className="text-center py-12">
+            <History className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">
+              暂无面试记录
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+              完成面试后点击"保存记录"按钮,记录将显示在这里
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 pb-4">
+          {interviewHistory.map((record) => (
+            <div key={record.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      {record.projectName || '未知项目'}
+                    </h4>
+                    <span className={`px-2 py-0.5 rounded text-xs ${
+                      record.chatOnlyMode 
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    }`}>
+                      {record.chatOnlyMode ? '仅对话' : '完整模式'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      {formatTime(record.duration)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MessageSquare className="w-4 h-4" />
+                      {record.messages?.length || 0} 条消息
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-4 h-4" />
+                      {record.model || 'GLM-4.7'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">
+                  {new Date(record.date).toLocaleString('zh-CN')}
+                </div>
+              </div>
+              
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => {
+                    setChatMessages(record.messages || []);
+                    setTimer(record.duration || 0);
+                    setCurrentInterviewId(record.id);
+                    setActiveSection('practice');
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
+                >
+                  查看详情
+                </button>
+                <button
+                  onClick={() => {
+                    const dataStr = JSON.stringify(record, null, 2);
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `interview_${record.projectName}_${new Date(record.date).toISOString().slice(0, 10)}.json`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm transition-colors"
+                >
+                  导出
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm('确定要删除这条记录吗?')) {
+                      const updatedHistory = interviewHistory.filter(r => r.id !== record.id);
+                      localStorage.setItem('interview_history', JSON.stringify(updatedHistory));
+                      setInterviewHistory(updatedHistory);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded-lg text-sm transition-colors"
+                >
+                  删除
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        )}
+      </div>
+    </div>
+  );
+
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -703,7 +925,7 @@ const InterviewPreparation = ({ selectedProject }) => {
   };
 
   const renderPractice = () => (
-    <div className="flex flex-col min-h-0">
+    <div className="flex flex-col h-full min-h-0">
       {/* 聊天头部 */}
       <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-2 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
@@ -771,7 +993,7 @@ const InterviewPreparation = ({ selectedProject }) => {
       </div>
 
       {/* 聊天消息区域 */}
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-h-[400px]">
+      <div className="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="h-full overflow-y-auto p-4 space-y-3">
           {chatMessages.length === 0 ? (
             <div className="text-center py-12">
@@ -1147,7 +1369,7 @@ const InterviewPreparation = ({ selectedProject }) => {
       </div>
 
       {/* 聊天输入区域 */}
-      <div className="mt-2 space-y-2 flex-shrink-0">
+      <div className="mt-2 space-y-2 flex-shrink-0 pb-2">
         <div className="flex gap-2">
           <IFlowModelSelector />
           <div className="flex-1">
@@ -1160,14 +1382,35 @@ const InterviewPreparation = ({ selectedProject }) => {
                   handleSendMessage();
                 }
               }}
-              placeholder="输入你的回答或问题... (Shift+Enter 换行)"
+              placeholder={isResumeMode ? "回答面试官的问题..." : "输入你的回答或问题... (Shift+Enter 换行)"}
               className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               rows={2}
             />
           </div>
+          <label className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors cursor-pointer ${
+            isResumeMode 
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'
+          }`}>
+            <FileText className="w-4 h-4" />
+            <span className="text-sm">{isResumeMode ? '简历模式' : '上传简历'}</span>
+            <input
+              type="file"
+              accept=".pdf,.txt"
+              onChange={handleResumeUpload}
+              disabled={isUploadingResume}
+              className="hidden"
+            />
+          </label>
         </div>
         <div className="flex justify-between items-center">
           <div className="flex gap-2 flex-wrap">
+            {isResumeMode && (
+              <div className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                {resumeFile?.name}
+              </div>
+            )}
             {multiRoundMode && (
               <>
                 <button
@@ -1236,17 +1479,30 @@ const InterviewPreparation = ({ selectedProject }) => {
 
     try {
       // 构建面试上下文作为消息的一部分
-      const interviewContext = `
+      let interviewContext = `
 【面试模式】
+仅聊天模式: ${chatOnlyMode ? '是' : '否'}
+`;
+
+      if (isResumeMode && resumeContent) {
+        interviewContext += `
+【简历信息】
+${resumeContent}
+
+请根据这份简历进行面试，重点关注候选人的技能、经验和项目经历。
+`;
+      } else if (selectedProject) {
+        interviewContext += `
+【项目信息】
 项目名称: ${selectedProject?.name || 'unknown'}
 项目路径: ${selectedProject?.path || ''}
 技术栈: ${projectAnalysis?.tech_stack?.languages?.join(', ') || '未知'}
 框架: ${projectAnalysis?.tech_stack?.frameworks?.join(', ') || '未知'}
-仅聊天模式: ${chatOnlyMode ? '是' : '否'}
 
 请扮演面试官角色，根据这个项目的技术栈进行面试。
 ${chatOnlyMode ? '注意：你只能进行对话，不能使用任何工具修改文件。' : ''}
 `;
+      }
 
       const fullMessage = interviewContext + '\n\n用户回答: ' + userMessage;
 
@@ -1314,10 +1570,16 @@ ${chatOnlyMode ? '注意：你只能进行对话，不能使用任何工具修�
   };
 
   const generateEvaluation = async () => {
-    if (chatMessages.length === 0) return;
+    console.log('[Interview] 点击生成评估报告按钮');
+    if (chatMessages.length === 0) {
+      console.warn('[Interview] 没有聊天消息,无法生成评估');
+      alert('请先进行一些对话,然后再生成评估报告');
+      return;
+    }
 
     setIsChatLoading(true);
     try {
+      console.log('[Interview] 开始生成评估报告...');
       // 构建评估请求
       const conversation = chatMessages.map(msg => `${msg.role === 'user' ? '候选人' : '面试官'}: ${msg.content}`).join('\n\n');
       
@@ -1431,10 +1693,16 @@ ${conversation}
   };
 
   const getHint = async () => {
-    if (chatMessages.length === 0) return;
+    console.log('[Interview] 点击获取提示按钮');
+    if (chatMessages.length === 0) {
+      console.warn('[Interview] 没有聊天消息,无法获取提示');
+      alert('请先进行一些对话,然后再获取提示');
+      return;
+    }
 
     setIsChatLoading(true);
     try {
+      console.log('[Interview] 开始获取提示...');
       const lastAIMessage = [...chatMessages].reverse().find(msg => msg.role === 'ai');
       if (!lastAIMessage) return;
 
@@ -1606,10 +1874,16 @@ ${conversation}
   };
 
   const generateReview = async () => {
-    if (chatMessages.length === 0) return;
+    console.log('[Interview] 点击面试复盘按钮');
+    if (chatMessages.length === 0) {
+      console.warn('[Interview] 没有聊天消息,无法生成复盘');
+      alert('请先进行一些对话,然后再生成面试复盘');
+      return;
+    }
 
     setIsChatLoading(true);
     try {
+      console.log('[Interview] 开始生成面试复盘...');
       const conversation = chatMessages.map(msg => `${msg.role === 'user' ? '候选人' : '面试官'}: ${msg.content}`).join('\n\n');
       
       const reviewPrompt = `
@@ -1783,16 +2057,27 @@ ${conversation}
             >
               常见问题
             </button>
+            <button
+              onClick={() => setActiveSection('history')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeSection === 'history'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              历史记录
+            </button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden p-6 pb-2">
+      <div className="flex-1 overflow-visible p-6 pb-2">
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'questions' && renderQuestions()}
         {activeSection === 'practice' && renderPractice()}
         {activeSection === 'faq' && renderFAQ()}
+        {activeSection === 'history' && renderHistory()}
       </div>
     </div>
   );

@@ -1,0 +1,50 @@
+# vLLM 配置文件
+# 使用方法: export VLLM_CONFIG=vllm_config.yaml && vllm serve --config vllm_config.yaml
+
+# 模型配置
+model: "Qwen/Qwen2.5-7B-Instruct"
+
+# 服务配置
+host: "0.0.0.0"
+port: 8000
+api_key: "token-abc123"
+
+# GPU 配置
+gpu_memory_utilization: 0.95
+tensor_parallel_size: 1
+pipeline_parallel_size: 1
+
+# 模型长度配置
+max_model_len: 131072
+max_num_batched_tokens: 8192
+
+# 数据类型
+dtype: "auto"  # auto, bfloat16, float16, float32
+
+# 采样参数
+temperature: 0.7
+top_p: 0.95
+top_k: -1
+repetition_penalty: 1.0
+
+# 日志配置
+log_level: "INFO"
+disable_log_requests: true
+
+# 监控配置
+metrics_port: 8001
+enable_metrics: true
+
+# 性能优化
+enable_chunked_prefill: false
+enforce_eager: false
+
+# 限制配置
+max_num_seqs: 256
+max_num_batched_tokens: 8192
+
+# 前缀缓存
+enable_prefix_caching: false
+
+# 其他
+trust_remote_code: true

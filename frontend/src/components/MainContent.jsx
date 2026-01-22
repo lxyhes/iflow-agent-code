@@ -710,13 +710,14 @@ function MainContent({
                   </ErrorBoundary>
                 </div>          )}
             {activeTab === 'interview' && (
-                <div className="h-full w-full overflow-hidden">
-                  <ErrorBoundary showDetails={true}>
-                    <Suspense fallback={null}>
-                      <InterviewPreparation selectedProject={selectedProject} />
-                    </Suspense>
-                  </ErrorBoundary>
-                </div>          )}
+                            <div className="h-full w-full overflow-visible">
+                              <ErrorBoundary showDetails={true}>
+                                <Suspense fallback={null}>
+                                  <InterviewPreparation selectedProject={selectedProject} />
+                                </Suspense>
+                              </ErrorBoundary>
+                            </div>
+                      )}
             {activeTab === 'workflow' && (
                 <div className="h-full w-full overflow-hidden">
                   <ErrorBoundary showDetails={true}>

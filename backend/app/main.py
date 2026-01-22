@@ -2,14 +2,16 @@ import sys
 import os
 import logging
 
-# Ensure backend path is in sys.path so we can import backend.core etc.
-# This file is backend/app/main.py
-# We want to add .../iflow-agent-code/ to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+backend_dir = os.path.join(project_root, "backend")
+for p in (project_root, backend_dir):
+    if p not in sys.path:
+        sys.path.append(p)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.routers import files
+from backend.app.routers import frameworks
 
 # Import legacy app to keep existing endpoints working
 # This also initializes the global variables in server.py
@@ -50,6 +52,7 @@ app.add_middleware(
 
 # Include new routers first (they take precedence)
 app.include_router(files.router)
+app.include_router(frameworks.router)
 
 # Include legacy routes
 # This brings in all the endpoints defined in server.py

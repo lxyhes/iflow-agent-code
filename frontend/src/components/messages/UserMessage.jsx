@@ -24,7 +24,7 @@ const UserMessage = ({
   const isEditing = editingMessageId === message.id;
 
   return (
-    <div className="flex w-full justify-end gap-3 pl-12 pr-4 mb-6 group relative">
+    <div className={`flex w-full justify-end gap-3 pl-12 pr-4 ${isGrouped ? 'mb-2' : 'mb-6'} group relative`}>
       <div className="flex flex-col items-end flex-1 min-w-0">
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-1.5">
@@ -81,6 +81,16 @@ const UserMessage = ({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Token 使用量 */}
+          {message.content && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>~{Math.ceil((message.content?.length || 0) / 4)} tokens</span>
             </div>
           )}
 

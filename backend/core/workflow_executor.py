@@ -4,11 +4,15 @@ Workflow Executor
 """
 
 import asyncio
+import json
 import logging
 from typing import Dict, List, Any, Optional, AsyncGenerator
 from datetime import datetime
 from .agent import Agent
 from .iflow_sdk_client import IFlowSDKClient, MessageType
+from .orchestrator_agent import OrchestratorAgent
+from .providers.provider_config import get_provider_config
+from .structured_output import generate_json_object
 
 logger = logging.getLogger("WorkflowExecutor")
 
@@ -72,12 +76,13 @@ class WorkflowExecutor:
             result.steps_total = len(execution_plan)
 
             # 初始化 iFlow Agent
-            agent = Agent(
+            base_agent = Agent(
                 name=f"WorkflowAgent_{workflow_id}",
                 cwd=project_path,
                 mode="yolo",
                 use_sdk=True
             )
+            agent = OrchestratorAgent(base_agent=base_agent, project_path=project_path, allow_side_effects=True)
 
             # 执行每个步骤
             for step in execution_plan:
@@ -162,12 +167,13 @@ class WorkflowExecutor:
             }
 
             # 初始化 iFlow Agent
-            agent = Agent(
+            base_agent = Agent(
                 name=f"WorkflowAgent_{workflow_id}",
                 cwd=project_path,
                 mode="yolo",
                 use_sdk=True
             )
+            agent = OrchestratorAgent(base_agent=base_agent, project_path=project_path, allow_side_effects=True)
 
             # 执行每个步骤
             for index, step in enumerate(execution_plan):
@@ -325,8 +331,11 @@ class WorkflowExecutor:
 }
 
 请务必返回有效的JSON格式，不要包含其他文本。"""
-                    result = await agent.chat(prompt)
-                    return {'success': True, 'output': result}
+                    cfg = get_provider_config()
+                    obj, raw = await generate_json_object(agent, prompt, max_attempts=3, provider=cfg.output_provider)
+                    if obj is None:
+                        return {'success': False, 'error': 'Invalid JSON output', 'output': raw}
+                    return {'success': True, 'output': json.dumps(obj, ensure_ascii=False), 'output_json': obj}
                 else:
                     result = await agent.chat(f"Execute action: {action}")
                     return {'success': True, 'output': result}
@@ -407,6 +416,20 @@ class WorkflowExecutor:
             if step_type in ['prompt', 'condition', 'action', 'mcp', 'skill',
                            'fileRead', 'fileWrite', 'shell', 'git', 'search', 'codeEdit']:
                 prompt = self._build_step_prompt(step_type, step_data)
+                if step_type == "action" and step_data.get("action") == "generate_fix":
+                    cfg = get_provider_config()
+                    obj, raw = await generate_json_object(agent, prompt, max_attempts=3, provider=cfg.output_provider)
+                    if obj is None:
+                        yield {'type': 'step_output', 'output': raw, 'timestamp': datetime.now().isoformat()}
+                        return
+                    yield {
+                        'type': 'step_output',
+                        'output': json.dumps(obj, ensure_ascii=False),
+                        'output_json': obj,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    return
+
                 full_output = ""
 
                 async for chunk in agent.chat_stream(prompt):

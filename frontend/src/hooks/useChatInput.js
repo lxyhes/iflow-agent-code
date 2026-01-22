@@ -17,16 +17,6 @@ export const useChatInput = (selectedProject, selectedSession, currentSessionId,
   
   const textareaRef = useRef(null);
 
-  // 加载草稿
-  useEffect(() => {
-    if (selectedProject) {
-      const sessionId = selectedSession?.id || currentSessionId || 'default';
-      const draftKey = scopedKey(selectedProject, `draft_input_${sessionId}`);
-      const savedDraft = safeLocalStorage.getItem(draftKey);
-      if (savedDraft) setInput(savedDraft);
-    }
-  }, [selectedProject, selectedSession?.id, currentSessionId]);
-
   // 保存草稿
   useEffect(() => {
     if (selectedProject && input) {

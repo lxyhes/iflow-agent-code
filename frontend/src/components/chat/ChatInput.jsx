@@ -17,6 +17,8 @@ const ChatInput = ({
   handleSubmit,
   isInputFocused,
   setIsInputFocused,
+  attachedImages,
+  removeAttachedImage,
   provider
 }) => {
   return (
@@ -32,6 +34,30 @@ const ChatInput = ({
         >
           <input {...getInputProps()} />
 
+          {/* 图片预览区域 */}
+          {attachedImages && attachedImages.length > 0 && (
+            <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 border-b border-gray-200/50 dark:border-gray-700/50">
+              {attachedImages.map((img, idx) => (
+                <div key={idx} className="relative group/img">
+                  <img
+                    src={img.data}
+                    alt={img.name || `Image ${idx + 1}`}
+                    className="h-16 w-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAttachedImage(idx)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow-md"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             value={input}
@@ -44,13 +70,6 @@ const ChatInput = ({
             disabled={isLoading}
             className="block w-full px-4 py-3 bg-transparent focus:outline-none text-gray-900 dark:text-gray-100 disabled:opacity-50 resize-none min-h-[60px] max-h-[400px] placeholder-gray-400 dark:placeholder-gray-500"
           />
-
-          {/* 拖拽上传提示 */}
-          <div className="absolute inset-0 flex items-center justify-center bg-blue-500/10 dark:bg-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            <div className="text-blue-600 dark:text-blue-400 text-sm font-medium">
-              Drop files here to upload
-            </div>
-          </div>
 
           {/* 发送按钮 */}
           <button
@@ -73,9 +92,6 @@ const ChatInput = ({
               </svg>
             )}
           </button>
-
-          {/* 装饰性渐变边框 */}
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/0 via-purple-500/0 to-pink-500/0 group-hover:from-blue-500/10 group-hover:via-purple-500/10 group-hover:to-pink-500/10 transition-all duration-500 pointer-events-none" />
         </div>
 
         {/* 底部提示 */}
@@ -90,12 +106,6 @@ const ChatInput = ({
               <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-medium">Shift + Enter</kbd>
               <span>换行</span>
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            <span>支持拖拽上传</span>
           </div>
         </div>
       </form>

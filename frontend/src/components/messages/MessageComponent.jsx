@@ -29,12 +29,8 @@ const MessageComponent = memo(({
   favoritedMessages,
   isLoading
 }) => {
-  const isGrouped = prevMessage && prevMessage.type === message.type &&
-    ((prevMessage.type === 'assistant') ||
-      (prevMessage.type === 'user') ||
-      (prevMessage.type === 'tool') ||
-      (prevMessage.type === 'plan') ||
-      (prevMessage.type === 'error'));
+  // 禁用消息分组,让每条消息都独立显示,避免消息挤在一起
+  const isGrouped = false;
   
   const messageRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(false);

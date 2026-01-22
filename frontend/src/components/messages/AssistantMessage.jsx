@@ -127,7 +127,7 @@ const AssistantMessage = ({
   const shouldSeparate = !isGrouped && message.type === 'assistant' && !message.isToolUse;
 
   return (
-    <div className={`flex gap-4 w-full max-w-4xl pr-4 group relative ${shouldSeparate ? 'mb-6 pb-6 border-b border-gray-100 dark:border-gray-800' : 'mb-2'}`}>
+    <div className={`flex gap-4 w-full max-w-4xl pr-4 group relative ${shouldSeparate ? 'mb-6 pb-6 border-b border-gray-100 dark:border-gray-800' : isGrouped ? 'mb-1' : 'mb-3'}`}>
       {/* Left Column: Avatar */}
       <div className="flex-shrink-0 flex flex-col items-center">
         {!isGrouped && (
@@ -192,6 +192,25 @@ const AssistantMessage = ({
             <TypedMarkdown content={message.content} isStreaming={!!message.isStreaming} />
           )}
         </div>
+
+        {/* Token 使用量 */}
+        {message.content && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+            <svg className={`w-3 h-3 ${message.isStreaming ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>
+              {message.isStreaming ? (
+                <>
+                  ~{Math.ceil((message.content?.length || 0) / 4)} tokens
+                  <span className="animate-pulse">...</span>
+                </>
+              ) : (
+                `~${Math.ceil((message.content?.length || 0) / 4)} tokens`
+              )}
+            </span>
+          </div>
+        )}
 
         {/* 操作菜单按钮 */}
         <button

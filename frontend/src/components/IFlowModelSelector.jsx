@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const models = [
   { id: 'GLM-4.7', label: 'GLM-4.7 (推荐)', icon: '✨' },
@@ -15,6 +16,8 @@ const IFlowModelSelector = () => {
     return localStorage.getItem('iflow-model') || 'GLM-4.7';
   });
   const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const buttonRef = React.useRef(null);
 
   useEffect(() => {
     // Sync with current server config on mount
@@ -28,6 +31,53 @@ const IFlowModelSelector = () => {
       })
       .catch(console.error);
   }, []);
+
+  // 计算下拉菜单位置
+  const updateDropdownPosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const dropdownWidth = 224; // 下拉菜单的宽度
+      const windowWidth = window.innerWidth;
+      
+      // 计算左边位置,确保不会超出屏幕右侧
+      let left = rect.right - dropdownWidth;
+      if (left < 10) {
+        left = 10; // 最小左边距
+      }
+      if (left + dropdownWidth > windowWidth - 10) {
+        left = windowWidth - dropdownWidth - 10; // 确保不会超出右侧
+      }
+      
+      // 计算顶部位置,确保不会超出屏幕底部
+      let top = rect.bottom + 4;
+      const windowHeight = window.innerHeight;
+      const dropdownHeight = 400; // 最大高度
+      
+      if (top + dropdownHeight > windowHeight - 10) {
+        top = rect.top - dropdownHeight - 4; // 向上显示
+      }
+      
+      setDropdownPosition({
+        top,
+        left
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (showDropdown) {
+      updateDropdownPosition();
+      const handleScroll = () => {
+        setShowDropdown(false);
+      };
+      window.addEventListener('scroll', handleScroll);
+      window.addEventListener('resize', handleScroll);
+      return () => {
+        window.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('resize', handleScroll);
+      };
+    }
+  }, [showDropdown]);
 
   const handleModelChange = (modelId) => {
     setCurrentModel(modelId);
@@ -51,8 +101,9 @@ const IFlowModelSelector = () => {
   const currentModelInfo = models.find(m => m.id === currentModel) || models[0];
 
   return (
-    <div className="relative mr-2">
+    <div className="relative mr-2 z-50">
       <button
+        ref={buttonRef}
         onClick={() => setShowDropdown(!showDropdown)}
         className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-colors shadow-sm"
         title="Select IFlow Model"
@@ -64,8 +115,17 @@ const IFlowModelSelector = () => {
         </svg>
       </button>
 
-      {showDropdown && (
-        <div className="absolute right-0 mt-2 w-56 rounded-xl shadow-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 z-[100] animate-in fade-in zoom-in-95 duration-200">
+      {showDropdown && createPortal(
+        <div 
+          className="fixed w-56 rounded-xl shadow-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 z-[99999] animate-in fade-in zoom-in-95 duration-200 overflow-y-auto"
+          style={{ 
+            maxHeight: '400px',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            position: 'fixed',
+            zIndex: 99999
+          }}
+        >
           <div className="p-2">
             <div className="px-3 py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
               Available Models
@@ -92,7 +152,8 @@ const IFlowModelSelector = () => {
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
