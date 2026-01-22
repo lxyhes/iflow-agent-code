@@ -10,9 +10,12 @@ import platform
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from core.ocr_service import get_ocr_service
-except ImportError:
-    get_ocr_service = None
+    from backend.core.ocr_service import get_ocr_service
+except Exception:
+    try:
+        from core.ocr_service import get_ocr_service
+    except Exception:
+        get_ocr_service = None
 import subprocess
 import logging
 from datetime import datetime
@@ -6102,6 +6105,7 @@ async def process_pdf_ocr(request: Request):
     }
     """
     try:
+        logger.info("[OCR] 收到 PDF OCR 请求")
         data = await request.json()
         
         pdf_data = data.get("pdf_data")
@@ -6110,8 +6114,13 @@ async def process_pdf_ocr(request: Request):
         max_tokens = data.get("max_tokens", 4096)
         temperature = data.get("temperature", 0.2)
         top_p = data.get("top_p", 0.9)
+        dpi = data.get("dpi", 240)
+        preprocess = data.get("preprocess", True)
+        
+        logger.info(f"[OCR] 请求参数: technology={technology}, max_tokens={max_tokens}, dpi={dpi}, preprocess={preprocess}, pdf_data_length={len(pdf_data) if pdf_data else 0}")
         
         if not pdf_data:
+            logger.warning("[OCR] 缺少 PDF 数据")
             return JSONResponse(
                 content={"success": False, "error": "缺少 PDF 数据"},
                 status_code=400
@@ -6122,8 +6131,10 @@ async def process_pdf_ocr(request: Request):
         import io
         import pypdfium2 as pdfium
         
+        logger.info("[OCR] 开始解码 PDF...")
         pdf_bytes = base64.b64decode(pdf_data)
         pdf = pdfium.PdfDocument(pdf_bytes)
+        logger.info(f"[OCR] PDF 解码成功，共 {len(pdf)} 页")
         
         # 确定要处理的页面
         if page_range:
@@ -6131,14 +6142,44 @@ async def process_pdf_ocr(request: Request):
         else:
             pages_to_process = [pdf[i] for i in range(len(pdf))]
         
+        logger.info(f"[OCR] 将处理 {len(pages_to_process)} 页")
+        
         # 获取 OCR 服务
+        logger.info(f"[OCR] 获取 OCR 服务: {technology}")
+        if get_ocr_service is None or not callable(get_ocr_service):
+            logger.error("[OCR] OCR 服务入口不可用（get_ocr_service 未正确导入）")
+            return JSONResponse(
+                content={"success": False, "error": "OCR 服务未就绪，请检查后端 OCR 依赖与导入配置"},
+                status_code=500
+            )
         service = get_ocr_service(technology)
+        
+        if service is None:
+            logger.error(f"[OCR] OCR 服务返回 None，技术类型: {technology}")
+            return JSONResponse(
+                content={"success": False, "error": f"OCR 服务初始化失败: {technology}"},
+                status_code=500
+            )
         
         # 处理每一页
         results = []
         for idx, page in enumerate(pages_to_process):
-            # 渲染页面为图片 (200 DPI)
-            pil_image = page.render(scale=2.77).to_pil()
+            # 渲染页面为图片（dpi/72 为 scale）
+            try:
+                dpi_value = int(dpi) if dpi else 240
+            except Exception:
+                dpi_value = 240
+            dpi_value = max(120, min(400, dpi_value))
+            scale = dpi_value / 72.0
+            pil_image = page.render(scale=scale).to_pil()
+
+            if preprocess:
+                from PIL import ImageEnhance, ImageFilter
+                if pil_image.mode != "RGB":
+                    pil_image = pil_image.convert("RGB")
+                pil_image = ImageEnhance.Contrast(pil_image).enhance(1.35)
+                pil_image = ImageEnhance.Sharpness(pil_image).enhance(1.2)
+                pil_image = pil_image.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
             
             # 转换为 base64
             buffer = io.BytesIO()
@@ -6173,6 +6214,205 @@ async def process_pdf_ocr(request: Request):
         
     except Exception as e:
         logger.error(f"PDF OCR 处理失败: {e}")
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500
+        )
+
+
+@app.post("/api/analyze-project-for-interview")
+async def analyze_project_for_interview(request: Request):
+    """
+    分析项目结构用于面试准备
+    
+    Request body:
+    {
+        "project_path": "/path/to/project"
+    }
+    
+    Returns:
+    {
+        "project_name": "项目名称",
+        "tech_stack": {
+            "languages": ["JavaScript", "TypeScript"],
+            "frameworks": ["React", "Node.js"],
+            "databases": ["PostgreSQL"],
+            "tools": ["Git", "Docker"]
+        },
+        "features": [],
+        "architecture": "前后端分离架构",
+        "complexity": "中等"
+    }
+    """
+    try:
+        data = await request.json()
+        project_path = data.get("project_path")
+        
+        if not project_path:
+            return JSONResponse(
+                content={"success": False, "error": "缺少项目路径"},
+                status_code=400
+            )
+        
+        # 获取项目名称
+        project_name = os.path.basename(project_path)
+        
+        # 分析项目技术栈
+        tech_stack = {
+            "languages": [],
+            "frameworks": [],
+            "databases": [],
+            "tools": []
+        }
+        
+        # 检查常见的技术栈文件
+        package_json = os.path.join(project_path, "package.json")
+        if os.path.exists(package_json):
+            try:
+                with open(package_json, 'r', encoding='utf-8') as f:
+                    pkg_data = json.load(f)
+                    dependencies = {**pkg_data.get('dependencies', {}), **pkg_data.get('devDependencies', {})}
+                    
+                    # 检测语言
+                    if 'typescript' in dependencies:
+                        tech_stack["languages"].append("TypeScript")
+                    else:
+                        tech_stack["languages"].append("JavaScript")
+                    
+                    # 检测框架
+                    frameworks = []
+                    if 'react' in dependencies:
+                        frameworks.append("React")
+                    if 'vue' in dependencies:
+                        frameworks.append("Vue")
+                    if 'angular' in dependencies:
+                        frameworks.append("Angular")
+                    if 'next' in dependencies:
+                        frameworks.append("Next.js")
+                    if 'nuxt' in dependencies:
+                        frameworks.append("Nuxt.js")
+                    if 'express' in dependencies:
+                        frameworks.append("Express")
+                    if 'fastify' in dependencies:
+                        frameworks.append("Fastify")
+                    if 'koa' in dependencies:
+                        frameworks.append("Koa")
+                    if 'nest' in dependencies:
+                        frameworks.append("NestJS")
+                    if 'django' in dependencies:
+                        frameworks.append("Django")
+                    if 'flask' in dependencies:
+                        frameworks.append("Flask")
+                    if 'fastapi' in dependencies:
+                        frameworks.append("FastAPI")
+                    
+                    tech_stack["frameworks"] = list(set(frameworks))
+                    
+                    # 检测数据库
+                    databases = []
+                    if 'pg' in dependencies or 'postgres' in dependencies or 'postgresql' in dependencies:
+                        databases.append("PostgreSQL")
+                    if 'mysql' in dependencies or 'mysql2' in dependencies:
+                        databases.append("MySQL")
+                    if 'mongodb' in dependencies or 'mongoose' in dependencies:
+                        databases.append("MongoDB")
+                    if 'redis' in dependencies:
+                        databases.append("Redis")
+                    if 'sqlite' in dependencies or 'sqlite3' in dependencies:
+                        databases.append("SQLite")
+                    
+                    tech_stack["databases"] = list(set(databases))
+                    
+                    # 检测工具
+                    tools = []
+                    if 'webpack' in dependencies:
+                        tools.append("Webpack")
+                    if 'vite' in dependencies:
+                        tools.append("Vite")
+                    if 'rollup' in dependencies:
+                        tools.append("Rollup")
+                    if 'jest' in dependencies:
+                        tools.append("Jest")
+                    if 'mocha' in dependencies:
+                        tools.append("Mocha")
+                    if 'eslint' in dependencies:
+                        tools.append("ESLint")
+                    if 'prettier' in dependencies:
+                        tools.append("Prettier")
+                    if 'docker' in str(dependencies).lower():
+                        tools.append("Docker")
+                    
+                    tech_stack["tools"] = list(set(tools))
+                    
+            except Exception as e:
+                logger.error(f"分析 package.json 失败: {e}")
+        
+        # 检查 Python 项目
+        requirements_txt = os.path.join(project_path, "requirements.txt")
+        if os.path.exists(requirements_txt):
+            try:
+                with open(requirements_txt, 'r', encoding='utf-8') as f:
+                    requirements = f.read().lower()
+                    
+                    if 'python' not in tech_stack["languages"]:
+                        tech_stack["languages"].append("Python")
+                    
+                    if 'django' in requirements:
+                        tech_stack["frameworks"].append("Django")
+                    if 'flask' in requirements:
+                        tech_stack["frameworks"].append("Flask")
+                    if 'fastapi' in requirements:
+                        tech_stack["frameworks"].append("FastAPI")
+                    if 'pymysql' in requirements or 'mysql' in requirements:
+                        tech_stack["databases"].append("MySQL")
+                    if 'psycopg2' in requirements or 'postgresql' in requirements:
+                        tech_stack["databases"].append("PostgreSQL")
+                    if 'pymongo' in requirements:
+                        tech_stack["databases"].append("MongoDB")
+                    
+                    tech_stack["frameworks"] = list(set(tech_stack["frameworks"]))
+                    tech_stack["databases"] = list(set(tech_stack["databases"]))
+                    
+            except Exception as e:
+                logger.error(f"分析 requirements.txt 失败: {e}")
+        
+        # 检查 Go 项目
+        go_mod = os.path.join(project_path, "go.mod")
+        if os.path.exists(go_mod):
+            if "Go" not in tech_stack["languages"]:
+                tech_stack["languages"].append("Go")
+            tech_stack["tools"].append("Go Modules")
+        
+        # 去重
+        tech_stack["languages"] = list(set(tech_stack["languages"]))
+        tech_stack["frameworks"] = list(set(tech_stack["frameworks"]))
+        tech_stack["databases"] = list(set(tech_stack["databases"]))
+        tech_stack["tools"] = list(set(tech_stack["tools"]))
+        
+        # 确定架构类型
+        architecture = "单体架构"
+        if "React" in tech_stack["frameworks"] or "Vue" in tech_stack["frameworks"]:
+            if "Express" in tech_stack["frameworks"] or "FastAPI" in tech_stack["frameworks"] or "Django" in tech_stack["frameworks"]:
+                architecture = "前后端分离架构"
+        
+        # 确定复杂度
+        complexity = "简单"
+        if len(tech_stack["frameworks"]) >= 3 or len(tech_stack["databases"]) >= 2:
+            complexity = "复杂"
+        elif len(tech_stack["frameworks"]) >= 1:
+            complexity = "中等"
+        
+        return JSONResponse(content={
+            "success": True,
+            "project_name": project_name,
+            "tech_stack": tech_stack,
+            "features": [],
+            "architecture": architecture,
+            "complexity": complexity
+        })
+        
+    except Exception as e:
+        logger.error(f"分析项目失败: {e}")
         return JSONResponse(
             content={"success": False, "error": str(e)},
             status_code=500

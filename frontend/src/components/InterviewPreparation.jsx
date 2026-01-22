@@ -59,6 +59,8 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [resumeContent, setResumeContent] = useState('');
   const [isResumeMode, setIsResumeMode] = useState(false);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [uploadStage, setUploadStage] = useState('');
   
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -154,38 +156,64 @@ const InterviewPreparation = ({ selectedProject }) => {
 
   const handleResumeUpload = async (e) => {
     const file = e.target.files[0];
+    console.log('[简历上传] 文件选择:', file);
     if (!file) return;
 
     setIsUploadingResume(true);
+    setUploadProgress('正在读取文件...');
+    setUploadStage('reading');
+    
     try {
       let content = '';
+      console.log('[简历上传] 文件类型:', file.type, '文件名:', file.name, '文件大小:', file.size);
       
       // 根据文件类型处理
       if (file.type === 'application/pdf') {
+        setUploadProgress('正在读取 PDF 文件...');
+        setUploadStage('reading');
+        console.log('[简历上传] 开始处理 PDF 文件...');
+        
         // PDF 文件 - 使用 OCR API
         const base64 = await readFileAsBase64(file);
+        console.log('[简历上传] Base64 编码完成，长度:', base64.length);
+        
+        const requestData = {
+          pdf_data: base64,
+          technology: 'rapidocr',  // 切换到 rapidocr，简单可靠
+          max_tokens: 16384
+        };
+        
+        setUploadProgress('正在进行 OCR 文字识别...');
+        setUploadStage('ocr');
+        console.log('[简历上传] 发送 OCR 请求...');
+        
         const response = await authenticatedFetch('/api/ocr/process-pdf', {
           method: 'POST',
-          body: JSON.stringify({
-            pdf_data: base64,
-            technology: 'lighton',
-            max_tokens: 8192
-          }),
+          body: JSON.stringify(requestData),
           headers: {
             'Content-Type': 'application/json'
           }
         });
 
+        console.log('[简历上传] OCR 响应状态:', response.status);
+        
         if (response.ok) {
           const result = await response.json();
+          console.log('[简历上传] OCR 结果:', result);
           content = result.text || result.content || '';
+          console.log('[简历上传] 提取文本长度:', content?.length || 0);
         } else {
           const error = await response.json();
+          console.error('[简历上传] OCR 错误:', error);
           throw new Error(error.error || 'PDF 处理失败');
         }
       } else if (file.type === 'text/plain') {
+        setUploadProgress('正在读取文本文件...');
+        setUploadStage('reading');
+        console.log('[简历上传] 开始处理 TXT 文件...');
         // TXT 文件 - 直接读取
         content = await readFileAsText(file);
+        console.log('[简历上传] TXT 内容长度:', content?.length || 0);
       } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                  file.type === 'application/msword') {
         // DOC/DOCX 文件 - 提示用户转换为 PDF 或 TXT
@@ -194,26 +222,35 @@ const InterviewPreparation = ({ selectedProject }) => {
         throw new Error('不支持的文件格式,请上传 PDF 或 TXT 文件');
       }
 
+      console.log('[简历上传] 提取的内容长度:', content?.length || 0);
+
       if (!content || content.trim().length === 0) {
         throw new Error('无法提取简历内容,请确保文件包含可读文本');
       }
 
+      setUploadProgress('正在处理简历内容...');
+      setUploadStage('processing');
+      
       setResumeContent(content);
       setResumeFile(file);
       setIsResumeMode(true);
       
+      console.log('[简历上传] 简历上传成功，设置聊天消息');
+      
       // 添加系统消息
       setChatMessages([{
         role: 'ai',
-        content: `✅ 简历已上传成功!\n\n**文件名**: ${file.name}\n\n简历内容:\n${content}\n\n现在我将根据这份简历开始面试。`
+        content: `✅ 简历已上传成功!\n\n**文件名**: ${file.name}\n**文件大小**: ${(file.size / 1024).toFixed(2)} KB\n**提取文本长度**: ${content.length} 字符\n\n简历内容:\n${content}\n\n现在我将根据这份简历开始面试。`
       }]);
       
-      alert('简历上传成功!现在将根据简历进行面试。');
+      alert(`✅ 简历上传成功!\n\n文件名: ${file.name}\n提取文本: ${content.length} 字符\n\n现在将根据简历进行面试。`);
     } catch (error) {
-      console.error('简历上传失败:', error);
-      alert('简历上传失败: ' + error.message);
+      console.error('[简历上传] 失败:', error);
+      alert('❌ 简历上传失败: ' + error.message);
     } finally {
       setIsUploadingResume(false);
+      setUploadProgress('');
+      setUploadStage('');
     }
   };
 
@@ -1043,6 +1080,30 @@ const InterviewPreparation = ({ selectedProject }) => {
             </div>
           )}
           
+          {/* 上传进度提示 */}
+          {isUploadingResume && (
+            <div className="flex justify-start">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 max-w-[70%]">
+                <div className="flex items-center gap-3">
+                  <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      正在处理简历...
+                    </div>
+                    <div className="text-xs text-blue-700 dark:text-blue-300">
+                      {uploadProgress}
+                    </div>
+                    {uploadStage === 'ocr' && (
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                        💡 PDF 文字识别需要一些时间，请耐心等待...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* 提示面板 */}
           {showHints && currentHint && (
             <div className="mt-2 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-yellow-200 dark:border-yellow-800">
@@ -1387,19 +1448,35 @@ const InterviewPreparation = ({ selectedProject }) => {
               rows={2}
             />
           </div>
-          <label className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors cursor-pointer ${
-            isResumeMode 
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+          <label className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer ${
+            isUploadingResume
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 cursor-not-allowed'
+              : isResumeMode 
+              ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300' 
               : 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'
           }`}>
-            <FileText className="w-4 h-4" />
-            <span className="text-sm">{isResumeMode ? '简历模式' : '上传简历'}</span>
+            {isUploadingResume ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span className="text-sm">处理中...</span>
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                <span className="text-sm">{isResumeMode ? '简历模式' : '上传简历'}</span>
+              </>
+            )}
             <input
               type="file"
               accept=".pdf,.txt"
               onChange={handleResumeUpload}
               disabled={isUploadingResume}
               className="hidden"
+              key={isUploadingResume ? 'uploading' : 'ready'}
+              onClick={(e) => {
+                // 重置文件输入框，允许重复选择同一个文件
+                e.target.value = '';
+              }}
             />
           </label>
         </div>
@@ -2072,7 +2149,7 @@ ${conversation}
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-visible p-6 pb-2">
+      <div className="flex-1 overflow-hidden min-h-0 p-6 pb-2">
         {activeSection === 'overview' && renderOverview()}
         {activeSection === 'questions' && renderQuestions()}
         {activeSection === 'practice' && renderPractice()}
