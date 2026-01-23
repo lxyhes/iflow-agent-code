@@ -340,12 +340,15 @@ const ChatInterfaceMinimal = memo(({
         const decoder = new TextDecoder();
         let partialData = '';
         let contentChunks = 0;
+        let totalChunks = 0;
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
+          totalChunks++;
+          console.log(`[SSE] Received chunk #${totalChunks}:`, chunk.substring(0, 200));
 
           // 处理 SSE 格式: "data: {...}"
           for (const char of chunk) {
@@ -353,54 +356,78 @@ const ChatInterfaceMinimal = memo(({
             if (partialData.endsWith('\n\n')) {
               const line = partialData.trim();
               partialData = '';
+              console.log(`[SSE] Found complete event:`, line.substring(0, 100));
 
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
+                  console.log('[SSE] Received event:', data.type, data);
                   
                   if (data.type === 'content') {
                     // 📝 追加内容到当前 AI 消息
                     chatState.setChatMessages(prev => {
                       const updated = [...prev];
-                      const last = updated[updated.length - 1];
-                      if (last?.type === 'assistant' && last.isStreaming) {
-                        last.content += data.content;
-                        contentChunks++;
+                      // 找到最后一个非工具卡片的 AI 消息（isStreaming 且不是工具卡片）
+                      for (let i = updated.length - 1; i >= 0; i--) {
+                        if (updated[i].type === 'assistant' && updated[i].isStreaming && !updated[i].isToolUse) {
+                          updated[i].content += data.content;
+                          contentChunks++;
+                          break;
+                        }
                       }
                       return updated;
                     });
                   } else if (data.type === 'tool_start') {
-                    // 🔧 工具开始 - 添加工具卡片
-                    chatState.setChatMessages(prev => [...prev, {
-                      id: `msg-${Date.now()}`,
-                      type: 'assistant',
-                      isToolUse: true,
-                      toolName: data.tool_name,
-                      toolType: data.tool_type,
-                      toolLabel: data.label,
-                      toolStatus: 'running',
-                      agentInfo: data.agent_info,
-                      timestamp: new Date()
-                    }]);
-                  } else if (data.type === 'tool_end') {
-                    // ✅ 工具结束 - 更新工具卡片状态
+                    // 🔧 工具开始 - 将工具信息添加到 AI 回复消息的 tools 数组中
                     chatState.setChatMessages(prev => {
                       const updated = [...prev];
-                      // 找到最后一个匹配的工具卡片
+                      // 找到最后一个 AI 回复消息
                       for (let i = updated.length - 1; i >= 0; i--) {
-                        if (updated[i].isToolUse && updated[i].toolName === data.tool_name && updated[i].toolStatus === 'running') {
-                          // 更新工具状态
-                          updated[i] = { 
-                            ...updated[i], 
-                            toolStatus: data.status, 
+                        if (updated[i].type === 'assistant' && updated[i].isStreaming) {
+                          // 初始化 tools 数组（如果不存在）
+                          if (!updated[i].tools) {
+                            updated[i].tools = [];
+                          }
+                          // 添加工具信息
+                          updated[i].tools.push({
+                            id: `tool-${Date.now()}`,
+                            toolName: data.tool_name,
+                            toolType: data.tool_type,
+                            toolLabel: data.label,
+                            toolStatus: 'running',
                             agentInfo: data.agent_info,
-                            // 添加代码修改信息（如果有）
-                            oldContent: data.old_content,
-                            newContent: data.new_content,
-                            output: data.output,
-                            result: data.result,
-                            toolParams: data.tool_params
-                          };
+                            timestamp: new Date()
+                          });
+                          break;
+                        }
+                      }
+                      return updated;
+                    });
+                  } else if (data.type === 'tool_end') {
+                    // ✅ 工具结束 - 更新 AI 回复消息中的工具状态
+                    chatState.setChatMessages(prev => {
+                      const updated = [...prev];
+                      // 找到最后一个 AI 回复消息
+                      for (let i = updated.length - 1; i >= 0; i--) {
+                        if (updated[i].type === 'assistant' && updated[i].isStreaming && updated[i].tools) {
+                          // 找到匹配的工具（按 tool_name 和状态）
+                          for (let j = updated[i].tools.length - 1; j >= 0; j--) {
+                            const tool = updated[i].tools[j];
+                            if (tool.toolName === data.tool_name && tool.toolStatus === 'running') {
+                              // 更新工具状态
+                              updated[i].tools[j] = {
+                                ...tool,
+                                toolStatus: data.status,
+                                agentInfo: data.agent_info,
+                                oldContent: data.old_content,
+                                newContent: data.new_content,
+                                output: data.output,
+                                result: data.result,
+                                toolParams: data.tool_params
+                              };
+                              break;
+                            }
+                          }
                           break;
                         }
                       }

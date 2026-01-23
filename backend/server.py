@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 # 配置日志 - 支持环境变量
-log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
 valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 if log_level not in valid_levels:
     logger.warning(f"Invalid LOG_LEVEL: {log_level}, using INFO")
@@ -590,25 +590,35 @@ async def stream_endpoint(message: str, cwd: str = None, sessionId: str = None, 
     async def event_generator():
         yield f"data: {json.dumps({'type': 'status', 'content': 'IFlow is thinking...'})}\n\n"
         full_reply = ""
+        message_count = 0
+        
         try:
             async for msg in agent.chat_stream(message):
+                message_count += 1
+                logger.debug(f">>> Processing message #{message_count}")
+                
                 # 检查 msg 是字符串还是字典
                 if isinstance(msg, str):
                     # 如果是字符串，直接作为内容返回（旧客户端兼容）
                     content = msg
                     full_reply += content
-                    yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                    event_data = f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                    logger.debug(f">>> Yielding string content (length: {len(content)})")
+                    yield event_data
                 else:
                     # 如果是字典，处理 SDK 客户端返回的消息类型
                     msg_type = msg.get("type", "text")
-                    logger.debug(f">>> Stream msg: type={msg_type}, keys={list(msg.keys())}")
+                    logger.debug(f">>> Stream msg #{message_count}: type={msg_type}, keys={list(msg.keys())}")
                     
                     if msg_type == "assistant":
                         # AI 回复（SDK 客户端）
                         content = msg.get("content", "")
                         full_reply += content
                         agent_info = msg.get("metadata", {}).get("agent_info")
-                        yield f"data: {json.dumps({'type': 'content', 'content': content, 'agent_info': agent_info})}\n\n"
+                        logger.debug(f">>> Sending assistant content: {content[:100]}...")
+                        event_data = f"data: {json.dumps({'type': 'content', 'content': content, 'agent_info': agent_info})}\n\n"
+                        logger.debug(f">>> Yielding SSE event: {event_data[:200]}...")
+                        yield event_data
                         
                     elif msg_type == "tool_call":
                         # 工具调用（SDK 客户端）

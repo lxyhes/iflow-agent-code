@@ -400,9 +400,45 @@ class IFlowSDKClient:
                             or getattr(message, "params", None)
                             or getattr(message, "arguments", None)
                         )
-                        result = getattr(message, "result", None) or getattr(message, "output", None)
-                        old_content = getattr(message, "old_content", None) or getattr(message, "oldContent", None)
-                        new_content = getattr(message, "new_content", None) or getattr(message, "newContent", None)
+                        
+                        # 从 message.content 中提取结果数据
+                        result = None
+                        old_content = None
+                        new_content = None
+                        
+                        # 调试日志：打印完整的消息结构
+                        logger.debug(f"[ToolCallMessage] Full message structure:")
+                        logger.debug(f"  id: {getattr(message, 'id', None)}")
+                        logger.debug(f"  tool_name: {message.tool_name}")
+                        logger.debug(f"  status: {message.status} ({type(message.status)})")
+                        logger.debug(f"  label: {message.label}")
+                        logger.debug(f"  content: {message.content} (type: {type(message.content)})")
+                        logger.debug(f"  agent_info: {message.agent_info}")
+                        
+                        if message.content:
+                            logger.debug(f"  content attributes:")
+                            for attr in dir(message.content):
+                                if not attr.startswith('_'):
+                                    value = getattr(message.content, attr)
+                                    if not callable(value):
+                                        logger.debug(f"    {attr}: {value}")
+                            
+                            if hasattr(message.content, 'markdown'):
+                                result = message.content.markdown
+                                logger.debug(f"  Extracted markdown result (length: {len(result) if result else 0})")
+                            if hasattr(message.content, 'old_text'):
+                                old_content = message.content.old_text
+                                logger.debug(f"  Extracted old_text (length: {len(old_content) if old_content else 0})")
+                            if hasattr(message.content, 'new_text'):
+                                new_content = message.content.new_text
+                                logger.debug(f"  Extracted new_text (length: {len(new_content) if new_content else 0})")
+                            if hasattr(message.content, 'path'):
+                                # 如果没有其他结果，将路径作为结果
+                                if result is None:
+                                    result = f"File: {message.content.path}"
+                                    logger.debug(f"  Using path as result: {result}")
+                        else:
+                            logger.warning(f"[ToolCallMessage] message.content is None for tool: {message.tool_name}")
 
                         yield {
                             "type": "tool_call",
