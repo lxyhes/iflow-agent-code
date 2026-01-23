@@ -46,6 +46,19 @@ const autoParagraphize = (text) => {
 };
 
 const TypedMarkdown = ({ content, isStreaming }) => {
+  // If no content, return nothing or a placeholder
+  if (!content) return null;
+
+  // Use simple MarkdownRenderer directly if not streaming or if content is short
+  // The complex TypedMarkdown logic might be causing rendering issues with empty/null content
+  if (!isStreaming) {
+    return (
+      <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none prose-p:mb-3 prose-strong:bg-yellow-50 prose-strong:text-gray-900 dark:prose-strong:bg-yellow-900/30 dark:prose-strong:text-white prose-strong:rounded prose-strong:px-1">
+        {content}
+      </MarkdownRenderer>
+    );
+  }
+
   const target = useMemo(() => autoParagraphize(content), [content]);
   const [typed, setTyped] = useState(target);
   const rafRef = useRef(null);
@@ -55,11 +68,12 @@ const TypedMarkdown = ({ content, isStreaming }) => {
     const key = target;
     if (lastKeyRef.current !== key) {
       lastKeyRef.current = key;
-      if (!isStreaming) {
+      // When streaming, ensure we don't clear content if target grows
+      if (isStreaming) {
+        setTyped((prev) => (prev.length > key.length ? key : prev)); 
+      } else {
         setTyped(key);
-        return;
       }
-      setTyped((prev) => (prev.length > key.length ? '' : prev));
     }
   }, [target, isStreaming]);
 
@@ -68,7 +82,16 @@ const TypedMarkdown = ({ content, isStreaming }) => {
       if (typed !== target) setTyped(target);
       return;
     }
-    if (typed.length >= target.length) return;
+    
+    // Safety check
+    if (!target) return;
+
+    if (typed.length >= target.length) {
+       // Ensure final state matches target exactly
+       if (typed !== target) setTyped(target);
+       return;
+    }
+    
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     let last = performance.now();
@@ -76,10 +99,14 @@ const TypedMarkdown = ({ content, isStreaming }) => {
       const dt = now - last;
       last = now;
       const remaining = target.length - typed.length;
-      const rate = Math.max(120, Math.min(520, Math.floor(target.length / 10)));
-      const add = Math.max(8, Math.floor((rate * dt) / 1000));
+      
+      // Dynamic typing speed
+      const rate = Math.max(120, Math.min(800, Math.floor(target.length / 5)));
+      const add = Math.max(5, Math.floor((rate * dt) / 1000));
+      
       const nextLen = Math.min(target.length, typed.length + Math.min(add, remaining));
       setTyped(target.slice(0, nextLen));
+      
       if (nextLen < target.length) {
         rafRef.current = requestAnimationFrame(step);
       } else {
