@@ -143,6 +143,8 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
     localStorage.setItem(scopedKey(selectedProject, 'file-tree-view-mode'), mode);
   };
 
+  const effectiveViewMode = hideHeader ? 'simple' : viewMode;
+
   // Format file size
   const formatFileSize = (bytes) => {
     if (!bytes || bytes === 0) return '0 B';
@@ -172,7 +174,8 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent",
+            "w-full justify-start h-auto font-normal text-left hover:bg-accent",
+            hideHeader ? "py-1 px-2 text-xs" : "p-2"
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
@@ -513,7 +516,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
       )}
 
       {/* Column Headers for Detailed View */}
-      {viewMode === 'detailed' && filteredFiles.length > 0 && (
+      {effectiveViewMode === 'detailed' && filteredFiles.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-b border-border">
           <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground">
             <div className="col-span-5">Name</div>
@@ -524,7 +527,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
         </div>
       )}
       
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className={cn("flex-1", hideHeader ? "p-0" : "p-4")}>
         {files.length === 0 ? (
           <div className="text-center py-8">
             <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
@@ -546,10 +549,10 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
             </p>
           </div>
         ) : (
-          <div className={viewMode === 'detailed' ? '' : 'space-y-1'}>
-            {viewMode === 'simple' && renderFileTree(filteredFiles)}
-            {viewMode === 'compact' && renderCompactView(filteredFiles)}
-            {viewMode === 'detailed' && renderDetailedView(filteredFiles)}
+          <div className={effectiveViewMode === 'detailed' ? '' : 'space-y-0.5'}>
+            {effectiveViewMode === 'simple' && renderFileTree(filteredFiles)}
+            {effectiveViewMode === 'compact' && renderCompactView(filteredFiles)}
+            {effectiveViewMode === 'detailed' && renderDetailedView(filteredFiles)}
           </div>
         )}
       </ScrollArea>
