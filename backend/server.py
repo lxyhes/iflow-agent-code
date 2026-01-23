@@ -82,6 +82,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include the new OCR router for project-based OCR (RapidOCR)
+try:
+    from backend.app.routers import ocr
+    app.include_router(ocr.router)
+    logger.info("Successfully included new OCR router")
+except Exception as e:
+    logger.error(f"Failed to include new OCR router: {e}")
+
 # --- CACHE MANAGER ---
 class CacheManager:
     """缓存管理器，支持自动清理和大小限制"""

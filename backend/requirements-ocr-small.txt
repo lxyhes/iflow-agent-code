@@ -1,0 +1,7 @@
+# 小型离线 OCR（中文/中英混排）推荐依赖
+rapidocr-onnxruntime>=0.1.0
+onnxruntime>=1.16.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+pypdfium2>=1.16.0

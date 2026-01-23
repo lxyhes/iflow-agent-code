@@ -14,6 +14,7 @@ import {
 import { authenticatedFetch } from '../utils/api';
 import IFlowModelSelector from './IFlowModelSelector';
 import ReactMarkdown from 'react-markdown';
+import OCRBlocksOverlay from './OCRBlocksOverlay';
 
 const InterviewPreparation = ({ selectedProject }) => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -61,6 +62,9 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [uploadStage, setUploadStage] = useState('');
+  const [resumePreview, setResumePreview] = useState(null);
+  const [resumePreviewPageIndex, setResumePreviewPageIndex] = useState(0);
+  const [resumePreviewBlockIndex, setResumePreviewBlockIndex] = useState(null);
   
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -152,6 +156,29 @@ const InterviewPreparation = ({ selectedProject }) => {
     setIsResumeMode(false);
     setResumeFile(null);
     setResumeContent('');
+    setResumePreview(null);
+    setResumePreviewPageIndex(0);
+    setResumePreviewBlockIndex(null);
+  };
+
+  const revokePreviewUrls = (preview) => {
+    try {
+      const pages = preview?.pages || [];
+      pages.forEach((p) => {
+        if (p?.preview_image && typeof p.preview_image === 'string' && p.preview_image.startsWith('blob:')) {
+          URL.revokeObjectURL(p.preview_image);
+        }
+      });
+    } catch (e) {
+    }
+  };
+
+  const fetchPreviewObjectUrl = async (url) => {
+    if (!url) return null;
+    const resp = await authenticatedFetch(url, { method: 'GET' });
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
   };
 
   const handleResumeUpload = async (e) => {
@@ -173,39 +200,83 @@ const InterviewPreparation = ({ selectedProject }) => {
         setUploadStage('reading');
         console.log('[简历上传] 开始处理 PDF 文件...');
         
-        // PDF 文件 - 使用 OCR API
-        const base64 = await readFileAsBase64(file);
-        console.log('[简历上传] Base64 编码完成，长度:', base64.length);
-        
-        const requestData = {
-          pdf_data: base64,
-          technology: 'rapidocr',  // 切换到 rapidocr，简单可靠
-          max_tokens: 16384
-        };
-        
+        const projectName = selectedProject?.name || 'default';
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('technology', 'rapidocr');
+        formData.append('dpi', '200');
+        formData.append('preprocess', 'true');
+        formData.append('deskew', 'true');
+        formData.append('max_side', '2200');
+        formData.append('return_images', 'true');
+        formData.append('preview_max_side', '900');
+        formData.append('max_preview_pages', '1');
+
         setUploadProgress('正在进行 OCR 文字识别...');
         setUploadStage('ocr');
-        console.log('[简历上传] 发送 OCR 请求...');
-        
-        const response = await authenticatedFetch('/api/ocr/process-pdf', {
+        console.log('[简历上传] 发送 OCR 请求（上传文件）...');
+
+        const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/ocr/recognize`, {
           method: 'POST',
-          body: JSON.stringify(requestData),
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          body: formData,
         });
 
         console.log('[简历上传] OCR 响应状态:', response.status);
-        
+
+        const rawText = await response.text().catch(() => '');
+        let result = {};
+        try {
+          result = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+          result = {};
+        }
         if (response.ok) {
-          const result = await response.json();
           console.log('[简历上传] OCR 结果:', result);
+          if (result && result.success === false) {
+            throw new Error(result.detail || result.error || 'PDF 处理失败');
+          }
           content = result.text || result.content || '';
+          if (!content || String(content).trim().length === 0) {
+            const pageTexts = (result.pages || [])
+              .map((p) => p?.text)
+              .filter((t) => t && String(t).trim().length > 0)
+              .join('\n\n');
+            if (pageTexts) content = pageTexts;
+          }
+          if (!content || String(content).trim().length === 0) {
+            const blockTexts = (result.pages || [])
+              .flatMap((p) => p?.blocks || [])
+              .map((b) => b?.text)
+              .filter((t) => t && String(t).trim().length > 0)
+              .join('\n');
+            if (blockTexts) content = blockTexts;
+          }
           console.log('[简历上传] 提取文本长度:', content?.length || 0);
+          const pagesWithPreview = (result.pages || []).filter((p) => p && p.preview_url);
+          if (pagesWithPreview.length > 0) {
+            const p0 = pagesWithPreview[0];
+            const objectUrl = await fetchPreviewObjectUrl(p0.preview_url);
+            revokePreviewUrls(resumePreview);
+            const pages = [
+              {
+                page: p0.page,
+                preview_image: objectUrl,
+                width: p0.width,
+                height: p0.height,
+                blocks: p0.blocks || [],
+              },
+            ].filter((p) => p.preview_image);
+            setResumePreview(pages.length ? { kind: 'pdf', pages } : null);
+          } else {
+            revokePreviewUrls(resumePreview);
+            setResumePreview(null);
+          }
+          setResumePreviewPageIndex(0);
+          setResumePreviewBlockIndex(null);
         } else {
-          const error = await response.json();
-          console.error('[简历上传] OCR 错误:', error);
-          throw new Error(error.error || 'PDF 处理失败');
+          console.error('[简历上传] OCR 错误:', result);
+          const message = result.detail || result.error || rawText || 'PDF 处理失败';
+          throw new Error(message);
         }
       } else if (file.type === 'text/plain') {
         setUploadProgress('正在读取文本文件...');
@@ -214,18 +285,99 @@ const InterviewPreparation = ({ selectedProject }) => {
         // TXT 文件 - 直接读取
         content = await readFileAsText(file);
         console.log('[简历上传] TXT 内容长度:', content?.length || 0);
+        revokePreviewUrls(resumePreview);
+        setResumePreview(null);
+        setResumePreviewPageIndex(0);
+        setResumePreviewBlockIndex(null);
+      } else if (file.type?.startsWith('image/')) {
+        setUploadProgress('正在读取图片文件...');
+        setUploadStage('reading');
+        console.log('[简历上传] 开始处理图片文件...');
+
+        const projectName = selectedProject?.name || 'default';
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('technology', 'rapidocr');
+        formData.append('preprocess', 'true');
+        formData.append('deskew', 'true');
+        formData.append('max_side', '2200');
+        formData.append('return_images', 'true');
+        formData.append('preview_max_side', '900');
+
+        setUploadProgress('正在进行 OCR 文字识别...');
+        setUploadStage('ocr');
+        console.log('[简历上传] 发送 OCR 请求（上传图片）...');
+
+        const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/ocr/recognize`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        console.log('[简历上传] OCR 响应状态:', response.status);
+
+        const rawText = await response.text().catch(() => '');
+        let result = {};
+        try {
+          result = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+          result = {};
+        }
+        if (response.ok) {
+          console.log('[简历上传] OCR 结果:', result);
+          if (result && result.success === false) {
+            throw new Error(result.detail || result.error || '图片 OCR 处理失败');
+          }
+          content = result.text || result.content || '';
+          if ((!content || String(content).trim().length === 0) && Array.isArray(result.blocks)) {
+            const blockTexts = result.blocks
+              .map((b) => b?.text)
+              .filter((t) => t && String(t).trim().length > 0)
+              .join('\n');
+            if (blockTexts) content = blockTexts;
+          }
+          console.log('[简历上传] 提取文本长度:', content?.length || 0);
+          if (result.preview_url) {
+            const objectUrl = await fetchPreviewObjectUrl(result.preview_url);
+            revokePreviewUrls(resumePreview);
+            setResumePreview(
+              objectUrl
+                ? {
+                    kind: 'image',
+                    pages: [
+                      {
+                        page: 1,
+                        preview_image: objectUrl,
+                        width: result.processed_width || result.width,
+                        height: result.processed_height || result.height,
+                        blocks: result.blocks || [],
+                      },
+                    ],
+                  }
+                : null
+            );
+          } else {
+            revokePreviewUrls(resumePreview);
+            setResumePreview(null);
+          }
+          setResumePreviewPageIndex(0);
+          setResumePreviewBlockIndex(null);
+        } else {
+          console.error('[简历上传] OCR 错误:', result);
+          const message = result.detail || result.error || rawText || '图片 OCR 处理失败';
+          throw new Error(message);
+        }
       } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                  file.type === 'application/msword') {
         // DOC/DOCX 文件 - 提示用户转换为 PDF 或 TXT
         throw new Error('请将 Word 文档转换为 PDF 或 TXT 格式后再上传');
       } else {
-        throw new Error('不支持的文件格式,请上传 PDF 或 TXT 文件');
+        throw new Error('不支持的文件格式,请上传 PDF/TXT 或图片文件');
       }
 
       console.log('[简历上传] 提取的内容长度:', content?.length || 0);
 
       if (!content || content.trim().length === 0) {
-        throw new Error('无法提取简历内容,请确保文件包含可读文本');
+        throw new Error('无法提取简历内容,可能是扫描件/图片过糊/字体过小。建议提高 PDF DPI 或上传更清晰的图片');
       }
 
       setUploadProgress('正在处理简历内容...');
@@ -237,34 +389,43 @@ const InterviewPreparation = ({ selectedProject }) => {
       
       console.log('[简历上传] 简历上传成功，设置聊天消息');
       
-      // 添加系统消息
+          // 添加系统消息
       setChatMessages([{
         role: 'ai',
-        content: `✅ 简历已上传成功!\n\n**文件名**: ${file.name}\n**文件大小**: ${(file.size / 1024).toFixed(2)} KB\n**提取文本长度**: ${content.length} 字符\n\n简历内容:\n${content}\n\n现在我将根据这份简历开始面试。`
+        content: `✅ 简历已上传成功!\n\n**文件名**: ${file.name}\n**文件大小**: ${(file.size / 1024).toFixed(2)} KB\n**提取文本长度**: ${content.length} 字符\n\n简历内容:\n\n${content}\n\n现在我将根据这份简历开始面试。`
       }]);
       
       alert(`✅ 简历上传成功!\n\n文件名: ${file.name}\n提取文本: ${content.length} 字符\n\n现在将根据简历进行面试。`);
-    } catch (error) {
-      console.error('[简历上传] 失败:', error);
-      alert('❌ 简历上传失败: ' + error.message);
+} catch (error) {
+      console.error('简历上传失败:', error);
+      
+      // 提供更详细的错误信息和解决方案
+      let errorMessage = '简历上传失败';
+      let solution = '';
+      
+      if (error.message.includes('所有 OCR 服务都不可用')) {
+        errorMessage = 'OCR 服务未安装';
+        solution = '请安装小型 OCR 依赖: backend/requirements-ocr-small.txt';
+      } else if (error.message.includes('网络') || error.message.includes('SSLError')) {
+        errorMessage = '网络连接失败';
+        solution = '请检查网络连接,或配置代理访问 Hugging Face';
+      } else if (error.message.includes('模型不可用')) {
+        errorMessage = 'OCR 模型加载失败';
+        solution = '请安装 backend/requirements-ocr-small.txt，并确认 onnxruntime 可用';
+      } else if (error.message.includes('不支持的文件格式')) {
+        errorMessage = '不支持的文件格式';
+        solution = '请将简历转换为 PDF/TXT 或上传清晰图片';
+      } else {
+        errorMessage = error.message || '未知错误';
+        solution = '请检查文件格式和网络连接';
+      }
+      
+      alert(`❌ ${errorMessage}\n\n💡 解决方案:\n${solution}\n\n详细错误: ${error.message}`);
     } finally {
       setIsUploadingResume(false);
       setUploadProgress('');
       setUploadStage('');
     }
-  };
-
-  const readFileAsBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        // 移除 data URL 前缀
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   };
 
   const readFileAsText = (file) => {
@@ -961,84 +1122,80 @@ const InterviewPreparation = ({ selectedProject }) => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const [showResumePanel, setShowResumePanel] = useState(true);
+
   const renderPractice = () => (
-    <div className="flex flex-col h-full min-h-0">
-      {/* 聊天头部 */}
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-2 flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-500" />
-            <h3 className="font-semibold text-gray-900 dark:text-white">
-              {multiRoundMode ? `多轮面试 (第 ${currentRound + 1}/${totalRounds} 轮)` : '模拟面试'}
-            </h3>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* 多轮面试模式开关 */}
-            <button
-              onClick={() => {
-                if (multiRoundMode) {
-                  // 退出多轮模式
-                  setMultiRoundMode(false);
-                  setCurrentRound(0);
-                  setRoundQuestions([]);
-                  setCurrentRoundQuestionIndex(0);
-                  setRoundAnswers([]);
-                  setShowRoundSummary(false);
-                } else {
-                  // 开始多轮面试
-                  startMultiRoundInterview();
-                }
-              }}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${
-                multiRoundMode
-                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                  : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-              }`}
-            >
-              <RefreshCw className="w-4 h-4" />
-              {multiRoundMode ? '退出多轮' : '多轮面试'}
-            </button>
-            
-            {/* 计时器显示 */}
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Timer className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-300">
-                {formatTime(timer)}
-              </span>
+    <div className="flex h-full min-h-0 gap-4">
+      {/* 左侧：聊天主区域 */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        {/* 聊天头部 */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                {multiRoundMode ? `多轮面试 (第 ${currentRound + 1}/${totalRounds} 轮)` : '模拟面试'}
+              </h3>
             </div>
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Clock className="w-4 h-4 text-purple-500" />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-300">
-                本题: {formatTime(questionTimer)}
-              </span>
+            <div className="flex items-center gap-3">
+              {/* 多轮面试模式开关 */}
+              <button
+                onClick={() => {
+                  if (multiRoundMode) {
+                    setMultiRoundMode(false);
+                    setCurrentRound(0);
+                    setRoundQuestions([]);
+                    setCurrentRoundQuestionIndex(0);
+                    setRoundAnswers([]);
+                    setShowRoundSummary(false);
+                  } else {
+                    startMultiRoundInterview();
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors text-xs font-medium ${
+                  multiRoundMode
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                    : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                }`}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                {multiRoundMode ? '退出多轮' : '多轮面试'}
+              </button>
+              
+              {/* 计时器显示 */}
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 px-3 py-1.5 rounded-lg text-xs font-mono">
+                <Timer className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-gray-700 dark:text-gray-300">
+                  {formatTime(timer)}
+                </span>
+              </div>
+
+              {resumePreview && (
+                <button
+                  onClick={() => setShowResumePanel(!showResumePanel)}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    showResumePanel
+                      ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                      : 'hover:bg-gray-100 text-gray-500 dark:hover:bg-gray-700'
+                  }`}
+                  title={showResumePanel ? "收起简历" : "查看简历"}
+                >
+                  <FileText className="w-5 h-5" />
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => {
-                setTimer(0);
-                setQuestionTimer(0);
-              }}
-              className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="重置计时器"
-            >
-              <RefreshCw className="w-4 h-4 text-gray-500" />
-            </button>
           </div>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          AI 将扮演面试官角色，只进行对话，不会修改任何文件
-        </p>
-      </div>
 
-      {/* 聊天消息区域 */}
-      <div className="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="h-full overflow-y-auto p-4 space-y-3">
+        {/* 聊天消息区域 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {chatMessages.length === 0 ? (
             <div className="text-center py-12">
-              <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">
+              <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
                 点击下方输入框开始模拟面试
               </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 AI 将根据选中的项目扮演面试官角色
               </p>
             </div>
@@ -1049,16 +1206,13 @@ const InterviewPreparation = ({ selectedProject }) => {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[70%] rounded-lg p-3 ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                      ? 'bg-blue-600 text-white rounded-br-none'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-none'
                   }`}
                 >
-                  <div className="text-sm font-medium mb-1">
-                    {msg.role === 'user' ? '你' : '面试官'}
-                  </div>
-                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none break-words">
                     {msg.role === 'ai' ? (
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     ) : (
@@ -1071,10 +1225,11 @@ const InterviewPreparation = ({ selectedProject }) => {
           )}
           {isChatLoading && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-2xl px-4 py-3 rounded-bl-none">
                 <div className="flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 animate-spin text-gray-500" />
-                  <span className="text-sm text-gray-500">面试官正在思考...</span>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             </div>
@@ -1082,467 +1237,307 @@ const InterviewPreparation = ({ selectedProject }) => {
           
           {/* 上传进度提示 */}
           {isUploadingResume && (
-            <div className="flex justify-start">
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 max-w-[70%]">
-                <div className="flex items-center gap-3">
-                  <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                      正在处理简历...
-                    </div>
-                    <div className="text-xs text-blue-700 dark:text-blue-300">
-                      {uploadProgress}
-                    </div>
-                    {uploadStage === 'ocr' && (
-                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                        💡 PDF 文字识别需要一些时间，请耐心等待...
-                      </div>
-                    )}
-                  </div>
-                </div>
+            <div className="flex justify-center my-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-full px-4 py-2 flex items-center gap-3 shadow-sm">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                  {uploadProgress || '处理中...'}
+                </span>
               </div>
-            </div>
-          )}
-          
-          {/* 提示面板 */}
-          {showHints && currentHint && (
-            <div className="mt-2 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-yellow-200 dark:border-yellow-800">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                  <h4 className="font-semibold text-gray-900 dark:text-white">关键知识点提示</h4>
-                </div>
-                <button
-                  onClick={() => setShowHints(false)}
-                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <span className="text-gray-500">×</span>
-                </button>
-              </div>
-
-              {/* 提示点 */}
-              {currentHint.hints && currentHint.hints.length > 0 && (
-                <div className="mb-3">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">💡 回答要点</div>
-                  <ul className="space-y-2">
-                    {currentHint.hints.map((hint, index) => (
-                      <li key={index} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                        <span className="text-yellow-500 font-bold">{index + 1}.</span>
-                        {hint}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* 关键词 */}
-              {currentHint.keywords && currentHint.keywords.length > 0 && (
-                <div className="mb-3">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">🔑 关键词</div>
-                  <div className="flex flex-wrap gap-2">
-                    {currentHint.keywords.map((keyword, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-sm"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 相关参考 */}
-              {currentHint.reference && (
-                <div className="mt-3 pt-3 border-t border-yellow-200 dark:border-yellow-800">
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">📚 相关参考：</span>
-                    {currentHint.reference}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 复盘面板 */}
-          {showReview && reviewData && (
-            <div className="mt-2 bg-gradient-to-br from-pink-50 to-purple-50 dark:from-pink-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-pink-200 dark:border-pink-800">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <History className="w-5 h-5 text-pink-600 dark:text-pink-400" />
-                  <h4 className="font-semibold text-gray-900 dark:text-white">面试复盘</h4>
-                </div>
-                <button
-                  onClick={() => setShowReview(false)}
-                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <span className="text-gray-500">×</span>
-                </button>
-              </div>
-
-              {/* 重点高亮 */}
-              {highlightedPoints && highlightedPoints.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">🎯 重点内容</div>
-                  <div className="space-y-2">
-                    {highlightedPoints.map((point, index) => (
-                      <div
-                        key={index}
-                        className={`p-3 rounded-lg border-l-4 ${
-                          point.type === '优势'
-                            ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
-                            : point.type === '劣势'
-                            ? 'bg-red-50 dark:bg-red-900/20 border-red-500'
-                            : 'bg-blue-50 dark:bg-blue-900/20 border-blue-500'
-                        }`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                            point.type === '优势'
-                              ? 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-200'
-                              : point.type === '劣势'
-                              ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
-                              : 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200'
-                          }`}>
-                            {point.type}
-                          </span>
-                          <div className="flex-1">
-                            <div className="text-sm text-gray-900 dark:text-white font-medium mb-1">
-                              {point.content}
-                            </div>
-                            {point.context && (
-                              <div className="text-xs text-gray-600 dark:text-gray-400">
-                                {point.context}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 学习计划 */}
-              {learningPlan && learningPlan.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">📚 学习计划</div>
-                  <div className="space-y-3">
-                    {learningPlan.map((plan, index) => (
-                      <div key={index} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                              plan.priority === '高'
-                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                                : plan.priority === '中'
-                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                            }`}>
-                              {plan.priority}优先级
-                            </span>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              {plan.topic}
-                            </span>
-                          </div>
-                          {plan.timeline && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {plan.timeline}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {plan.resources && plan.resources.length > 0 && (
-                          <div className="mb-2">
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">学习资源:</div>
-                            <div className="flex flex-wrap gap-1">
-                              {plan.resources.map((resource, rIndex) => (
-                                <span
-                                  key={rIndex}
-                                  className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded"
-                                >
-                                  {resource}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {plan.goals && plan.goals.length > 0 && (
-                          <div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">学习目标:</div>
-                            <ul className="space-y-0.5">
-                              {plan.goals.map((goal, gIndex) => (
-                                <li key={gIndex} className="text-xs text-gray-700 dark:text-gray-300 flex items-start gap-1">
-                                  <span className="text-purple-500">•</span>
-                                  {goal}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 复盘总结 */}
-              {reviewData.summary && (
-                <div className="mt-4 pt-4 border-t border-pink-200 dark:border-pink-800">
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">📝 复盘总结：</span>
-                    {reviewData.summary}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 评估报告 */}
-          {showEvaluation && evaluation && (
-            <div className="mt-2 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  <h4 className="font-semibold text-gray-900 dark:text-white">面试评估报告</h4>
-                </div>
-                <button
-                  onClick={() => setShowEvaluation(false)}
-                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                >
-                  <span className="text-gray-500">×</span>
-                </button>
-              </div>
-              
-              {/* 总分 */}
-              <div className="mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
-                    {evaluation.overall_score || 0}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    <div>总分</div>
-                    <div className="text-xs opacity-75">满分 100</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 分类评分 */}
-              {evaluation.categories && Object.keys(evaluation.categories).length > 0 && (
-                <div className="space-y-3 mb-4">
-                  {Object.entries(evaluation.categories).map(([key, value]) => (
-                    <div key={key}>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {key === 'technical_understanding' ? '技术理解能力' :
-                           key === 'problem_analysis' ? '问题分析能力' :
-                           key === 'communication' ? '表达能力' :
-                           key === 'project_experience' ? '项目经验' :
-                           key === 'learning_ability' ? '学习能力' : key}
-                        </span>
-                        <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                          {value.score}/10
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div
-                          className="bg-purple-600 dark:bg-purple-400 h-2 rounded-full transition-all"
-                          style={{ width: `${(value.score / 10) * 100}%` }}
-                        />
-                      </div>
-                      {value.comment && (
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          {value.comment}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* 优势 */}
-              {evaluation.strengths && evaluation.strengths.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Star className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">优势</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {evaluation.strengths.map((strength, index) => (
-                      <li key={index} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
-                        {strength}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* 待改进 */}
-              {evaluation.weaknesses && evaluation.weaknesses.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUpIcon className="w-4 h-4 text-red-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">待改进</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {evaluation.weaknesses.map((weakness, index) => (
-                      <li key={index} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                        <span className="text-red-500">•</span>
-                        {weakness}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* 建议 */}
-              {evaluation.suggestions && evaluation.suggestions.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Lightbulb className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">建议</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {evaluation.suggestions.map((suggestion, index) => (
-                      <li key={index} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                        <span className="text-blue-500">•</span>
-                        {suggestion}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* 总体评价 */}
-              {evaluation.summary && (
-                <div className="mt-4 pt-4 border-t border-purple-200 dark:border-purple-800">
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">总体评价：</span>
-                    {evaluation.summary}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
-      </div>
 
-      {/* 聊天输入区域 */}
-      <div className="mt-2 space-y-2 flex-shrink-0 pb-2">
-        <div className="flex gap-2">
-          <IFlowModelSelector />
-          <div className="flex-1">
-            <textarea
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder={isResumeMode ? "回答面试官的问题..." : "输入你的回答或问题... (Shift+Enter 换行)"}
-              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              rows={2}
-            />
-          </div>
-          <label className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-all cursor-pointer ${
-            isUploadingResume
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 cursor-not-allowed'
-              : isResumeMode 
-              ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300' 
-              : 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'
-          }`}>
-            {isUploadingResume ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">处理中...</span>
-              </>
-            ) : (
-              <>
-                <FileText className="w-4 h-4" />
-                <span className="text-sm">{isResumeMode ? '简历模式' : '上传简历'}</span>
-              </>
+        {/* 底部输入区域 */}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          {/* 功能按钮行 */}
+          <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+             {/* 仅在多轮模式显示 */}
+             {multiRoundMode && (
+              <button
+                onClick={nextQuestion}
+                disabled={isChatLoading}
+                className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 rounded-lg flex items-center gap-1.5 transition-colors text-xs font-medium whitespace-nowrap"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+                {currentRoundQuestionIndex < roundQuestions.length - 1 ? '下一题' : '下一轮'}
+              </button>
             )}
-            <input
-              type="file"
-              accept=".pdf,.txt"
-              onChange={handleResumeUpload}
-              disabled={isUploadingResume}
-              className="hidden"
-              key={isUploadingResume ? 'uploading' : 'ready'}
-              onClick={(e) => {
-                // 重置文件输入框，允许重复选择同一个文件
-                e.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-        <div className="flex justify-between items-center">
-          <div className="flex gap-2 flex-wrap">
-            {isResumeMode && (
-              <div className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                {resumeFile?.name}
-              </div>
-            )}
-            {multiRoundMode && (
-              <>
-                <button
-                  onClick={nextQuestion}
-                  disabled={isChatLoading}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                  {currentRoundQuestionIndex < roundQuestions.length - 1 ? '下一题' : '下一轮'}
-                </button>
-              </>
-            )}
+            
             <button
               onClick={generateEvaluation}
               disabled={chatMessages.length === 0 || isChatLoading}
-              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
+              className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 dark:text-purple-300 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
             >
-              <TrendingUpIcon className="w-4 h-4" />
-              生成评估报告
+              <TrendingUpIcon className="w-3.5 h-3.5" />
+              评估报告
             </button>
+            
             <button
               onClick={generateReview}
               disabled={chatMessages.length === 0 || isChatLoading}
-              className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
+              className="px-3 py-1.5 bg-pink-100 hover:bg-pink-200 text-pink-700 dark:bg-pink-900/30 dark:hover:bg-pink-900/50 dark:text-pink-300 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
             >
-              <History className="w-4 h-4" />
+              <History className="w-3.5 h-3.5" />
               面试复盘
             </button>
-            <button
-              onClick={() => saveInterviewRecord()}
-              disabled={chatMessages.length === 0}
-              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-            >
-              <Save className="w-4 h-4" />
-              保存记录
-            </button>
+
             <button
               onClick={getHint}
               disabled={chatMessages.length === 0 || isChatLoading}
-              className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
+              className="px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 dark:text-yellow-300 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
             >
-              <Lightbulb className="w-4 h-4" />
+              <Lightbulb className="w-3.5 h-3.5" />
               获取提示
             </button>
+
+            <div className="flex-1" /> {/* Spacer */}
+            
+            <button
+              onClick={() => saveInterviewRecord()}
+              disabled={chatMessages.length === 0}
+              className="px-3 py-1.5 text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50 text-xs font-medium whitespace-nowrap"
+            >
+              <Save className="w-3.5 h-3.5" />
+              保存
+            </button>
           </div>
-          <button
-            onClick={handleSendMessage}
-            disabled={!chatInput.trim() || isChatLoading}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-          >
-            <Send className="w-4 h-4" />
-            发送
-          </button>
+
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-300 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all shadow-sm">
+              <textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder={isResumeMode ? "回答面试官的问题..." : "输入你的回答或问题... (Shift+Enter 换行)"}
+                className="w-full bg-transparent p-3 max-h-32 text-sm focus:outline-none resize-none"
+                rows={1}
+                style={{ minHeight: '44px' }}
+              />
+              <div className="flex justify-between items-center px-2 pb-2">
+                 <div className="flex gap-1">
+                   <label className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      isUploadingResume
+                        ? 'bg-blue-50 text-blue-500 cursor-not-allowed'
+                        : isResumeMode
+                        ? 'bg-green-50 text-green-600 hover:bg-green-100'
+                        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`} title={isResumeMode ? `已上传: ${resumeFile?.name}` : "上传简历"}>
+                      {isUploadingResume ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <FileText className="w-4 h-4" />
+                      )}
+                      <input
+                        type="file"
+                        accept=".pdf,.txt,image/*"
+                        onChange={handleResumeUpload}
+                        disabled={isUploadingResume}
+                        className="hidden"
+                        onClick={(e) => { e.target.value = ''; }}
+                      />
+                   </label>
+                   <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1 self-center" />
+                   <div className="transform scale-90 origin-left">
+                     <IFlowModelSelector />
+                   </div>
+                 </div>
+                 
+                 <button
+                    onClick={handleSendMessage}
+                    disabled={!chatInput.trim() || isChatLoading}
+                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* 右侧：简历预览/辅助面板 (可折叠) */}
+      {showResumePanel && resumePreview?.pages?.length > 0 && (
+        <div className="w-1/3 min-w-[320px] max-w-[600px] flex flex-col bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg">
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 rounded-t-lg">
+             <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-600" />
+                <span className="font-medium text-sm text-gray-900 dark:text-white truncate max-w-[150px]" title={resumeFile?.name}>
+                  {resumeFile?.name || '简历预览'}
+                </span>
+             </div>
+             <button 
+               onClick={() => setShowResumePanel(false)}
+               className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"
+             >
+               <span className="text-xs">收起</span>
+             </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+            {/* 分页控制 */}
+            {resumePreview.kind === 'pdf' && resumePreview.pages.length > 1 && (
+              <div className="flex gap-1 flex-wrap mb-3">
+                {resumePreview.pages.map((p, idx) => (
+                  <button
+                    key={p.page || idx}
+                    onClick={() => {
+                      setResumePreviewPageIndex(idx);
+                      setResumePreviewBlockIndex(null);
+                    }}
+                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                      idx === resumePreviewPageIndex
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    第{p.page}页
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* OCR 预览与文本 */}
+            {(() => {
+              const p = resumePreview.pages[resumePreviewPageIndex] || resumePreview.pages[0];
+              const active = resumePreviewBlockIndex;
+              
+              return (
+                <div className="space-y-4">
+                  {/* 图片层 */}
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900">
+                    <OCRBlocksOverlay
+                      imageSrc={p?.preview_image}
+                      imageWidth={p?.width}
+                      imageHeight={p?.height}
+                      blocks={p?.blocks || []}
+                      activeIndex={active}
+                      onSelect={(i) => setResumePreviewBlockIndex(i)}
+                    />
+                  </div>
+                  
+                  {/* 识别文本层 */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 flex justify-between items-center">
+                      <span>识别内容</span>
+                      {active !== null && (
+                         <button 
+                           onClick={() => setResumePreviewBlockIndex(null)}
+                           className="text-blue-500 hover:text-blue-600"
+                         >
+                           取消选择
+                         </button>
+                      )}
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
+                      {(p?.blocks || []).map((b, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setResumePreviewBlockIndex(idx)}
+                          className={`px-3 py-2 text-xs border-b border-gray-100 dark:border-gray-800 cursor-pointer transition-colors ${
+                            idx === active
+                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-l-2 border-l-blue-500'
+                              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-l-2 border-l-transparent'
+                          }`}
+                        >
+                          {String(b?.text || '').trim() || <span className="text-gray-300 italic">(空)</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* 弹窗层：复盘/评估/提示 */}
+      {(showHints || showReview || showEvaluation) && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={(e) => {
+           if(e.target === e.currentTarget) {
+             setShowHints(false);
+             setShowReview(false);
+             setShowEvaluation(false);
+           }
+        }}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 animate-in fade-in zoom-in duration-200">
+             {showHints && currentHint && (
+                <div>
+                   <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                         <Lightbulb className="w-5 h-5 text-yellow-500" />
+                         关键知识点提示
+                      </h3>
+                      <button onClick={() => setShowHints(false)} className="text-gray-400 hover:text-gray-600">×</button>
+                   </div>
+                   {/* ... Hint Content ... */}
+                   <div className="space-y-4">
+                      {currentHint.hints?.map((h, i) => (
+                        <div key={i} className="flex gap-2">
+                           <span className="flex-shrink-0 w-5 h-5 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-bold mt-0.5">{i+1}</span>
+                           <p className="text-gray-700 dark:text-gray-300 text-sm">{h}</p>
+                        </div>
+                      ))}
+                      {currentHint.keywords?.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {currentHint.keywords.map((k, i) => (
+                            <span key={i} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-300">
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                   </div>
+                </div>
+             )}
+             
+             {/* 复盘与评估内容的渲染逻辑保留，或按需简化为组件 */}
+             {showReview && reviewData && (
+               <div>
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                         <History className="w-5 h-5 text-pink-500" />
+                         面试复盘
+                      </h3>
+                      <button onClick={() => setShowReview(false)} className="text-gray-400 hover:text-gray-600">×</button>
+                   </div>
+                   {/* 复盘内容 */}
+                   <div className="space-y-4">
+                      {reviewData.summary && (
+                        <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700">
+                           {reviewData.summary}
+                        </div>
+                      )}
+                      {/* ...更多复盘细节... */}
+                   </div>
+               </div>
+             )}
+
+             {showEvaluation && evaluation && (
+               <div>
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                         <Award className="w-5 h-5 text-purple-500" />
+                         面试评估报告
+                      </h3>
+                      <button onClick={() => setShowEvaluation(false)} className="text-gray-400 hover:text-gray-600">×</button>
+                   </div>
+                   <div className="text-center mb-6">
+                      <div className="text-5xl font-bold text-purple-600">{evaluation.overall_score}</div>
+                      <div className="text-sm text-gray-500">综合得分</div>
+                   </div>
+                   {/* ...更多评估细节... */}
+               </div>
+             )}
+          </div>
+        </div>
+      )}
     </div>
   );
 
