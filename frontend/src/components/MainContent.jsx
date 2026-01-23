@@ -67,8 +67,10 @@ function MainContent({
                        externalMessageUpdate,  // Trigger for external CLI updates to current session
                        onShowAllTasks,
                        aiPersona,
+                       editingFile,
+                       onFileOpen,
+                       onCloseEditor,
                      }) {
-  const [editingFile, setEditingFile] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [editorWidth, setEditorWidth] = useState(600);
@@ -128,7 +130,7 @@ function MainContent({
     loadExistingPRDs();
   }, [currentProject?.name]);
 
-  const handleFileOpen = (filePath, diffInfo = null) => {
+  const handleFileOpenLocal = (filePath, diffInfo = null) => {
     // Create a file object that CodeEditor expects
     const file = {
       name: filePath.split('/').pop(),
@@ -136,11 +138,15 @@ function MainContent({
       projectName: selectedProject?.name,
       diffInfo: diffInfo // Pass along diff information if available
     };
-    setEditingFile(file);
+    if (onFileOpen) {
+      onFileOpen(file);
+    }
   };
 
-  const handleCloseEditor = () => {
-    setEditingFile(null);
+  const handleCloseEditorLocal = () => {
+    if (onCloseEditor) {
+      onCloseEditor();
+    }
     setEditorExpanded(false);
   };
 
@@ -572,7 +578,7 @@ function MainContent({
                     ws={ws}
                     sendMessage={sendMessage}
                     messages={messages}
-                    onFileOpen={handleFileOpen}
+                    onFileOpen={handleFileOpenLocal}
                     onInputFocusChange={onInputFocusChange}
                     onSessionActive={onSessionActive}
                     onSessionInactive={onSessionInactive}
@@ -617,7 +623,7 @@ function MainContent({
             {activeTab === 'git' && (
                 <div className="h-full overflow-hidden">
                   <Suspense fallback={null}>
-                    <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
+                    <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpenLocal} />
                   </Suspense>
                 </div>
             )}
@@ -756,7 +762,7 @@ function MainContent({
                   <Suspense fallback={null}>
                     <CodeEditor
                         file={editingFile}
-                        onClose={handleCloseEditor}
+                        onClose={handleCloseEditorLocal}
                         projectPath={selectedProject?.path}
                         isSidebar={true}
                         isExpanded={editorExpanded}
@@ -773,7 +779,7 @@ function MainContent({
             <Suspense fallback={null}>
               <CodeEditor
                   file={editingFile}
-                  onClose={handleCloseEditor}
+                  onClose={handleCloseEditorLocal}
                   projectPath={selectedProject?.path}
                   isSidebar={false}
               />
@@ -818,7 +824,7 @@ function MainContent({
 
                         const fileName = selectedPRD?.name || 'prd.txt';
                         const filePath = `${currentProject.path}/${fileName}`;
-                        handleFileOpen(filePath);
+                        handleFileOpenLocal(filePath);
                       }
                     } catch (error) {
                       console.error('Failed to refresh PRDs:', error);

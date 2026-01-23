@@ -9,7 +9,7 @@ import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
 import { scopedKey } from '../utils/projectScope';
 
-function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
+function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = false }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedDirs, setExpandedDirs] = useState(new Set());
@@ -442,73 +442,75 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect }) {
   return (
     <div className="h-full flex flex-col bg-card">
       {/* Header with Search and View Mode Toggle */}
-      <div className="p-4 border-b border-border space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-foreground">Files</h3>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={fetchFiles}
-              title="Refresh files"
-              disabled={loading}
-            >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            </Button>
-            <Button
-              variant={viewMode === 'simple' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => changeViewMode('simple')}
-              title="Simple view"
-            >
-              <List className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'compact' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => changeViewMode('compact')}
-              title="Compact view"
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'detailed' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => changeViewMode('detailed')}
-              title="Detailed view"
-            >
-              <TableProperties className="w-4 h-4" />
-            </Button>
+      {!hideHeader && (
+        <div className="p-4 border-b border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-foreground">Files</h3>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={fetchFiles}
+                title="Refresh files"
+                disabled={loading}
+              >
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              </Button>
+              <Button
+                variant={viewMode === 'simple' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => changeViewMode('simple')}
+                title="Simple view"
+              >
+                <List className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'compact' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => changeViewMode('compact')}
+                title="Compact view"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'detailed' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => changeViewMode('detailed')}
+                title="Detailed view"
+              >
+                <TableProperties className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search files and folders..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-8 h-8 text-sm"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-accent"
+                onClick={() => setSearchQuery('')}
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
           </div>
         </div>
-
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search files and folders..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 pr-8 h-8 text-sm"
-          />
-          {searchQuery && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-accent"
-              onClick={() => setSearchQuery('')}
-              title="Clear search"
-            >
-              <X className="w-3 h-3" />
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Column Headers for Detailed View */}
       {viewMode === 'detailed' && filteredFiles.length > 0 && (

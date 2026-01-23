@@ -5,12 +5,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 import IFlowLogo from './IFlowLogo';
 import CursorLogo from './CursorLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
+import FileTree from './FileTree';
 import { api } from '../utils/api';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
@@ -60,9 +61,11 @@ function Sidebar({
   onShowVersionModal,
   isPWA,
   isMobile,
-  onToggleSidebar
+  onToggleSidebar,
+  onFileOpen
 }) {
   const [expandedProjects, setExpandedProjects] = useState(new Set());
+  const [projectTabs, setProjectTabs] = useState({}); // { projectName: 'sessions' | 'files' }
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
@@ -219,13 +222,22 @@ function Sidebar({
 
 
   const toggleProject = (projectName) => {
-    const newExpanded = new Set();
-    // If clicking the already-expanded project, collapse it (newExpanded stays empty)
-    // If clicking a different project, expand only that one
-    if (!expandedProjects.has(projectName)) {
+    const newExpanded = new Set(expandedProjects);
+    if (newExpanded.has(projectName)) {
+      newExpanded.delete(projectName);
+    } else {
       newExpanded.add(projectName);
+      // Initialize tab to sessions if not set
+      if (!projectTabs[projectName]) {
+        setProjectTabs(prev => ({ ...prev, [projectName]: 'sessions' }));
+      }
     }
     setExpandedProjects(newExpanded);
+  };
+
+  const handleTabChange = (projectName, tab, e) => {
+    e.stopPropagation();
+    setProjectTabs(prev => ({ ...prev, [projectName]: tab }));
   };
 
   // Wrapper to attach project context when session is clicked
@@ -1097,9 +1109,50 @@ function Sidebar({
                       </Button>
                     </div>
 
-                    {/* Sessions List */}
+                    {/* Project Tabs & Content */}
                     {isExpanded && (
-                      <div className="ml-3 space-y-1 border-l border-border pl-3">
+                      <div className="ml-3 border-l border-border pl-3 mt-1">
+                        {/* Tabs Header */}
+                        <div className="flex items-center gap-1 mb-2 pr-2">
+                          <button
+                            className={cn(
+                              "flex-1 text-xs py-1 px-2 rounded-md transition-colors flex items-center justify-center gap-1.5",
+                              (!projectTabs[project.name] || projectTabs[project.name] === 'sessions')
+                                ? "bg-accent text-accent-foreground font-medium shadow-sm"
+                                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                            )}
+                            onClick={(e) => handleTabChange(project.name, 'sessions', e)}
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            Sessions
+                          </button>
+                          <button
+                            className={cn(
+                              "flex-1 text-xs py-1 px-2 rounded-md transition-colors flex items-center justify-center gap-1.5",
+                              projectTabs[project.name] === 'files'
+                                ? "bg-accent text-accent-foreground font-medium shadow-sm"
+                                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                            )}
+                            onClick={(e) => handleTabChange(project.name, 'files', e)}
+                          >
+                            <FileText className="w-3 h-3" />
+                            Files
+                          </button>
+                        </div>
+
+                        {/* Content Area */}
+                        {projectTabs[project.name] === 'files' ? (
+                          <div className="pr-2 min-h-[200px]">
+                            <FileTree 
+                              selectedProject={project} 
+                              onFileSelect={(file) => {
+                                if (onFileOpen) onFileOpen(file);
+                              }}
+                              hideHeader={true}
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
                         {!initialSessionsLoaded.has(project.name) ? (
                           // Loading skeleton for sessions
                           Array.from({ length: 3 }).map((_, i) => (
@@ -1393,12 +1446,14 @@ function Sidebar({
                           <Plus className="w-3 h-3" />
                           New Session
                         </Button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
           </div>
         </ScrollArea>
 

@@ -85,6 +85,15 @@ function AppContent() {
   // External Message Update Trigger: Incremented when external CLI modifies current session's JSONL
   // Triggers ChatInterface to reload messages without switching sessions
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
+  const [editingFile, setEditingFile] = useState(null);
+
+  const handleFileOpen = useCallback((file) => {
+    setEditingFile(file);
+  }, []);
+
+  const handleCloseEditor = useCallback(() => {
+    setEditingFile(null);
+  }, []);
 
   // WebSocket message tracking - 避免重复处理
   const lastProcessedMessageRef = useRef(null);
@@ -479,6 +488,7 @@ function AppContent() {
       console.error('Failed to save last selected project:', e);
     }
     setSelectedSession(null);
+    setEditingFile(null);
     navigate('/');
     if (isMobile) {
       setSidebarOpen(false);
@@ -518,6 +528,7 @@ function AppContent() {
   const handleNewSession = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
+    setEditingFile(null);
     setActiveTab('chat');
     navigate('/');
     if (isMobile) {
@@ -918,6 +929,7 @@ function AppContent() {
                 isPWA={isPWA}
                 isMobile={isMobile}
                 onToggleSidebar={() => setSidebarVisible(false)}
+                onFileOpen={handleFileOpen}
               />
             ) : (
               /* Collapsed Sidebar */
@@ -1010,6 +1022,7 @@ function AppContent() {
               isPWA={isPWA}
               isMobile={isMobile}
               onToggleSidebar={() => setSidebarVisible(false)}
+              onFileOpen={handleFileOpen}
             />
           </div>
         </div>
@@ -1046,6 +1059,9 @@ function AppContent() {
             sendByCtrlEnter={sendByCtrlEnter}
             externalMessageUpdate={externalMessageUpdate}
             aiPersona={aiPersona}
+            editingFile={editingFile}
+            onFileOpen={handleFileOpen}
+            onCloseEditor={handleCloseEditor}
           />
         </div>
         
