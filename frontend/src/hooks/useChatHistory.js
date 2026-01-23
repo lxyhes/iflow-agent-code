@@ -83,12 +83,21 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
     const loadMessages = async () => {
       let loaded = false;
       
+      // Check if this is a temporary new session
+      const isNewSession = sessionKey && typeof sessionKey === 'string' && sessionKey.startsWith('new-session-');
+      
       if (projectSessionKey && projectSessionKey !== projectLegacyKey) {
         try {
           const msgs = await chatStorage.getMessages(projectSessionKey);
+          console.log('[useChatHistory] Loaded from primary key:', projectSessionKey, 'messages:', msgs?.length || 0);
+          
           if (msgs && msgs.length > 0) {
-            console.log('[useChatHistory] Loaded from primary key:', projectSessionKey, 'messages:', msgs.length);
             setChatMessages(msgs);
+            loaded = true;
+          } else if (isNewSession) {
+            // Only force empty state for explicit new sessions
+            // For existing sessions with no data, we want to fall back to legacy key
+            setChatMessages([]);
             loaded = true;
           }
         } catch (e) {

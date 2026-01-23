@@ -526,8 +526,15 @@ function AppContent() {
   };
 
   const handleNewSession = (project) => {
+    // Create a temporary session object to ensure empty state and session protection
+    const tempSession = {
+      id: `new-session-${Date.now()}`,
+      summary: 'New Session',
+      lastActivity: new Date().toISOString()
+    };
+
     setSelectedProject(project);
-    setSelectedSession(null);
+    setSelectedSession(tempSession);
     setEditingFile(null);
     setActiveTab('chat');
     navigate('/');

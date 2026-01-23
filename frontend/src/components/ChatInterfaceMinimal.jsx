@@ -503,9 +503,7 @@ const ChatInterfaceMinimal = memo(({
   // 🔗 同步 Session ID
   // ============================================
   useEffect(() => {
-    if (selectedSession?.id) {
-      chatState.syncSessionId(selectedSession.id);
-    }
+    chatState.syncSessionId(selectedSession?.id);
   }, [selectedSession?.id, chatState.syncSessionId]);
 
   // ============================================
@@ -637,35 +635,6 @@ const ChatInterfaceMinimal = memo(({
       </div>
 
       {/* ============================================
-          📊 状态栏
-      ============================================ */}
-      <ChatStatusBar
-        connectionState={chatState.connectionState}
-        lastHeartbeat={chatState.lastHeartbeat}
-        reconnectAttempts={chatState.reconnectAttempts}
-        iflowStatus={chatState.iflowStatus}
-        isLoading={chatState.isLoading}
-        provider={chatState.provider}
-        showThinking={showThinking}
-        tokenBudget={chatState.tokenBudget}
-        permissionMode={chatState.permissionMode}
-        handleModeSwitch={chatState.handleModeSwitch}
-        taskProgress={chatState.taskProgress}
-        taskStatus={chatState.taskStatus}
-        currentTaskName={chatState.currentTaskName}
-        taskSteps={chatState.taskSteps}
-        unreadMessages={chatState.unreadMessages}
-        showNotifications={chatState.showNotifications}
-        setShowNotifications={chatState.setShowNotifications}
-        notifications={chatState.notifications}
-        toggleNotifications={chatState.toggleNotifications}
-        clearAllNotifications={chatState.clearAllNotifications}
-        markNotificationAsRead={chatState.markNotificationAsRead}
-        chatMessages={chatState.chatMessages}
-        scrollContainerRef={scrollManagement.scrollContainerRef}
-      />
-
-      {/* ============================================
           ⌨️ 输入区域
       ============================================ */}
       <div className="flex items-center gap-3 w-full p-4 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-t border-gray-200/50 dark:border-gray-700/50">
@@ -693,6 +662,35 @@ const ChatInterfaceMinimal = memo(({
           provider={chatState.provider}
         />
       </div>
+
+      {/* ============================================
+          📊 状态栏
+      ============================================ */}
+      <ChatStatusBar
+        connectionState={chatState.connectionState}
+        lastHeartbeat={chatState.lastHeartbeat}
+        reconnectAttempts={chatState.reconnectAttempts}
+        iflowStatus={chatState.iflowStatus}
+        isLoading={chatState.isLoading}
+        provider={chatState.provider}
+        showThinking={showThinking}
+        tokenBudget={chatState.tokenBudget}
+        permissionMode={chatState.permissionMode}
+        handleModeSwitch={chatState.handleModeSwitch}
+        taskProgress={chatState.taskProgress}
+        taskStatus={chatState.taskStatus}
+        currentTaskName={chatState.currentTaskName}
+        taskSteps={chatState.taskSteps}
+        unreadMessages={chatState.unreadMessages}
+        showNotifications={chatState.showNotifications}
+        setShowNotifications={chatState.setShowNotifications}
+        notifications={chatState.notifications}
+        toggleNotifications={chatState.toggleNotifications}
+        clearAllNotifications={chatState.clearAllNotifications}
+        markNotificationAsRead={chatState.markNotificationAsRead}
+        chatMessages={chatState.chatMessages}
+        scrollContainerRef={scrollManagement.scrollContainerRef}
+      />
 
       {/* ============================================
           🎪 弹出菜单层

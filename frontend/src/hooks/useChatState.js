@@ -68,8 +68,8 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
 
   // 同步外部 Session ID
   const syncSessionId = useCallback((sessionId) => {
-    if (sessionId && sessionId !== currentSessionId) {
-      setCurrentSessionId(sessionId);
+    if (sessionId !== currentSessionId) {
+      setCurrentSessionId(sessionId || null);
     }
   }, [currentSessionId]);
 

@@ -108,7 +108,18 @@ const InterviewPreparation = ({ selectedProject }) => {
   const loadInterviewHistory = () => {
     try {
       const history = JSON.parse(localStorage.getItem('interview_history') || '[]');
-      setInterviewHistory(history);
+      // 加载时去重，防止历史数据中已有重复 ID 导致 key 冲突
+      const uniqueHistory = [];
+      const seenIds = new Set();
+      
+      for (const item of history) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          uniqueHistory.push(item);
+        }
+      }
+      
+      setInterviewHistory(uniqueHistory);
     } catch (error) {
       console.error('Failed to load interview history:', error);
     }
@@ -135,7 +146,9 @@ const InterviewPreparation = ({ selectedProject }) => {
 
     try {
       const history = JSON.parse(localStorage.getItem('interview_history') || '[]');
-      const updatedHistory = [record, ...history].slice(0, 50); // 保留最近50条
+      // 过滤掉已存在的同 ID 记录，避免 key 重复
+      const filteredHistory = history.filter(r => r.id !== record.id);
+      const updatedHistory = [record, ...filteredHistory].slice(0, 50); // 保留最近50条
       localStorage.setItem('interview_history', JSON.stringify(updatedHistory));
       setInterviewHistory(updatedHistory);
       setCurrentInterviewId(record.id);

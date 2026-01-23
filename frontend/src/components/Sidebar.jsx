@@ -270,7 +270,17 @@ function Sidebar({
   // Helper function to get all sessions for a project (initial + additional)
   const getAllSessions = (project) => {
     // Combine Claude and Cursor sessions; Sidebar will display icon per row
-    const iflowSessions = [...(project.sessions || []), ...(additionalSessions[project.name] || [])].map(s => ({ ...s, __provider: 'claude' }));
+    let iflowSessions = [...(project.sessions || []), ...(additionalSessions[project.name] || [])].map(s => ({ ...s, __provider: 'claude' }));
+    
+    // Optimistically add selected session if it's a new temporary session and not in the list
+    // This ensures "New Session" appears in the sidebar immediately
+    if (selectedSession && selectedProject?.name === project.name && selectedSession.id.startsWith('new-session-')) {
+       const exists = iflowSessions.some(s => s.id === selectedSession.id);
+       if (!exists) {
+          iflowSessions.push({ ...selectedSession, __provider: 'claude' });
+       }
+    }
+
     const cursorSessions = (project.cursorSessions || []).map(s => ({ ...s, __provider: 'cursor' }));
     // Sort by most recent activity/date
     const normalizeDate = (s) => new Date(s.__provider === 'cursor' ? s.createdAt : s.lastActivity);
@@ -1153,6 +1163,63 @@ function Sidebar({
                           </div>
                         ) : (
                           <div className="space-y-1">
+                            {/* Always show Project Chat (Default/Legacy) */}
+                            <div className="group relative">
+                              {/* Mobile Project Chat Item */}
+                              <div className="md:hidden">
+                                <div
+                                  className={cn(
+                                    "p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative",
+                                    (isSelected && !selectedSession) ? "bg-primary/5 border-primary/20" : "border-border/30"
+                                  )}
+                                  onClick={() => handleProjectSelect(project)}
+                                  onTouchEnd={handleTouchClick(() => handleProjectSelect(project))}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                      "w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0",
+                                      (isSelected && !selectedSession) ? "bg-primary/10" : "bg-muted/50"
+                                    )}>
+                                      <MessageSquare className="w-3 h-3" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-xs font-medium truncate text-foreground">
+                                        Project Chat
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                                        Default workspace
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Desktop Project Chat Item */}
+                              <div className="hidden md:block">
+                                <Button
+                                  variant="ghost"
+                                  className={cn(
+                                    "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent/50 transition-colors duration-200",
+                                    (isSelected && !selectedSession) && "bg-accent text-accent-foreground"
+                                  )}
+                                  onClick={() => handleProjectSelect(project)}
+                                  onTouchEnd={handleTouchClick(() => handleProjectSelect(project))}
+                                >
+                                  <div className="flex items-start gap-2 min-w-0 w-full">
+                                    <MessageSquare className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-xs font-medium truncate text-foreground">
+                                        Project Chat
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                                        Default workspace
+                                      </div>
+                                    </div>
+                                  </div>
+                                </Button>
+                              </div>
+                            </div>
+
                         {!initialSessionsLoaded.has(project.name) ? (
                           // Loading skeleton for sessions
                           Array.from({ length: 3 }).map((_, i) => (
