@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   BookOpen, Code2, BrainCircuit, Target, TrendingUp,
-  CheckCircle2, Clock, Award, Lightbulb, FileText,
+  CheckCircle2, Clock, Award, Lightbulb, FileText, FileEdit,
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
@@ -91,6 +91,25 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [progressTab, setProgressTab] = useState('progress');
   const [recommendations, setRecommendations] = useState([]);
   const [scoreHistory, setScoreHistory] = useState([]);
+
+  // 语音录音状态
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordedChunks, setRecordedChunks] = useState([]);
+  const [recordings, setRecordings] = useState([]);
+
+  // 面试笔记状态
+  const [interviewNotes, setInterviewNotes] = useState('');
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const notesPanelRef = useRef(null);
+
+  // 问题收藏状态
+  const [favoriteQuestions, setFavoriteQuestions] = useState([]);
+
+  // AI面试官模式状态
+  const [aiInterviewerMode, setAiInterviewerMode] = useState(false);
+  const [aiInterviewerPersonality, setAiInterviewerPersonality] = useState('professional');
   const [isResumeMode, setIsResumeMode] = useState(false);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
@@ -1140,7 +1159,23 @@ const InterviewPreparation = ({ selectedProject }) => {
                         </span>
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavoriteQuestion(q.id);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          favoriteQuestions.includes(q.id)
+                            ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/30'
+                            : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        }`}
+                        title={favoriteQuestions.includes(q.id) ? "取消收藏" : "收藏"}
+                      >
+                        <Star className={`w-4 h-4 ${favoriteQuestions.includes(q.id) ? 'fill-current' : ''}`} />
+                      </button>
+                      <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1362,6 +1397,46 @@ const InterviewPreparation = ({ selectedProject }) => {
 
         {/* 聊天消息区域 */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {chatMessages.length > 0 && (
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Timer className="w-4 h-4" />
+                  <span className="font-medium">总时长:</span>
+                  <span className="font-mono">{Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Clock className="w-4 h-4" />
+                  <span className="font-medium">本题:</span>
+                  <span className="font-mono">{Math.floor(questionTimer / 60)}:{String(questionTimer % 60).padStart(2, '0')}</span>
+                </div>
+              </div>
+              {/* AI面试官模式切换 */}
+              {aiInterviewerMode && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">面试官:</span>
+                  <button 
+                    onClick={() => setAiInterviewerPersonality('professional')}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${aiInterviewerPersonality === 'professional' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    专业型
+                  </button>
+                  <button 
+                    onClick={() => setAiInterviewerPersonality('friendly')}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${aiInterviewerPersonality === 'friendly' ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    友好型
+                  </button>
+                  <button 
+                    onClick={() => setAiInterviewerPersonality('challenging')}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${aiInterviewerPersonality === 'challenging' ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                  >
+                    挑战型
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {chatMessages.length === 0 ? (
             <div className="text-center py-12">
               <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -1493,18 +1568,67 @@ const InterviewPreparation = ({ selectedProject }) => {
                 style={{ minHeight: '44px' }}
               />
               <div className="flex justify-between items-center px-2 pb-2">
-                 <div className="flex gap-1">
+                 <div className="flex gap-1 items-center">
+                   {/* 发送按钮 */}
+                   <button
+                     onClick={handleSendMessage}
+                     disabled={!chatInput.trim() || isChatLoading}
+                     className="p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg transition-all disabled:opacity-50 disabled:scale-95"
+                     title="发送"
+                   >
+                     <Send className="w-3.5 h-3.5" />
+                   </button>
+                   
+                   {/* 录音按钮 */}
+                   <button
+                     onClick={isRecording ? stopRecording : startRecording}
+                     className={`p-1.5 ${isRecording ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 animate-pulse' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'} rounded-lg transition-all`}
+                     title={isRecording ? "停止录音" : "开始录音"}
+                   >
+                     <Mic className="w-3.5 h-3.5" />
+                   </button>
+                   
+                   {/* 笔记按钮 */}
+                   <button
+                     onClick={() => setShowNotesPanel(true)}
+                     className="p-1.5 text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/30 rounded-lg transition-all"
+                     title="面试笔记"
+                   >
+                     <FileEdit className="w-3.5 h-3.5" />
+                   </button>
+                   
+                   {/* 评分按钮 */}
+                   <button
+                     onClick={() => setShowScorePanel(true)}
+                     className="p-1.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30 rounded-lg transition-all"
+                     title="查看评分"
+                   >
+                     <Award className="w-3.5 h-3.5" />
+                   </button>
+                   
+                   {/* 进度按钮 */}
+                   <button
+                     onClick={() => setShowProgressPanel(true)}
+                     className="p-1.5 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/30 rounded-lg transition-all"
+                     title="学习进度"
+                   >
+                     <BarChart3 className="w-3.5 h-3.5" />
+                   </button>
+                   
+                   <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1 self-center" />
+                   
+                   {/* 简历上传按钮 */}
                    <label className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                       isUploadingResume
-                        ? 'bg-blue-50 text-blue-500 cursor-not-allowed'
+                        ? 'text-blue-500 bg-blue-50 cursor-not-allowed'
                         : isResumeMode
-                        ? 'bg-green-50 text-green-600 hover:bg-green-100'
+                        ? 'text-green-600 bg-green-50 hover:bg-green-100'
                         : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`} title={isResumeMode ? `已上传: ${resumeFile?.name}` : "上传简历"}>
                       {isUploadingResume ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <FileText className="w-4 h-4" />
+                        <FileText className="w-3.5 h-3.5" />
                       )}
                       <input
                         type="file"
@@ -1515,33 +1639,14 @@ const InterviewPreparation = ({ selectedProject }) => {
                         onClick={(e) => { e.target.value = ''; }}
                       />
                    </label>
+                   
                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1 self-center" />
+                   
+                   {/* 模型选择器 */}
                    <div className="transform scale-90 origin-left">
                      <IFlowModelSelector />
                    </div>
                  </div>
-                 
-                 <button
-                    onClick={handleSendMessage}
-                    disabled={!chatInput.trim() || isChatLoading}
-                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setShowScorePanel(true)}
-                    className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
-                    title="查看评分"
-                  >
-                    <Award className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setShowProgressPanel(true)}
-                    className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
-                    title="学习进度"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                  </button>
               </div>
             </div>
           </div>
@@ -2024,6 +2129,58 @@ const InterviewPreparation = ({ selectedProject }) => {
         </div>
       )}
 
+      {/* 笔记面板 */}
+      {showNotesPanel && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileEdit className="w-6 h-6 text-yellow-500" />
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">面试笔记</h3>
+                </div>
+                <button
+                  onClick={() => setShowNotesPanel(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  面试记录
+                </label>
+                <textarea
+                  value={interviewNotes}
+                  onChange={(e) => setInterviewNotes(e.target.value)}
+                  placeholder="记录面试中的重要信息、问题、答案要点等..."
+                  className="w-full h-64 p-3 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent resize-none bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={saveInterviewNotes}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-xl font-medium transition-all hover:shadow-lg flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存笔记
+                </button>
+                <button
+                  onClick={() => setShowNotesPanel(false)}
+                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 弹窗层：复盘/评估/提示 */}
       {(showHints || showReview || showEvaluation) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={(e) => {
@@ -2340,6 +2497,119 @@ const InterviewPreparation = ({ selectedProject }) => {
       }
     }
   }, []);
+
+  // 语音录音功能
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+      
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioUrl(url);
+        setRecordings(prev => [...prev, { url, blob, timestamp: new Date() }]);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      recorder.start();
+      setMediaRecorder(recorder);
+      setRecordedChunks(chunks);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert('无法访问麦克风，请检查权限设置');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // 面试计时器
+  useEffect(() => {
+    let interval;
+    if (chatMessages.length > 0) {
+      interval = setInterval(() => {
+        setTimer(prev => prev + 1);
+        setQuestionTimer(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [chatMessages.length]);
+
+  // 当切换问题时重置当前题计时器
+  useEffect(() => {
+    setQuestionTimer(0);
+  }, [currentQuestionIndex]);
+
+  // AI面试官模式
+  const startAIInterviewer = () => {
+    setAiInterviewerMode(true);
+    let openingMessage = '';
+    
+    switch(aiInterviewerPersonality) {
+      case 'professional':
+        openingMessage = '你好，我是今天的面试官。我们将进行一场专业的技术面试。我会从技术深度、系统设计、代码质量等多个维度来评估你的能力。请放松，展示你的真实水平。';
+        break;
+      case 'friendly':
+        openingMessage = '嗨！很高兴见到你！今天我们来聊聊技术，不用太紧张。我会根据你的回答来调整问题的难度，让我们一起享受这次技术交流吧！';
+        break;
+      case 'challenging':
+        openingMessage = '欢迎来到今天的面试。我会提出一些有挑战性的问题，希望你能够深入思考。记住，没有标准答案，我更看重你的思考过程和解决问题的能力。准备好了吗？';
+        break;
+      default:
+        openingMessage = '你好，我是今天的面试官。让我们开始面试吧。';
+    }
+    
+    setChatMessages(prev => [...prev, { role: 'assistant', content: openingMessage }]);
+  };
+
+  // 问题收藏功能
+  const toggleFavoriteQuestion = (questionId) => {
+    setFavoriteQuestions(prev => {
+      const newFavorites = prev.includes(questionId)
+        ? prev.filter(id => id !== questionId)
+        : [...prev, questionId];
+      localStorage.setItem('favorite-questions', JSON.stringify(newFavorites));
+      return newFavorites;
+    });
+  };
+
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem('favorite-questions');
+    if (savedFavorites) {
+      try {
+        setFavoriteQuestions(JSON.parse(savedFavorites));
+      } catch (e) {
+        console.error('加载收藏问题失败:', e);
+      }
+    }
+  }, []);
+
+  // 面试笔记功能
+  const saveInterviewNotes = () => {
+    localStorage.setItem(`interview-notes-${currentInterviewId || 'default'}`, interviewNotes);
+    alert('笔记已保存');
+  };
+
+  useEffect(() => {
+    const savedNotes = localStorage.getItem(`interview-notes-${currentInterviewId || 'default'}`);
+    if (savedNotes) {
+      setInterviewNotes(savedNotes);
+    }
+  }, [currentInterviewId]);
 
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
