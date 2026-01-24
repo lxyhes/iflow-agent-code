@@ -3,14 +3,18 @@
  * 项目面试准备页面 - 针对选中的项目生成面试问题
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   BookOpen, Code2, BrainCircuit, Target, TrendingUp,
   CheckCircle2, Clock, Award, Lightbulb, FileText,
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
-  Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon
+  Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
+  BarChart3, Zap, AlertCircle
 } from 'lucide-react';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { authenticatedFetch } from '../utils/api';
 import IFlowModelSelector from './IFlowModelSelector';
 import ReactMarkdown from 'react-markdown';
@@ -58,6 +62,35 @@ const InterviewPreparation = ({ selectedProject }) => {
   // 简历面试状态
   const [resumeFile, setResumeFile] = useState(null);
   const [resumeContent, setResumeContent] = useState('');
+  
+  // 面试评分系统状态
+  const [interviewScores, setInterviewScores] = useState({});
+  const [overallScore, setOverallScore] = useState(0);
+  const [scoreBreakdown, setScoreBreakdown] = useState({
+    technical: 0,
+    communication: 0,
+    problemSolving: 0,
+    codeQuality: 0,
+    systemDesign: 0
+  });
+  const [showScorePanel, setShowScorePanel] = useState(false);
+  const scorePanelRef = useRef(null);
+  
+  // 学习进度追踪状态
+  const [knowledgePoints, setKnowledgePoints] = useState([
+    { id: 1, name: 'JavaScript/TypeScript', category: '前端', progress: 0, total: 10 },
+    { id: 2, name: 'React', category: '前端', progress: 0, total: 10 },
+    { id: 3, name: '算法与数据结构', category: '基础', progress: 0, total: 10 },
+    { id: 4, name: '系统设计', category: '架构', progress: 0, total: 10 },
+    { id: 5, name: '数据库', category: '后端', progress: 0, total: 10 },
+    { id: 6, name: 'API 设计', category: '后端', progress: 0, total: 10 },
+    { id: 7, name: '性能优化', category: '进阶', progress: 0, total: 10 },
+    { id: 8, name: '安全', category: '进阶', progress: 0, total: 10 }
+  ]);
+  const [showProgressPanel, setShowProgressPanel] = useState(false);
+  const [progressTab, setProgressTab] = useState('progress');
+  const [recommendations, setRecommendations] = useState([]);
+  const [scoreHistory, setScoreHistory] = useState([]);
   const [isResumeMode, setIsResumeMode] = useState(false);
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
@@ -1368,11 +1401,405 @@ const InterviewPreparation = ({ selectedProject }) => {
                   >
                     <Send className="w-4 h-4" />
                   </button>
+                  <button
+                    onClick={() => setShowScorePanel(true)}
+                    className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
+                    title="查看评分"
+                  >
+                    <Award className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowProgressPanel(true)}
+                    className="p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:scale-95 shadow-sm"
+                    title="学习进度"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 评分面板 */}
+      {showScorePanel && (
+        <div ref={scorePanelRef} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Award className="w-6 h-6 text-yellow-500" />
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">面试评分</h3>
+                </div>
+                <button
+                  onClick={() => setShowScorePanel(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* 总分展示 */}
+              <div className="text-center">
+                <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
+                  {overallScore}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">综合评分 / 100</div>
+              </div>
+
+              {/* 分数明细 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">技术能力</span>
+                    <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{scoreBreakdown.technical}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${scoreBreakdown.technical}%`}}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">沟通表达</span>
+                    <span className="text-2xl font-bold text-green-600 dark:text-green-400">{scoreBreakdown.communication}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-green-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${scoreBreakdown.communication}%`}}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">问题解决</span>
+                    <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{scoreBreakdown.problemSolving}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-purple-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${scoreBreakdown.problemSolving}%`}}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">代码质量</span>
+                    <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">{scoreBreakdown.codeQuality}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-orange-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${scoreBreakdown.codeQuality}%`}}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">系统设计</span>
+                    <span className="text-2xl font-bold text-pink-600 dark:text-pink-400">{scoreBreakdown.systemDesign}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-pink-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${scoreBreakdown.systemDesign}%`}}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 能力雷达图 */}
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-purple-500" />
+                  能力评估雷达图
+                </h4>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={[
+                      { dimension: '技术能力', value: scoreBreakdown.technical },
+                      { dimension: '沟通表达', value: scoreBreakdown.communication },
+                      { dimension: '问题解决', value: scoreBreakdown.problemSolving },
+                      { dimension: '代码质量', value: scoreBreakdown.codeQuality },
+                      { dimension: '系统设计', value: scoreBreakdown.systemDesign }
+                    ]}>
+                      <PolarGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+                      <PolarAngleAxis 
+                        dataKey="dimension" 
+                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                      />
+                      <PolarRadiusAxis 
+                        angle={90} 
+                        domain={[0, 100]}
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Radar
+                        name="当前能力"
+                        dataKey="value"
+                        stroke="#8b5cf6"
+                        fill="#8b5cf6"
+                        fillOpacity={0.3}
+                        strokeWidth={2}
+                      />
+                      <Radar
+                        name="理想水平"
+                        dataKey="value"
+                        stroke="#22c55e"
+                        fill="none"
+                        strokeWidth={1}
+                        strokeDasharray="5 5"
+                        data={[{ dimension: '技术能力', value: 80 }, { dimension: '沟通表达', value: 80 }, { dimension: '问题解决', value: 80 }, { dimension: '代码质量', value: 80 }, { dimension: '系统设计', value: 80 }]}
+                      />
+                      <Legend 
+                        iconType="circle"
+                        wrapperStyle={{ paddingTop: '10px' }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 评分建议 */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-yellow-500" />
+                  改进建议
+                </h4>
+                <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                  {overallScore >= 80 ? (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                        <p>表现优秀！继续保持，可以尝试更有挑战性的题目。</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                        <p>建议准备系统设计和架构相关的问题。</p>
+                      </div>
+                    </>
+                  ) : overallScore >= 60 ? (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <Target className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <p>表现良好！建议加强薄弱环节的练习。</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Target className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <p>多练习算法和数据结构相关题目。</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <p>需要加强基础知识的复习。</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <p>建议从基础题目开始练习，循序渐进。</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* 操作按钮 */}
+              <div className="flex gap-3">
+                <button
+                  onClick={exportPDF}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all hover:shadow-lg flex items-center justify-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  导出报告
+                </button>
+                <button
+                  onClick={() => setShowScorePanel(false)}
+                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 学习进度面板 */}
+      {showProgressPanel && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-6 h-6 text-purple-500" />
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">学习进度追踪</h3>
+                </div>
+                <button
+                  onClick={() => setShowProgressPanel(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setProgressTab('progress')}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    progressTab === 'progress'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  学习进度
+                </button>
+                <button
+                  onClick={() => setProgressTab('recommendations')}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    progressTab === 'recommendations'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  智能推荐
+                </button>
+                <button
+                  onClick={() => setProgressTab('history')}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                    progressTab === 'history'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  历史分析
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {progressTab === 'progress' && (
+                <>
+                  <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-6 text-white">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="text-sm opacity-90">总体学习进度</div>
+                        <div className="text-3xl font-bold mt-1">
+                          {Math.round(knowledgePoints.reduce((sum, kp) => sum + (kp.progress / kp.total * 100), 0) / knowledgePoints.length)}%
+                        </div>
+                      </div>
+                      <TrendingUp className="w-12 h-12 opacity-80" />
+                    </div>
+                    <div className="w-full bg-white/30 rounded-full h-3">
+                      <div 
+                        className="bg-white h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${knowledgePoints.reduce((sum, kp) => sum + (kp.progress / kp.total * 100), 0) / knowledgePoints.length}%`}}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {['前端', '基础', '架构', '后端', '进阶'].map(category => {
+                      const categoryPoints = knowledgePoints.filter(kp => kp.category === category);
+                      const avgProgress = categoryPoints.length > 0 
+                        ? categoryPoints.reduce((sum, kp) => sum + (kp.progress / kp.total * 100), 0) / categoryPoints.length
+                        : 0;
+                      return (
+                        <div key={category} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-center">
+                          <div className="text-2xl font-bold text-gray-900 dark:text-white">{Math.round(avgProgress)}%</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{category}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-blue-500" />
+                      知识点掌握情况
+                    </h4>
+                    <div className="space-y-3">
+                      {knowledgePoints.map(kp => (
+                        <div key={kp.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{kp.name}</span>
+                              <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+                                {kp.category}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                              {kp.progress}/{kp.total}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-500 ${
+                                kp.progress / kp.total >= 0.8 ? 'bg-green-500' :
+                                kp.progress / kp.total >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${kp.progress / kp.total * 100}%`}}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {progressTab === 'recommendations' && (
+                <div className="text-center py-12">
+                  <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    智能推荐功能开发中...
+                  </p>
+                </div>
+              )}
+
+              {progressTab === 'history' && (
+                <div className="text-center py-12">
+                  <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    历史分析功能开发中...
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                {progressTab === 'progress' && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('确定要重置所有学习进度吗？')) {
+                        const resetPoints = knowledgePoints.map(kp => ({ ...kp, progress: 0 }));
+                        setKnowledgePoints(resetPoints);
+                        localStorage.setItem('interview-knowledge-points', JSON.stringify(resetPoints));
+                      }
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
+                  >
+                    重置进度
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowProgressPanel(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl font-medium transition-all hover:shadow-lg"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 右侧：简历预览/辅助面板 (可折叠) */}
       {showResumePanel && resumePreview?.pages?.length > 0 && (
@@ -1554,6 +1981,239 @@ const InterviewPreparation = ({ selectedProject }) => {
     </div>
   );
 
+  // 计算面试评分
+  const calculateScores = () => {
+    const messages = chatMessages.filter(m => m.role === 'user');
+    const aiMessages = chatMessages.filter(m => m.role === 'ai');
+    
+    if (messages.length === 0) return;
+
+    const answerCount = messages.length;
+    const avgAnswerLength = messages.reduce((sum, m) => sum + m.content.length, 0) / answerCount;
+    const hasCodeAnswers = messages.some(m => m.content.includes('```'));
+
+    const technicalScore = Math.min(100, Math.floor(
+      (avgAnswerLength > 200 ? 30 : 15) +
+      (hasCodeAnswers ? 25 : 0) +
+      (answerCount >= 3 ? 25 : answerCount * 8) +
+      20
+    ));
+
+    const communicationScore = Math.min(100, Math.floor(
+      (messages.some(m => m.content.includes('首先') || m.content.includes('其次')) ? 30 : 15) +
+      (messages.some(m => m.content.includes('因为') || m.content.includes('所以')) ? 25 : 10) +
+      (answerCount >= 2 ? 25 : answerCount * 12) +
+      20
+    ));
+
+    const problemSolvingScore = Math.min(100, Math.floor(
+      (messages.some(m => m.content.includes('解决') || m.content.includes('方法')) ? 30 : 15) +
+      (messages.some(m => m.content.includes('步骤') || m.content.includes('流程')) ? 25 : 10) +
+      (answerCount >= 2 ? 25 : answerCount * 12) +
+      20
+    ));
+
+    const codeQualityScore = Math.min(100, Math.floor(
+      (hasCodeAnswers ? 40 : 0) +
+      (messages.some(m => m.content.includes('function') || m.content.includes('class')) ? 30 : 10) +
+      (messages.some(m => m.content.includes('import') || m.content.includes('export')) ? 20 : 10) +
+      10
+    ));
+
+    const systemDesignScore = Math.min(100, Math.floor(
+      (messages.some(m => m.content.includes('架构') || m.content.includes('设计')) ? 30 : 10) +
+      (messages.some(m => m.content.includes('模块') || m.content.includes('组件')) ? 25 : 10) +
+      (messages.some(m => m.content.includes('数据库') || m.content.includes('缓存')) ? 25 : 10) +
+      20
+    ));
+
+    const overall = Math.floor(
+      (technicalScore + communicationScore + problemSolving + codeQualityScore + systemDesignScore) / 5
+    );
+
+    setScoreBreakdown({
+      technical: technicalScore,
+      communication: communicationScore,
+      problemSolving: problemSolving,
+      codeQuality: codeQualityScore,
+      systemDesign: systemDesignScore
+    });
+    setOverallScore(overall);
+
+    const newHistoryEntry = {
+      date: new Date().toLocaleDateString('zh-CN'),
+      timestamp: Date.now(),
+      overall: overall,
+      breakdown: {
+        technical: technicalScore,
+        communication: communicationScore,
+        problemSolving: problemSolving,
+        codeQuality: codeQualityScore,
+        systemDesign: systemDesignScore
+      }
+    };
+    
+    const newHistory = [...scoreHistory, newHistoryEntry].slice(-10);
+    setScoreHistory(newHistory);
+    localStorage.setItem('interview-score-history', JSON.stringify(newHistory));
+  };
+
+  const exportPDF = async () => {
+    if (!scorePanelRef.current) return;
+
+    try {
+      const element = scorePanelRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      pdf.save(`面试评分报告_${new Date().toLocaleDateString('zh-CN')}.pdf`);
+    } catch (error) {
+      console.error('导出 PDF 失败:', error);
+      alert('导出 PDF 失败，请重试');
+    }
+  };
+
+  const updateLearningProgress = () => {
+    const messages = chatMessages.filter(m => m.role === 'user');
+    
+    if (messages.length === 0) return;
+
+    const newKnowledgePoints = knowledgePoints.map(kp => {
+      let progress = kp.progress;
+      
+      if (kp.name === 'JavaScript/TypeScript') {
+        const hasJSContent = messages.some(m => 
+          m.content.includes('JavaScript') || 
+          m.content.includes('TypeScript') ||
+          m.content.includes('async') ||
+          m.content.includes('await') ||
+          m.content.includes('Promise')
+        );
+        if (hasJSContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === 'React') {
+        const hasReactContent = messages.some(m => 
+          m.content.includes('React') || 
+          m.content.includes('useState') ||
+          m.content.includes('useEffect') ||
+          m.content.includes('component')
+        );
+        if (hasReactContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === '算法与数据结构') {
+        const hasAlgoContent = messages.some(m => 
+          m.content.includes('算法') || 
+          m.content.includes('数据结构') ||
+          m.content.includes('数组') ||
+          m.content.includes('链表') ||
+          m.content.includes('树') ||
+          m.content.includes('图') ||
+          m.content.includes('排序') ||
+          m.content.includes('查找')
+        );
+        if (hasAlgoContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === '系统设计') {
+        const hasDesignContent = messages.some(m => 
+          m.content.includes('系统设计') || 
+          m.content.includes('架构') ||
+          m.content.includes('微服务') ||
+          m.content.includes('分布式') ||
+          m.content.includes('负载均衡')
+        );
+        if (hasDesignContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === '数据库') {
+        const hasDBContent = messages.some(m => 
+          m.content.includes('数据库') || 
+          m.content.includes('SQL') ||
+          m.content.includes('MySQL') ||
+          m.content.includes('MongoDB') ||
+          m.content.includes('Redis')
+        );
+        if (hasDBContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === 'API 设计') {
+        const hasAPIContent = messages.some(m => 
+          m.content.includes('API') || 
+          m.content.includes('REST') ||
+          m.content.includes('GraphQL') ||
+          m.content.includes('接口') ||
+          m.content.includes('请求')
+        );
+        if (hasAPIContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === '性能优化') {
+        const hasPerfContent = messages.some(m => 
+          m.content.includes('性能') || 
+          m.content.includes('优化') ||
+          m.content.includes('缓存') ||
+          m.content.includes('CDN') ||
+          m.content.includes('懒加载')
+        );
+        if (hasPerfContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      if (kp.name === '安全') {
+        const hasSecurityContent = messages.some(m => 
+          m.content.includes('安全') || 
+          m.content.includes('认证') ||
+          m.content.includes('授权') ||
+          m.content.includes('加密') ||
+          m.content.includes('XSS') ||
+          m.content.includes('CSRF')
+        );
+        if (hasSecurityContent) progress = Math.min(kp.total, progress + 1);
+      }
+      
+      return { ...kp, progress };
+    });
+    
+    setKnowledgePoints(newKnowledgePoints);
+    localStorage.setItem('interview-knowledge-points', JSON.stringify(newKnowledgePoints));
+  };
+
+  useEffect(() => {
+    const savedScoreHistory = localStorage.getItem('interview-score-history');
+    if (savedScoreHistory) {
+      try {
+        setScoreHistory(JSON.parse(savedScoreHistory));
+      } catch (e) {
+        console.error('加载历史评分失败:', e);
+      }
+    }
+    
+    const savedKnowledgePoints = localStorage.getItem('interview-knowledge-points');
+    if (savedKnowledgePoints) {
+      try {
+        setKnowledgePoints(JSON.parse(savedKnowledgePoints));
+      } catch (e) {
+        console.error('加载学习进度失败:', e);
+      }
+    }
+  }, []);
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
 
@@ -1651,6 +2311,8 @@ ${chatOnlyMode ? '注意：你只能进行对话，不能使用任何工具修�
       }]);
     } finally {
       setIsChatLoading(false);
+      calculateScores();
+      updateLearningProgress();
     }
   };
 

@@ -320,7 +320,7 @@ const ChatInterfaceMinimal = memo(({
         const model = localStorage.getItem('iflow-model') || 'GLM-4.7';
         const mode = chatState.permissionMode || 'default';
         
-        const streamUrl = `/stream?message=${encodeURIComponent(content + ragContext)}&cwd=${encodeURIComponent(selectedProject.path || selectedProject.fullPath)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(selectedProject.name)}&model=${encodeURIComponent(model)}&mode=${encodeURIComponent(mode)}`;
+        const streamUrl = `/stream?message=${encodeURIComponent(content + ragContext)}&cwd=${encodeURIComponent(selectedProject.path || selectedProject.fullPath)}&sessionId=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(selectedProject.name)}&model=${encodeURIComponent(model)}&mode=${encodeURIComponent(mode)}&persona=${encodeURIComponent(aiPersona || 'partner')}`;
 
         // 创建 AbortController 用于中断请求
         abortControllerRef.current = new AbortController();

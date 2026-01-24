@@ -41,7 +41,8 @@ export const useAppSettings = () => {
     const personaMap = {
       'senior': '资深架构师',
       'hacker': '黑客',
-      'partner': '合作伙伴'
+      'partner': '合作伙伴',
+      'socratic': '苏格拉底'
     };
     return personaMap[persona] || persona;
   }, []);
@@ -53,7 +54,8 @@ export const useAppSettings = () => {
     const descriptionMap = {
       'senior': '强调代码质量和最佳实践，优先考虑可维护性和可扩展性',
       'hacker': '快速迭代，优先功能实现，最小化样板代码',
-      'partner': '友好协作的结对编程风格，鼓励和支持用户'
+      'partner': '友好协作的结对编程风格，鼓励和支持用户',
+      'socratic': '通过提问引导思考，启发式学习，帮助用户发现答案'
     };
     return descriptionMap[persona] || '';
   }, []);

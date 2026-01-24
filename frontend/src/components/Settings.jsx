@@ -2526,7 +2526,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                 {/* 人格选择 */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">AI 人格</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <button
                       type="button"
                       onClick={() => setPromptOptimizerPersona('senior')}
@@ -2567,6 +2567,20 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       <div className="font-medium mb-1">💗 共情模式</div>
                       <div className="text-xs text-muted-foreground">
                         温柔鼓励，提供情绪支持
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromptOptimizerPersona('socratic')}
+                      className={`p-4 border rounded-lg text-left transition-colors ${
+                        promptOptimizerPersona === 'socratic'
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="font-medium mb-1">💡 苏格拉底模式</div>
+                      <div className="text-xs text-muted-foreground">
+                        通过提问引导思考，启发式学习
                       </div>
                     </button>
                   </div>
