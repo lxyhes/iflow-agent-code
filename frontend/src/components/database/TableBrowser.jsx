@@ -168,17 +168,17 @@ const TableBrowser = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-2">
-          <Database className="w-5 h-5 text-blue-400" />
-          <h2 className="text-sm font-semibold text-white">数据库表</h2>
-          <span className="text-xs text-gray-400">({tables.length})</span>
+          <Database className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">数据库表</h2>
+          <span className="text-xs text-gray-500 dark:text-gray-400">({tables.length})</span>
         </div>
         <button
           onClick={onRefresh}
-          className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+          className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           title="刷新"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +188,7 @@ const TableBrowser = ({
       </div>
 
       {/* 搜索框 */}
-      <div className="px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <div className="px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -196,7 +196,7 @@ const TableBrowser = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜索表名..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-700 text-white text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 dark:placeholder-gray-400"
           />
         </div>
       </div>
@@ -204,42 +204,42 @@ const TableBrowser = ({
       {/* 表列表 */}
       <div className="flex-1 overflow-y-auto">
         {filteredTables.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
             <Table2 className="w-12 h-12 mb-2 opacity-50" />
             <p className="text-sm">没有找到表</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-gray-200 dark:divide-gray-800">
             {filteredTables.map((table) => (
               <div key={table}>
                 {/* 表名行 */}
                 <div
                   onClick={() => toggleTableExpand(table)}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-800 transition-colors ${
-                    selectedTable === table ? 'bg-gray-800' : ''
+                  className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                    selectedTable === table ? 'bg-gray-100 dark:bg-gray-800' : ''
                   }`}
                 >
                   <div className="flex items-center space-x-2">
                     {expandedTables.has(table) ? (
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                      <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                      <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     )}
-                    <Table2 className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-white font-medium">{table}</span>
+                    <Table2 className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                    <span className="text-sm text-gray-900 dark:text-white font-medium">{table}</span>
                   </div>
                   {tableInfo && tableInfo.name === table && (
-                    <span className="text-xs text-gray-400">{tableInfo.row_count.toLocaleString()} 行</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{tableInfo.row_count.toLocaleString()} 行</span>
                   )}
                 </div>
 
                 {/* 表详细信息 */}
                 {expandedTables.has(table) && tableInfo && tableInfo.name === table && (
-                  <div className="px-4 py-3 bg-gray-800/50 border-l-2 border-blue-500">
+                  <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-l-2 border-blue-500">
                     {/* 列信息 */}
                     <div className="mb-3">
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <h4 className="text-xs font-semibold text-gray-300 flex items-center">
+                        <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center">
                           <FileText className="w-3 h-3 mr-1" />
                           列信息
                         </h4>
@@ -263,7 +263,7 @@ const TableBrowser = ({
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="text-left text-gray-400 border-b border-gray-700">
+                            <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                               <th className="pb-2 pr-2">列名</th>
                               <th className="pb-2 pr-2">类型</th>
                               <th className="pb-2 pr-2">主键</th>
@@ -273,26 +273,26 @@ const TableBrowser = ({
                           </thead>
                           <tbody>
                             {tableInfo.columns.map((col) => (
-                              <tr key={col.cid} className="border-b border-gray-700/50">
-                                <td className="py-2 pr-2 text-white font-mono">{col.name}</td>
+                              <tr key={col.cid} className="border-b border-gray-200/50 dark:border-gray-700/50">
+                                <td className="py-2 pr-2 text-gray-900 dark:text-white font-mono">{col.name}</td>
                                 <td className="py-2 pr-2">
                                   <span className={getTypeColor(col.type)}>{col.type}</span>
                                 </td>
                                 <td className="py-2 pr-2">
                                   {col.pk ? (
-                                    <Key className="w-3 h-3 text-yellow-400" title="主键" />
+                                    <Key className="w-3 h-3 text-yellow-500 dark:text-yellow-400" title="主键" />
                                   ) : (
-                                    <span className="text-gray-600">-</span>
+                                    <span className="text-gray-400 dark:text-gray-600">-</span>
                                   )}
                                 </td>
                                 <td className="py-2 pr-2">
                                   {col.notnull ? (
-                                    <span className="text-red-400">✓</span>
+                                    <span className="text-red-500 dark:text-red-400">✓</span>
                                   ) : (
-                                    <span className="text-gray-600">-</span>
+                                    <span className="text-gray-400 dark:text-gray-600">-</span>
                                   )}
                                 </td>
-                                <td className="py-2 text-gray-400">
+                                <td className="py-2 text-gray-500 dark:text-gray-400">
                                   {col.default_value || '-'}
                                 </td>
                               </tr>
@@ -305,19 +305,19 @@ const TableBrowser = ({
                     {/* 索引信息 */}
                     {tableInfo.indexes && tableInfo.indexes.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-gray-300 mb-2 flex items-center">
+                        <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center">
                           <Hash className="w-3 h-3 mr-1" />
                           索引
                         </h4>
                         <div className="space-y-1">
                           {tableInfo.indexes.map((index) => (
                             <div key={index.seq} className="flex items-center justify-between text-xs">
-                              <span className="text-white font-mono">{index.name}</span>
+                              <span className="text-gray-900 dark:text-white font-mono">{index.name}</span>
                               <div className="flex items-center space-x-2">
                                 {index.unique && (
-                                  <span className="text-yellow-400">唯一</span>
+                                  <span className="text-yellow-600 dark:text-yellow-400">唯一</span>
                                 )}
-                                <span className="text-gray-400">{index.origin}</span>
+                                <span className="text-gray-500 dark:text-gray-400">{index.origin}</span>
                               </div>
                             </div>
                           ))}

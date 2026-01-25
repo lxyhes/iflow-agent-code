@@ -227,62 +227,66 @@ const QueryResult = ({
 
   const formatValue = (value) => {
     if (value === null || value === undefined) {
-      return <span className="text-gray-500 italic">NULL</span>;
+      return <span className="text-gray-400 dark:text-gray-500 italic">NULL</span>;
     }
     if (typeof value === 'boolean') {
-      return value ? <span className="text-green-400">TRUE</span> : <span className="text-red-400">FALSE</span>;
+      return value ? <span className="text-green-600 dark:text-green-400 font-bold">TRUE</span> : <span className="text-red-600 dark:text-red-400 font-bold">FALSE</span>;
     }
     if (typeof value === 'number') {
-      return <span className="text-blue-400">{value}</span>;
+      return <span className="text-blue-600 dark:text-blue-400 font-mono">{value}</span>;
     }
     if (typeof value === 'string') {
-      return <span className="text-gray-100">{value}</span>;
+      return <span className="text-gray-900 dark:text-white">{value}</span>;
     }
-    return String(value);
+    return <span className="text-gray-900 dark:text-white">{String(value)}</span>;
   };
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-900 rounded-lg">
+      <div className="flex flex-col items-center justify-center h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-gray-400">执行查询中...</p>
+        <p className="text-gray-500 dark:text-gray-400 font-medium">执行查询中...</p>
       </div>
     );
   }
 
   if (!result) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-900 rounded-lg">
-        <Database className="w-16 h-16 text-gray-600 mb-4" />
-        <p className="text-gray-400">执行查询以查看结果</p>
+      <div className="flex flex-col items-center justify-center h-full bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-full mb-4">
+          <Database className="w-12 h-12 text-gray-300 dark:text-gray-600" />
+        </div>
+        <p className="text-gray-500 dark:text-gray-400">执行查询以查看结果</p>
       </div>
     );
   }
 
   if (!result.success) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-900 rounded-lg p-8">
-        <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-        <p className="text-red-400 text-lg font-semibold mb-2">查询失败</p>
-        <p className="text-gray-400 text-center">{result.error}</p>
+      <div className="flex flex-col items-center justify-center h-full bg-white dark:bg-gray-900 rounded-lg p-8 border border-red-200 dark:border-red-900/30">
+        <AlertCircle className="w-16 h-16 text-red-500 mb-4 opacity-80" />
+        <p className="text-red-600 dark:text-red-400 text-lg font-bold mb-2">查询失败</p>
+        <p className="text-gray-600 dark:text-gray-400 text-center max-w-lg font-mono text-sm bg-red-50 dark:bg-red-900/10 p-4 rounded-lg border border-red-100 dark:border-red-900/20">
+          {result.error}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
       {/* 工具栏 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <Database className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-semibold text-white">
+            <Database className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+            <span className="text-sm font-bold text-gray-900 dark:text-white tracking-tight">
               {result.row_count.toLocaleString()} 行
             </span>
           </div>
           <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-400">
+            <Clock className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <span className="text-sm text-gray-500 dark:text-gray-400">
               {result.execution_time.toFixed(3)}s
             </span>
           </div>
@@ -291,7 +295,7 @@ const QueryResult = ({
         <div className="flex items-center space-x-2">
           <button
             onClick={() => openAi('interpret')}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm font-medium transition-colors"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm font-medium transition-colors shadow-sm"
             title="AI 解读结果"
           >
             <MessageSquareText className="w-4 h-4" />
@@ -299,7 +303,7 @@ const QueryResult = ({
           </button>
           <button
             onClick={() => openAi('chart')}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-medium transition-colors"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm font-medium transition-colors shadow-sm"
             title="图表建议"
           >
             <BarChart3 className="w-4 h-4" />
@@ -307,50 +311,57 @@ const QueryResult = ({
           </button>
           <button
             onClick={() => openAi('next')}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium transition-colors shadow-sm"
             title="生成下一步查询"
           >
             <ArrowRight className="w-4 h-4" />
             <span>下一步</span>
           </button>
+          
+          <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
+
           <button
             onClick={handleCopy}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors"
+            className="flex items-center space-x-1 px-3 py-1.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-white border border-gray-300 dark:border-transparent rounded text-sm transition-colors shadow-sm"
             title="复制为 CSV"
           >
-            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="w-4 h-4 text-green-500 dark:text-green-400" /> : <Copy className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
             <span>{copied ? '已复制' : '复制'}</span>
           </button>
 
           <div className="relative">
             <button
               onClick={() => setExportOpen((v) => !v)}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-white border border-gray-300 dark:border-transparent rounded text-sm transition-colors shadow-sm"
               title="导出"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               <span>导出</span>
+              <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${exportOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {exportOpen && (
-              <div className="absolute top-full right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10">
+              <div className="absolute top-full right-0 mt-2 w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 overflow-hidden animate-in fade-in zoom-in duration-200">
                 <button
                   onClick={() => handleExport('csv')}
-                  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-t-lg"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between group"
                 >
-                  CSV
+                  <span>CSV</span>
+                  <span className="text-[10px] bg-gray-100 dark:bg-gray-600 px-1 rounded text-gray-400 group-hover:bg-white dark:group-hover:bg-gray-500">.csv</span>
                 </button>
                 <button
                   onClick={() => handleExport('json')}
-                  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between group"
                 >
-                  JSON
+                  <span>JSON</span>
+                  <span className="text-[10px] bg-gray-100 dark:bg-gray-600 px-1 rounded text-gray-400 group-hover:bg-white dark:group-hover:bg-gray-500">.json</span>
                 </button>
                 <button
                   onClick={() => handleExport('excel')}
-                  className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 rounded-b-lg"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between group"
                 >
-                  Excel
+                  <span>Excel</span>
+                  <span className="text-[10px] bg-gray-100 dark:bg-gray-600 px-1 rounded text-gray-400 group-hover:bg-white dark:group-hover:bg-gray-500">.xlsx</span>
                 </button>
               </div>
             )}
@@ -359,39 +370,38 @@ const QueryResult = ({
       </div>
 
       {/* 表格 */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-800 sticky top-0">
+      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
+        <table className="w-full text-sm border-collapse">
+          <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 shadow-sm">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 w-12">
+              <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 w-12 border-b border-gray-200 dark:border-gray-700">
                 #
               </th>
               {result.columns.map((column, index) => (
                 <th
                   key={index}
                   onClick={() => handleSort(index)}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-400 cursor-pointer hover:bg-gray-700 transition-colors select-none"
+                  className="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none border-b border-gray-200 dark:border-gray-700"
                 >
-                  <div className="flex items-center space-x-1">
-                    <span>{column}</span>
-                    {sortColumn === index && (
-                      <span className="text-blue-400">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
+                  <div className="flex items-center space-x-1 group">
+                    <span className="truncate">{column}</span>
+                    <div className={`flex flex-col -space-y-1 opacity-0 group-hover:opacity-100 transition-opacity ${sortColumn === index ? 'opacity-100' : ''}`}>
+                      <ChevronDown className={`w-3 h-3 transform rotate-180 ${sortColumn === index && sortDirection === 'asc' ? 'text-blue-500' : 'text-gray-300'}`} />
+                      <ChevronDown className={`w-3 h-3 ${sortColumn === index && sortDirection === 'desc' ? 'text-blue-500' : 'text-gray-300'}`} />
+                    </div>
                   </div>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-800">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {processedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-800/50 transition-colors">
-                <td className="px-4 py-2 text-gray-500 text-xs font-mono">
+              <tr key={rowIndex} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 text-[10px] font-mono border-r border-gray-50 dark:border-gray-800/50">
                   {(currentPage - 1) * rowsPerPage + rowIndex + 1}
                 </td>
                 {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-4 py-2">
+                  <td key={cellIndex} className="px-4 py-2.5 font-sans whitespace-nowrap overflow-hidden text-ellipsis max-w-xs">
                     {formatValue(cell)}
                   </td>
                 ))}
@@ -402,16 +412,16 @@ const QueryResult = ({
       </div>
 
       {/* 分页 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-t border-gray-700">
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-400">每页显示:</span>
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-inner">
+        <div className="flex items-center space-x-3">
+          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">每页显示:</span>
           <select
             value={pageSize}
             onChange={(e) => {
               setPageSize(parseInt(e.target.value));
               setCurrentPage(1);
             }}
-            className="bg-gray-700 text-white text-xs rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="bg-white dark:bg-gray-700 text-gray-700 dark:text-white text-xs rounded border border-gray-200 dark:border-gray-600 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
           >
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -420,24 +430,26 @@ const QueryResult = ({
           </select>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="p-1 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4 text-gray-400" />
-          </button>
-          <span className="text-xs text-gray-400">
-            第 {currentPage} / {totalPages || 1} 页
-          </span>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages || totalPages === 0}
-            className="p-1 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </button>
+        <div className="flex items-center space-x-4">
+          <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+            第 <span className="text-gray-900 dark:text-white font-bold">{currentPage}</span> / {totalPages || 1} 页
+          </div>
+          <div className="flex items-center bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 shadow-sm overflow-hidden">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-r border-gray-100 dark:border-gray-600"
+            >
+              <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
         </div>
       </div>
 

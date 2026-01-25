@@ -141,42 +141,47 @@ const RAGUploadWithOCR = ({
   return (
     <div className="space-y-4">
       {/* OCR 开关 */}
-      <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 cursor-pointer">
+      <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/50">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer group">
             <input
               type="checkbox"
               checked={ocrMode}
               onChange={(e) => setOcrMode(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-indigo-500"
+              className="w-4 h-4 text-indigo-600 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 rounded focus:ring-indigo-500 transition-colors"
             />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
+            <span className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
               启用 OCR 识别
             </span>
           </label>
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            (自动识别图片和 PDF 中的文字)
+          <span className="text-[10px] uppercase font-black text-indigo-500/60 dark:text-indigo-400/40 tracking-widest bg-white dark:bg-indigo-950/30 px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-800/30">
+            Auto-Detect
           </span>
         </div>
         <button
           onClick={() => setShowSettings(!showSettings)}
-          className="p-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-800 rounded-lg transition-colors"
+          className={`p-1.5 rounded-lg transition-all ${
+            showSettings 
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+              : 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 border border-indigo-100 dark:border-indigo-800/50'
+          }`}
+          title="OCR 设置"
         >
-          <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <Settings className="w-4 h-4" />
         </button>
       </div>
 
       {/* OCR 设置 */}
       {showSettings && (
-        <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
+        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              OCR 技术
+            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
+              OCR Engine / 技术引擎
             </label>
             <select
               value={ocrTech}
               onChange={(e) => setOcrTech(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
             >
               <option value="lighton">LightOnOCR-2-1B (推荐)</option>
               <option value="tesseract">Tesseract OCR</option>
@@ -184,11 +189,21 @@ const RAGUploadWithOCR = ({
               <option value="easyocr">EasyOCR</option>
             </select>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>• LightOnOCR-2-1B: 支持 Markdown 输出,数学公式识别</p>
-            <p>• Tesseract: 开源,多语言支持</p>
-            <p>• PaddleOCR: 中文识别优秀</p>
-            <p>• EasyOCR: 简单易用</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { label: 'LightOn', desc: 'Markdown支持, 公式识别', color: 'bg-blue-500' },
+              { label: 'Paddle', desc: '中文识别优秀', color: 'bg-emerald-500' },
+              { label: 'Tesseract', desc: '开源多语言支持', color: 'bg-purple-500' },
+              { label: 'EasyOCR', desc: '简单易用', color: 'bg-orange-500' }
+            ].map((tech, i) => (
+              <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
+                <div className={`w-1 h-full min-h-[24px] rounded-full ${tech.color}`} />
+                <div>
+                  <p className="text-[10px] font-bold text-gray-900 dark:text-white leading-none mb-1">{tech.label}</p>
+                  <p className="text-[9px] text-gray-500 dark:text-gray-500">{tech.desc}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -197,8 +212,10 @@ const RAGUploadWithOCR = ({
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 hover:border-indigo-500 dark:hover:border-indigo-400 transition-colors"
+        className="group relative border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-[2rem] p-10 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10 transition-all duration-300 overflow-hidden"
       >
+        <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+        
         <input
           type="file"
           ref={fileInputRef}
@@ -209,24 +226,24 @@ const RAGUploadWithOCR = ({
         />
         <label
           htmlFor="rag-file-upload-with-ocr"
-          className="flex flex-col items-center justify-center cursor-pointer"
+          className="relative flex flex-col items-center justify-center cursor-pointer"
         >
-          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-            <Upload className="w-8 h-8 text-gray-400" />
+          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-inner border border-gray-200 dark:border-gray-700">
+            <Upload className="w-10 h-10 text-gray-400 group-hover:text-indigo-500 transition-colors" />
           </div>
-          <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+          <p className="text-lg font-black text-gray-900 dark:text-white mb-2 tracking-tight">
             点击选择或拖拽文件
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs text-center leading-relaxed">
             支持代码、Markdown、PDF、图片等
-            {ocrMode && ' · 图片/PDF 将自动进行 OCR 识别'}
+            {ocrMode && <span className="block mt-1 font-bold text-indigo-500 dark:text-indigo-400">✨ 图片/PDF 将自动进行智能 OCR 识别</span>}
           </p>
         </label>
       </div>
 
       {/* 文件列表 */}
       {files.length > 0 && (
-        <div className="space-y-2 max-h-60 overflow-y-auto">
+        <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
           {files.map((file, index) => {
             const fileId = `${file.name}-${index}`;
             const isProcessing = processing[fileId];
@@ -235,31 +252,40 @@ const RAGUploadWithOCR = ({
             return (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                className="group flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-indigo-200 dark:hover:border-indigo-800 hover:shadow-lg transition-all duration-300"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 transition-colors border border-gray-100 dark:border-gray-800">
                     {getFileIcon(file)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
                       {file.name}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {(file.size / 1024).toFixed(2)} KB
-                      {canOCR && ' · 将进行 OCR 识别'}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">
+                        {(file.size / 1024).toFixed(2)} KB
+                      </span>
+                      {canOCR && (
+                        <span className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter">
+                          Ready for OCR
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   {isProcessing && (
-                    <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                    <div className="flex items-center gap-2 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800/30">
+                      <Loader2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Processing</span>
+                    </div>
                   )}
                   <button
                     onClick={() => handleRemoveFile(index)}
-                    className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                    className="p-2 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl transition-all"
                   >
-                    <X className="w-4 h-4 text-gray-400 hover:text-red-600 dark:hover:text-red-400" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -273,22 +299,23 @@ const RAGUploadWithOCR = ({
         <button
           onClick={handleUploadAll}
           disabled={disabled || Object.keys(processing).length > 0}
-          className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="group w-full p-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-[1.5rem] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-xl shadow-indigo-600/20 hover:shadow-indigo-600/40 active:scale-95"
         >
           {Object.keys(processing).length > 0 ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              处理中...
+              <span className="tracking-tight uppercase text-sm">Synchronizing Data...</span>
             </>
           ) : (
             <>
-              <Sparkles className="w-5 h-5" />
-              上传{ocrMode ? '并识别' : ''}
+              <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
+              <span className="tracking-tight uppercase text-sm">上传并集成{ocrMode ? '识别' : ''}结果</span>
             </>
           )}
         </button>
       )}
     </div>
+  );
   );
 };
 

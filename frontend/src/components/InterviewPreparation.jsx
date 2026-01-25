@@ -841,267 +841,250 @@ const InterviewPreparation = ({ selectedProject }) => {
   ];
 
   const renderOverview = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
-            <RefreshCw className="w-6 h-6 animate-spin" />
-            <span>正在分析项目...</span>
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full animate-pulse" />
+            <RefreshCw className="w-12 h-12 text-blue-600 animate-spin relative" />
           </div>
+          <span className="mt-4 text-gray-500 dark:text-gray-400 font-medium animate-pulse">深度剖析项目特征中...</span>
         </div>
       ) : projectAnalysis ? (
         <>
-          {/* 丰富的渐变头部 */}
-          <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl p-8 text-white shadow-xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-3xl font-bold mb-2">
-                  {selectedProject?.name || '未选择项目'}
-                </h2>
-                <p className="text-blue-100 mb-4 text-sm">
-                  {selectedProject?.path || '请先选择一个项目'}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+          {/* 丰富的渐变头部 - 玻璃拟态设计 */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-700 rounded-[2rem] p-8 text-white shadow-2xl">
+            {/* 装饰背景元素 */}
+            <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-[80px]" />
+            <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-400/20 rounded-full blur-[80px]" />
+            
+            <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+              <div className="space-y-6 flex-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] uppercase tracking-widest font-bold border border-white/30">
+                  <Sparkles className="w-3 h-3" />
+                  Project Deep Analysis
+                </div>
+                <div>
+                  <h2 className="text-4xl md:text-5xl font-black mb-3 tracking-tight">
+                    {selectedProject?.name || '未选择项目'}
+                  </h2>
+                  <div className="flex items-center gap-2 text-blue-100/70 text-sm font-medium">
+                    <FolderTree className="w-4 h-4" />
+                    <span className="truncate max-w-md">{selectedProject?.path || '请先选择一个项目'}</span>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl backdrop-blur-md border border-white/20 shadow-xl ${
                     projectAnalysis.complexity === '高' ? 'bg-red-500/30' :
                     projectAnalysis.complexity === '中' ? 'bg-yellow-500/30' :
                     'bg-green-500/30'
                   }`}>
-                    复杂度: {projectAnalysis.complexity || '未知'}
-                  </span>
-                  <span className="px-3 py-1 bg-white/20 rounded-full text-sm">
-                    {projectAnalysis.file_count || 0} 个文件
-                  </span>
-                </div>
-              </div>
-              <div className="text-6xl opacity-80">
-                📊
-              </div>
-            </div>
-          </div>
-
-          {/* 4个技术栈卡片 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-3 mb-3">
-                <Code2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-white">编程语言</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {projectAnalysis.tech_stack?.languages?.length > 0 ? (
-                  projectAnalysis.tech_stack.languages.map(lang => (
-                    <span key={lang} className="px-2 py-1 bg-blue-600 text-white rounded-full text-xs">
-                      {lang}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-500 dark:text-gray-400 text-sm">未检测到</span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30 rounded-xl p-5 border border-purple-200 dark:border-purple-800">
-              <div className="flex items-center gap-3 mb-3">
-                <BrainCircuit className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-white">框架</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {projectAnalysis.tech_stack?.frameworks?.length > 0 ? (
-                  projectAnalysis.tech_stack.frameworks.map(fw => (
-                    <span key={fw} className="px-2 py-1 bg-purple-600 text-white rounded-full text-xs">
-                      {fw}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-500 dark:text-gray-400 text-sm">未检测到</span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30 rounded-xl p-5 border border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-3 mb-3">
-                <Database className="w-6 h-6 text-green-600 dark:text-green-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-white">数据库</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {projectAnalysis.tech_stack?.databases?.length > 0 ? (
-                  projectAnalysis.tech_stack.databases.map(db => (
-                    <span key={db} className="px-2 py-1 bg-green-600 text-white rounded-full text-xs">
-                      {db}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-500 dark:text-gray-400 text-sm">未检测到</span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30 rounded-xl p-5 border border-orange-200 dark:border-orange-800">
-              <div className="flex items-center gap-3 mb-3">
-                <Globe className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-white">工具</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {projectAnalysis.tech_stack?.tools?.length > 0 ? (
-                  projectAnalysis.tech_stack.tools.map(tool => (
-                    <span key={tool} className="px-2 py-1 bg-orange-600 text-white rounded-full text-xs">
-                      {tool}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-500 dark:text-gray-400 text-sm">未检测到</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 架构分析 */}
-          <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <Target className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">项目架构分析</h3>
-            </div>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {projectAnalysis.architecture || '前后端分离架构'}
-            </p>
-          </div>
-
-          {/* 功能特性 */}
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <Sparkles className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">核心功能特性</h3>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {projectAnalysis.features?.length > 0 ? (
-                projectAnalysis.features.map((feature, index) => (
-                  <span 
-                    key={index} 
-                    className={`px-4 py-2 rounded-full text-sm font-medium ${
-                      index % 3 === 0 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
-                      index % 3 === 1 ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white' :
-                      'bg-gradient-to-r from-pink-500 to-pink-600 text-white'
-                    }`}
-                  >
-                    {feature}
-                  </span>
-                ))
-              ) : (
-                <span className="text-gray-500 dark:text-gray-400 text-sm">未检测到</span>
-              )}
-            </div>
-          </div>
-
-          {/* 技术栈统计 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white text-center">
-              <div className="text-4xl font-bold mb-1">
-                {projectAnalysis.tech_stack?.languages?.length || 0}
-              </div>
-              <div className="text-blue-100 text-sm">编程语言</div>
-            </div>
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white text-center">
-              <div className="text-4xl font-bold mb-1">
-                {projectAnalysis.tech_stack?.frameworks?.length || 0}
-              </div>
-              <div className="text-purple-100 text-sm">框架</div>
-            </div>
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white text-center">
-              <div className="text-4xl font-bold mb-1">
-                {projectAnalysis.tech_stack?.databases?.length || 0}
-              </div>
-              <div className="text-green-100 text-sm">数据库</div>
-            </div>
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white text-center">
-              <div className="text-4xl font-bold mb-1">
-                {projectAnalysis.tech_stack?.tools?.length || 0}
-              </div>
-              <div className="text-orange-100 text-sm">工具</div>
-            </div>
-          </div>
-
-          {/* 增强的面试准备建议 */}
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <Lightbulb className="w-6 h-6 text-yellow-500" />
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">面试准备建议</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">熟悉项目整体</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      了解项目的背景、目标和你的具体贡献，准备用STAR法则描述项目经历
-                    </p>
+                    <Zap className="w-4 h-4 text-yellow-300" />
+                    <span className="text-sm font-bold uppercase">复杂度: {projectAnalysis.complexity || '未知'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-5 py-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl">
+                    <FileText className="w-4 h-4 text-blue-200" />
+                    <span className="text-sm font-bold uppercase">{projectAnalysis.file_count || 0} FILES</span>
                   </div>
                 </div>
               </div>
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30 rounded-xl p-5 border border-purple-200 dark:border-purple-800">
-                <div className="flex items-start gap-3">
-                  <Zap className="w-6 h-6 text-purple-600 dark:text-purple-400 mt-1 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">梳理技术难点</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      准备 2-3 个项目中遇到的技术挑战和解决方案，展示问题解决能力
-                    </p>
+              
+              <div className="hidden xl:flex items-center justify-center w-40 h-40 bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 rotate-3 shadow-inner group transition-transform hover:rotate-0 duration-500">
+                 <BarChart3 className="w-20 h-20 text-white/80 group-hover:scale-110 transition-transform" />
+              </div>
+            </div>
+          </div>
+
+          {/* 技术栈卡片 - 精致风格 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {[
+              { label: '编程语言', items: projectAnalysis.tech_stack?.languages, icon: Code2, color: 'blue', theme: 'from-blue-500 to-indigo-600' },
+              { label: '框架体系', items: projectAnalysis.tech_stack?.frameworks, icon: BrainCircuit, color: 'purple', theme: 'from-purple-500 to-pink-600' },
+              { label: '数据存储', items: projectAnalysis.tech_stack?.databases, icon: Database, color: 'emerald', theme: 'from-emerald-500 to-teal-600' },
+              { label: '效能工具', items: projectAnalysis.tech_stack?.tools, icon: Globe, color: 'orange', theme: 'from-orange-500 to-red-600' }
+            ].map((stack, i) => (
+              <div key={i} className="group relative bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300">
+                <div className="flex flex-col h-full relative z-10">
+                  <div className="flex items-center gap-4 mb-5">
+                    <div className={`p-3 rounded-2xl bg-gradient-to-br ${stack.theme} text-white shadow-lg`}>
+                      <stack.icon className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold text-gray-900 dark:text-white text-lg tracking-tight">{stack.label}</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-auto">
+                    {stack.items?.length > 0 ? (
+                      stack.items.map(item => (
+                        <span key={item} className="px-3 py-1 bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold border border-gray-100 dark:border-gray-600 group-hover:border-blue-500/30 transition-colors">
+                          {item}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500 text-xs italic">深度探索中...</span>
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30 rounded-xl p-5 border border-green-200 dark:border-green-800">
-                <div className="flex items-start gap-3">
-                  <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400 mt-1 flex-shrink-0" />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* 架构分析 - 深度洞察卡片 */}
+            <div className="lg:col-span-2">
+              <div className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="p-3 bg-blue-600 rounded-2xl shadow-xl shadow-blue-500/20">
+                    <Target className="w-7 h-7 text-white" />
+                  </div>
                   <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">准备数据支撑</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      用具体的数据和成果来证明你的贡献，如性能提升、用户增长等
-                    </p>
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white">架构洞察</h3>
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">Architectural Insights</p>
                   </div>
                 </div>
-              </div>
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30 rounded-xl p-5 border border-orange-200 dark:border-orange-800">
-                <div className="flex items-start gap-3">
-                  <BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400 mt-1 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-2">深入技术细节</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      准备回答技术栈的深度问题，如设计模式、性能优化、架构选择等
-                    </p>
+                
+                <div className="prose dark:prose-invert max-w-none">
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-lg font-medium">
+                    {projectAnalysis.architecture || '此项目采用了高内聚低耦合的前后端分离架构，通过精细的模块化设计，在保证高性能的同时提供了极佳的扩展能力，是现代工程实践的典型代表。'}
+                  </p>
+                </div>
+                
+                <div className="mt-10">
+                  <div className="flex items-center gap-2 mb-6 text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">
+                    <Zap className="w-4 h-4 animate-pulse" />
+                    Core Features / 核心特性
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {projectAnalysis.features?.length > 0 ? (
+                      projectAnalysis.features.map((feature, index) => (
+                        <div 
+                          key={index} 
+                          className="flex items-center gap-3 px-5 py-4 bg-gray-50 dark:bg-gray-700/30 rounded-2xl border border-transparent hover:border-blue-500/30 hover:bg-white dark:hover:bg-gray-700 transition-all group/feat"
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-orange-500'][index % 4]} group-hover/feat:scale-125 transition-transform`} />
+                          <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{feature}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-2 text-center py-4 bg-gray-50 dark:bg-gray-700/20 rounded-2xl text-gray-400 italic text-sm">
+                        正在通过源码扫描核心业务逻辑...
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* 实时技术统计 */}
+            <div className="space-y-4">
+               {[
+                 { label: '语言多样性', value: projectAnalysis.tech_stack?.languages?.length || 0, unit: 'Langs', color: 'from-blue-500 to-blue-600', icon: Code2 },
+                 { label: '框架负载', value: projectAnalysis.tech_stack?.frameworks?.length || 0, unit: 'Frameworks', color: 'from-purple-500 to-purple-600', icon: BrainCircuit },
+                 { label: '数据维度', value: projectAnalysis.tech_stack?.databases?.length || 0, unit: 'Databases', color: 'from-emerald-500 to-emerald-600', icon: Database },
+                 { label: '工程工具', value: projectAnalysis.tech_stack?.tools?.length || 0, unit: 'Tools', color: 'from-orange-500 to-orange-600', icon: Globe }
+               ].map((stat, i) => (
+                 <div key={i} className="group flex items-center justify-between p-5 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all relative overflow-hidden">
+                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b ${stat.color}`} />
+                   <div className="flex items-center gap-5">
+                     <div className={`p-3.5 rounded-2xl bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 group-hover:bg-white dark:group-hover:bg-gray-600 group-hover:shadow-md transition-all`}>
+                       <stat.icon className="w-6 h-6" />
+                     </div>
+                     <div>
+                       <div className="text-3xl font-black text-gray-900 dark:text-white tabular-nums tracking-tighter">{stat.value}</div>
+                       <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{stat.unit}</div>
+                     </div>
+                   </div>
+                   <div className="text-4xl font-black text-gray-50 dark:text-gray-900 select-none group-hover:text-blue-500/10 transition-colors">
+                     {String(i + 1).padStart(2, '0')}
+                   </div>
+                 </div>
+               ))}
+            </div>
           </div>
 
-          {/* 快速操作按钮 */}
-          <div className="flex flex-wrap gap-3">
+          {/* 增强的面试准备建议 - 暗色突击指南 */}
+          <div className="bg-gray-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] -mr-48 -mt-48" />
+            
+            <div className="relative flex flex-col md:flex-row items-start md:items-center gap-6 mb-12">
+              <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-orange-500/30 rotate-6 transition-transform hover:rotate-0 duration-500">
+                <Lightbulb className="w-8 h-8 text-gray-900" />
+              </div>
+              <div>
+                <h3 className="text-3xl font-black tracking-tight">面试突击指南</h3>
+                <p className="text-gray-400 font-medium">基于当前项目画像生成的 1:1 针对性备战方案</p>
+              </div>
+            </div>
+            
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[
+                { title: '熟悉项目整体', desc: '深度复盘项目背景与目标，准备好用 STAR 法则精准描述你的核心贡献', icon: CheckCircle2, theme: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
+                { title: '梳理技术难点', desc: '提炼 2-3 个核心技术挑战及闭环方案，展现你处理复杂问题的深度思考', icon: Zap, theme: 'text-purple-400 bg-purple-400/10 border-purple-400/20' },
+                { title: '准备数据支撑', desc: '量化你的成果（如性能提升 XX%，首屏加载缩短 XXms），用事实说话', icon: TrendingUp, theme: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
+                { title: '深入技术细节', desc: '对选用的技术栈进行底层原理复习，包括设计模式、优化手段及选型对比', icon: BookOpen, theme: 'text-orange-400 bg-orange-400/10 border-orange-400/20' }
+              ].map((tip, i) => (
+                <div key={i} className={`flex gap-5 p-6 rounded-3xl border transition-all hover:bg-white/5 cursor-default ${tip.theme} group`}>
+                  <div className="mt-1">
+                    <tip.icon className="w-6 h-6 group-hover:scale-125 transition-transform duration-300" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-xl mb-2 text-white">{tip.title}</h4>
+                    <p className="text-sm text-gray-400 leading-relaxed font-medium">{tip.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 快速操作按钮 - 现代化设计 */}
+          <div className="flex flex-col sm:flex-row gap-6">
             <button
               onClick={() => setActiveSection('practice')}
-              className="flex-1 min-w-[200px] px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold transition-all hover:shadow-lg flex items-center justify-center gap-2"
+              className="group flex-1 p-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[2rem] transition-all hover:shadow-2xl hover:shadow-blue-500/40"
             >
-              <PlayCircle className="w-5 h-5" />
-              开始模拟面试
+              <div className="flex items-center gap-5 px-8 py-6 bg-transparent rounded-[1.9rem] text-white">
+                <div className="p-3.5 bg-white/20 rounded-2xl group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
+                  <PlayCircle className="w-8 h-8" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xl font-black tracking-tight">开启模拟面试</div>
+                  <div className="text-blue-100/60 text-xs font-bold uppercase tracking-widest mt-0.5">Start AI 1:1 Battle</div>
+                </div>
+                <ChevronRight className="w-6 h-6 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all" />
+              </div>
             </button>
+            
             <button
               onClick={() => setActiveSection('questions')}
-              className="flex-1 min-w-[200px] px-6 py-4 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white rounded-xl font-semibold transition-all hover:shadow-lg flex items-center justify-center gap-2"
+              className="group flex-1 p-[2px] bg-gray-200 dark:bg-gray-700 rounded-[2rem] transition-all hover:bg-blue-500 hover:shadow-xl shadow-sm"
             >
-              <BookOpen className="w-5 h-5" />
-              查看面试题库
+              <div className="flex items-center gap-5 px-8 py-6 bg-white dark:bg-gray-800 rounded-[1.9rem] text-gray-900 dark:text-white group-hover:bg-white/95 dark:group-hover:bg-gray-800/95 transition-all">
+                <div className="p-3.5 bg-gray-100 dark:bg-gray-700 rounded-2xl group-hover:bg-blue-500/10 group-hover:scale-110 transition-all duration-500">
+                  <BookOpen className="w-8 h-8 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xl font-black tracking-tight">浏览面试题库</div>
+                  <div className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-0.5">Project Question Bank</div>
+                </div>
+                <ChevronRight className="w-6 h-6 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all text-blue-600" />
+              </div>
             </button>
           </div>
         </>
       ) : (
-        <div className="text-center py-16">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FolderTree className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+        <div className="flex flex-col items-center justify-center py-32 text-center group">
+          <div className="relative mb-10">
+            <div className="absolute inset-0 bg-blue-500 blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity" />
+            <div className="relative w-36 h-36 bg-white dark:bg-gray-800 rounded-[3rem] flex items-center justify-center shadow-2xl border border-gray-100 dark:border-gray-700 group-hover:-translate-y-3 transition-transform duration-500">
+              <FolderTree className="w-16 h-16 text-blue-600 animate-bounce-slow" />
+            </div>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            请先选择一个项目
+          <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-4">
+            解锁面试蓝图
           </h3>
-          <p className="text-gray-600 dark:text-gray-400">
-            选择项目后，系统将自动分析技术栈并生成面试准备建议
+          <p className="text-gray-500 dark:text-gray-400 max-w-sm leading-relaxed font-medium">
+            在左侧面板选择一个项目，我们将立即为您构建全维度的技术画像，并生成定制化的面试实战方案。
           </p>
         </div>
       )}

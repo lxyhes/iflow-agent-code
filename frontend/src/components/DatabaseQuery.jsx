@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Database, Plus, Settings, X, AlertCircle } from 'lucide-react';
+import { Database, Plus, Settings, X, AlertCircle, ChevronDown } from 'lucide-react';
 import SqlEditor from './database/SqlEditor';
 import TableBrowser from './database/TableBrowser';
 import QueryResult from './database/QueryResult';
@@ -517,16 +517,19 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
           )}
 
           {connections.length > 0 && !selectedConnection && (
-            <select
-              value=""
-              onChange={(e) => e.target.value && handleSelectConnection(e.target.value)}
-              className="bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">选择连接...</option>
-              {connections.map(conn => (
-                <option key={conn} value={conn}>{conn}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value=""
+                onChange={(e) => e.target.value && handleSelectConnection(e.target.value)}
+                className="appearance-none bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm rounded pl-3 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="">选择连接...</option>
+                {connections.map(conn => (
+                  <option key={conn} value={conn}>{conn}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
           )}
 
           <button
@@ -679,7 +682,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
 
               {/* 项目选择器 - 所有数据库类型都支持 */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   选择项目（可选）
                 </label>
                 <select
@@ -690,7 +693,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                     // 总是加载项目配置，不管当前是什么数据库类型
                     loadProjectDatabases(projectName);
                   }}
-                  className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">选择项目...</option>
                   {projects.map(project => (
@@ -699,7 +702,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-medium">
                   选择项目后，可以保存数据库配置到该项目
                 </p>
               </div>
@@ -707,27 +710,27 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
               {/* 已保存的配置 */}
               {selectedProject && savedConfigs.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     已保存的配置
                   </label>
                   <div className="space-y-2">
                     {savedConfigs.map((config) => (
-                      <div key={config.name} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                      <div key={config.name} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
                                           <div className="flex-1">
-                                            <div className="text-sm font-medium text-gray-900 dark:text-white">{config.name}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">                            {config.db_type.toUpperCase()} - {new Date(config.created_at).toLocaleString()}
+                                            <div className="text-sm font-bold text-gray-900 dark:text-white">{config.name}</div>
+                                            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono mt-0.5">                            {config.db_type.toUpperCase()} - {new Date(config.created_at).toLocaleString()}
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => handleLoadConfig(config)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-sm transition-colors"
                           >
                             加载
                           </button>
                           <button
                             onClick={() => handleDeleteConfig(config.name)}
-                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                            className="px-3 py-1.5 bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 border border-red-200 dark:border-transparent hover:bg-red-50 dark:hover:bg-red-900/20 text-xs font-bold rounded transition-colors"
                           >
                             删除
                           </button>
@@ -741,14 +744,14 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
               {/* 配置文件中的数据库连接 - 对所有数据库类型显示 */}
               {selectedProject && projectConfigs.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     配置文件中的数据库连接
                   </label>
                   <div className="space-y-2">
                     {projectConfigs.map((conn, index) => (
                       <div 
                         key={index}
-                        className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        className="p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-white dark:hover:bg-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition-all"
                         onClick={() => {
                           console.log('=== 点击配置连接 ===');
                           console.log('完整连接对象:', JSON.stringify(conn, null, 2));
@@ -788,41 +791,41 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2">
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              <div className="text-sm font-bold text-gray-900 dark:text-white">
                                 {conn.name}
                               </div>
                               {conn.source_type && (
-                                <span className="px-2 py-0.5 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded">
-                                  {conn.source_type.toUpperCase()}
+                                <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-[10px] font-bold rounded uppercase">
+                                  {conn.source_type}
                                 </span>
                               )}
                               {conn.source_file.includes('.dev.') && (
-                                <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded">
+                                <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold rounded">
                                   DEV
                                 </span>
                               )}
                               {conn.source_file.includes('.pro.') && (
-                                <span className="px-2 py-0.5 bg-yellow-600 text-white text-xs rounded">
+                                <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-[10px] font-bold rounded">
                                   PRO
                                 </span>
                               )}
                               {conn.source_file.includes('.test.') && (
-                                <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
+                                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold rounded">
                                   TEST
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">
+                            <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 font-medium">
                               来源: {conn.source_file}
                             </div>
                             {conn.config && (
-                              <div className="text-xs text-gray-400 mt-1">
+                              <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 font-mono">
                                 {conn.config.host && `${conn.config.host}:${conn.config.port}`}
                                 {conn.config.database && ` / ${conn.config.database}`}
                               </div>
                             )}
                           </div>
-                          <div className="text-blue-400 text-xs ml-2">点击加载</div>
+                          <div className="text-blue-500 dark:text-blue-400 text-xs font-bold ml-2">点击加载</div>
                         </div>
                       </div>
                     ))}
@@ -836,11 +839,14 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                   {/* 数据库选择器 */}
                   {selectedProject && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         选择项目数据库
                       </label>
                       {isLoadingProjectDatabases ? (
-                        <div className="text-sm text-gray-500 dark:text-gray-400">加载中...</div>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>加载中...</span>
+                        </div>
                       ) : projectDatabases.length > 0 ? (
                         <select
                           value={dbPath}
@@ -851,7 +857,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                               setConnectionName(selectedDb.name);
                             }
                           }}
-                          className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">选择数据库...</option>
                           {projectDatabases.map(db => (
@@ -862,14 +868,16 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                           ))}
                         </select>
                       ) : (
-                        <div className="text-sm text-gray-400">项目中未找到数据库文件</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 text-center">
+                          项目中未找到数据库文件
+                        </div>
                       )}
                     </div>
                   )}
 
                   {/* 手动输入路径 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       或手动输入数据库路径
                     </label>
                     <input
@@ -877,7 +885,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbPath}
                       onChange={(e) => setDbPath(e.target.value)}
                       placeholder="例如: /path/to/database.db"
-                      className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </>
@@ -887,7 +895,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
               {dbType !== 'sqlite' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       主机地址
                     </label>
                     <input
@@ -895,12 +903,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbConfig.host}
                       onChange={(e) => setDbConfig(prev => ({ ...prev, host: e.target.value }))}
                       placeholder="例如: localhost"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       端口
                     </label>
                     <input
@@ -908,12 +916,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbConfig.port}
                       onChange={(e) => setDbConfig(prev => ({ ...prev, port: e.target.value }))}
                       placeholder="例如: 3306"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       数据库名称
                     </label>
                     <input
@@ -921,12 +929,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbConfig.database}
                       onChange={(e) => setDbConfig(prev => ({ ...prev, database: e.target.value }))}
                       placeholder="例如: mydb"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       用户名
                     </label>
                     <input
@@ -934,12 +942,12 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbConfig.username}
                       onChange={(e) => setDbConfig(prev => ({ ...prev, username: e.target.value }))}
                       placeholder="例如: root"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       密码
                     </label>
                     <input
@@ -947,7 +955,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                       value={dbConfig.password}
                       onChange={(e) => setDbConfig(prev => ({ ...prev, password: e.target.value }))}
                       placeholder="••••••••"
-                      className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -955,7 +963,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
 
               {/* 连接名称 */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   连接名称（可选）
                 </label>
                 <input
@@ -963,19 +971,19 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                   value={connectionName}
                   onChange={(e) => setConnectionName(e.target.value)}
                   placeholder="例如: My Database"
-                  className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-700">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setShowSaveConfig(true)}
                 disabled={!selectedProject || (
                   dbType === 'sqlite' ? !dbPath :
                   !dbConfig.host || !dbConfig.port || !dbConfig.database || !dbConfig.username || !dbConfig.password
                 )}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed font-bold"
               >
                 保存配置
               </button>
@@ -992,7 +1000,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                     setDbConfig({ host: '', port: '', database: '', username: '', password: '' });
                     setSavedConfigs([]);
                   }}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-white border border-gray-300 dark:border-transparent rounded-lg transition-colors font-bold"
                 >
                   取消
                 </button>
@@ -1002,7 +1010,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                     dbType === 'sqlite' ? !dbPath :
                     !dbConfig.host || !dbConfig.port || !dbConfig.database || !dbConfig.username || !dbConfig.password
                   }
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                 >
                   连接
                 </button>
@@ -1011,13 +1019,13 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
             
             {/* 保存配置对话框 */}
             {showSaveConfig && (
-  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">保存数据库配置</h2>
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[60]">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md overflow-hidden scale-in-center animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">保存数据库配置</h2>
             <button
-              onClick={() => setShowSaveModal(false)}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+              onClick={() => setShowSaveConfig(false)}
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
                       <X className="w-5 h-5" />
                     </button>
@@ -1025,7 +1033,7 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
 
                   <div className="p-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         配置名称
                       </label>
                       <input
@@ -1033,22 +1041,22 @@ const DatabaseQuery = ({ selectedProject: initialSelectedProject }) => {
                         value={configName}
                         onChange={(e) => setConfigName(e.target.value)}
                         placeholder="例如: 生产环境 MySQL"
-                        className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-gray-700">
+                  <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       onClick={() => setShowSaveConfig(false)}
-                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                      className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-white border border-gray-300 dark:border-transparent rounded-lg transition-colors font-bold"
                     >
                       取消
                     </button>
                     <button
                       onClick={handleSaveConfig}
                       disabled={!configName.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed font-bold"
                     >
                       保存
                     </button>
