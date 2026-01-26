@@ -17,9 +17,18 @@ import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 
 // Move formatTimeAgo outside component to avoid recreation on every render
-const formatTimeAgo = (dateString, currentTime) => {
-  const date = new Date(dateString);
-  const now = currentTime;
+const formatTimeAgo = (dateInput, currentTime) => {
+  if (!dateInput) return 'Never';
+  
+  let date;
+  if (typeof dateInput === 'number') {
+    // Handle unix timestamp (seconds or ms)
+    date = new Date(dateInput < 10000000000 ? dateInput * 1000 : dateInput);
+  } else {
+    date = new Date(dateInput);
+  }
+
+  const now = currentTime || new Date();
 
   // Check if date is valid
   if (isNaN(date.getTime())) {

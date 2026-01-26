@@ -268,18 +268,43 @@ class ProjectManager:
         for f in os.listdir(session_dir):
             if f.endswith(".jsonl"):
                 session_id = f.replace(".jsonl", "")
+                full_path = os.path.join(session_dir, f)
 
                 # 尝试获取自定义 summary
                 metadata = self._get_session_metadata(project_name, session_id)
+                summary = None
+                
                 if metadata and "summary" in metadata:
                     summary = metadata["summary"]
-                else:
-                    summary = f"Session {session_id[:8]}"
+                
+                # 如果没有元数据摘要，尝试从文件内容第一行获取
+                if not summary:
+                    try:
+                        with open(full_path, 'r', encoding='utf-8') as sf:
+                            first_line = sf.readline()
+                            if first_line:
+                                msg = json.loads(first_line)
+                                content = msg.get("content", "")
+                                if content:
+                                    # 取前 40 个字符作为摘要
+                                    summary = (content[:40] + '...') if len(content) > 40 else content
+                    except:
+                        pass
+                
+                # 最终兜底方案
+                if not summary:
+                    display_id = session_id.replace("session-", "")[:8]
+                    summary = f"Session {display_id}"
+
+                # 获取修改时间 (ISO 格式)
+                mtime = os.path.getmtime(full_path)
+                iso_time = datetime.fromtimestamp(mtime).isoformat()
 
                 sessions.append({
                     "id": session_id,
                     "summary": summary,
-                    "updated_at": time.ctime(os.path.getmtime(os.path.join(session_dir, f))),
+                    "lastActivity": iso_time,
+                    "updated_at": iso_time,
                     "__provider": "claude"
                 })
         # 按时间排序
