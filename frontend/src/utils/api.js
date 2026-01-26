@@ -197,4 +197,13 @@ export const api = {
     authenticatedFetch('/api/iflow/sync-mcp-servers', {
       method: 'POST',
     }),
+
+  // Chat endpoints
+  chat: {
+    generateSuggestions: (projectName, options = {}) =>
+      authenticatedFetch(`/api/chat/suggestions/${projectName}`, {
+        method: 'POST',
+        body: JSON.stringify(options),
+      }),
+  },
 };

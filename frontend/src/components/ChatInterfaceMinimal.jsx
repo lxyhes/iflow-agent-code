@@ -47,6 +47,7 @@ import ChatInput from './chat/ChatInput';
 import ChatToolbar from './chat/ChatToolbar';
 import EmptyState from './chat/EmptyState';
 import MessageList from './chat/MessageList';
+import PromptSuggestions from './chat/PromptSuggestions';
 
 /**
  * 🎨 极简布局的 Chat 界面
@@ -388,9 +389,9 @@ const ChatInterfaceMinimal = memo(({
                           if (!updated[i].tools) {
                             updated[i].tools = [];
                           }
-                          // 添加工具信息
+                          // 添加工具信息 - 使用时间戳 + 随机数确保唯一性
                           updated[i].tools.push({
-                            id: `tool-${Date.now()}`,
+                            id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                             toolName: data.tool_name,
                             toolType: data.tool_type,
                             toolLabel: data.label,
@@ -662,6 +663,19 @@ const ChatInterfaceMinimal = memo(({
       </div>
 
       {/* ============================================
+          💡 智能提示词建议（独立区域）
+      ============================================ */}
+      <PromptSuggestions
+        messages={chatState.chatMessages}
+        selectedProject={selectedProject}
+        onApplySuggestion={(suggestion) => {
+          inputState.setInput(suggestion);
+          inputState.textareaRef.current?.focus();
+        }}
+        isLoading={chatState.isLoading}
+      />
+
+      {/* ============================================
           ⌨️ 输入区域
       ============================================ */}
       <div className="flex items-center gap-3 w-full p-4 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-t border-gray-200/50 dark:border-gray-700/50">
@@ -672,6 +686,7 @@ const ChatInterfaceMinimal = memo(({
           selectedProject={selectedProject}
           selectedSession={selectedSession}
         />
+        
         <ChatInput
           input={inputState.input}
           isLoading={chatState.isLoading}
