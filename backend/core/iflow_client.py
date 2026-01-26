@@ -112,3 +112,34 @@ class IFlowWrapper:
 
 def create_iflow_client(cwd: str = None, mode: str = "yolo", model: str = None, mcp_servers: List[Dict[str, Any]] = None):
     return IFlowWrapper(cwd=cwd, approval_mode=mode, model=model, mcp_servers=mcp_servers)
+
+async def query_async(prompt: str, cwd: str = None, model: str = None, system_prompt: str = None, timeout: float = 300.0) -> str:
+    """异步执行简单的 AI 查询"""
+    target_model = model or "GLM-4.7"
+    target_cwd = cwd or os.getcwd()
+    iflow_path = find_iflow_path()
+    
+    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+    
+    logger.info(f"query_async: prompt={prompt[:50]}..., model={target_model}")
+    
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        _executor,
+        _run_iflow_sync,
+        iflow_path,
+        full_prompt,
+        target_model,
+        target_cwd
+    )
+    return result
+
+def query_sync(prompt: str, cwd: str = None, model: str = None, system_prompt: str = None, timeout: float = 300.0) -> str:
+    """同步版本的 AI 查询"""
+    target_model = model or "GLM-4.7"
+    target_cwd = cwd or os.getcwd()
+    iflow_path = find_iflow_path()
+    
+    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+    
+    return _run_iflow_sync(iflow_path, full_prompt, target_model, target_cwd)
