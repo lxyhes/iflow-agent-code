@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatRelativeTime, formatTime } from '../../utils/timeFormat';
 import IFlowLogo from '../IFlowLogo.jsx';
 import CursorLogo from '../CursorLogo.jsx';
 import MarkdownRenderer from '../markdown/MarkdownRenderer';
@@ -184,8 +185,11 @@ const AssistantMessage = ({
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool Usage' : message.type === 'plan' ? 'Plan' : (provider === 'cursor' ? 'Cursor' : 'IFlow')}
             </span>
-            <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <span 
+              className="text-xs text-gray-400 dark:text-gray-500 font-medium cursor-help"
+              title={new Date(message.timestamp).toLocaleString()}
+            >
+              {formatRelativeTime(message.timestamp)}
             </span>
           </div>
         )}

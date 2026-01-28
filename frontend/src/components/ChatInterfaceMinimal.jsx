@@ -41,6 +41,7 @@ import { useMessageActions } from '../hooks/useMessageActions';
 import { useChatInput } from '../hooks/useChatInput';
 import { useScrollManagement } from '../hooks/useScrollManagement';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useTokenUsage } from '../hooks/useTokenUsage';
 
 // 导入 UI 组件
 import ChatInput from './chat/ChatInput';
@@ -105,6 +106,9 @@ const ChatInterfaceMinimal = memo(({
 
   // 模型选择状态
   const [model] = React.useState(() => localStorage.getItem('iflow-model') || 'GLM-4.7');
+  
+  // Token 用量追踪
+  const tokenUsage = useTokenUsage(model, chatState.chatMessages);
 
   // ============================================
   // 🎯 2. 消息操作 Hook
@@ -697,6 +701,7 @@ const ChatInterfaceMinimal = memo(({
           handleKeyDown={inputState.handleKeyDown}
           handlePaste={inputState.handlePaste}
           handleSubmit={inputState.handleSubmit}
+          tokenUsage={tokenUsage}
           isInputFocused={inputState.isInputFocused}
           setIsInputFocused={inputState.setIsInputFocused}
           attachedImages={inputState.attachedImages}

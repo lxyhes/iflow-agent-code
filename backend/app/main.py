@@ -13,10 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.routers import files
 from backend.app.routers import frameworks
 from backend.app.routers import ocr
+from backend.app.routers import system
+from backend.app.routers import intelligence
 
 # Import legacy app to keep existing endpoints working
 # This also initializes the global variables in server.py
 from backend.server import app as legacy_app
+
+# Import new bootstrap system
+from backend.core.bootstrap import initialize_application
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -24,7 +29,10 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 
-app = FastAPI(title="IFlow Agent API")
+# Initialize application bootstrap
+initialize_application()
+
+app = FastAPI(title="IFlow Agent API", version="2.0.0")
 
 # Configure CORS - 从环境变量读取允许的来源
 import os
@@ -55,6 +63,8 @@ app.add_middleware(
 app.include_router(files.router)
 app.include_router(frameworks.router)
 app.include_router(ocr.router)
+app.include_router(system.router)
+app.include_router(intelligence.router)
 
 # Include legacy routes
 # This brings in all the endpoints defined in server.py

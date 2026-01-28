@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { formatRelativeTime, formatTime } from '../../utils/timeFormat';
 
 const UserMessage = ({ 
   message, 
@@ -28,10 +29,13 @@ const UserMessage = ({
       <div className="flex flex-col items-end flex-1 min-w-0">
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
             <span className="text-sm font-bold text-gray-700 dark:text-gray-200">You</span>
+            <span 
+              className="text-[11px] text-gray-400 dark:text-gray-500 font-medium cursor-help"
+              title={new Date(message.timestamp).toLocaleString()}
+            >
+              {formatRelativeTime(message.timestamp)}
+            </span>
           </div>
         )}
         

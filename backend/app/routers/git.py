@@ -6,6 +6,7 @@ Git 操作相关的 API 路由
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 import logging
+from typing import Optional
 
 from backend.core.git_service import git_service
 from backend.core.file_service import file_service
@@ -121,8 +122,7 @@ async def get_file_with_diff(project: str = Query(None), file: str = Query(None)
 # 辅助函数
 # ============================================
 
-def _get_project_path(project: str) -> str:
-    """获取项目路径（临时实现，后续需要与 project_registry 集成）"""
-    # TODO: 使用 project_registry 获取项目路径
-    # 目前先返回 project 字符串，后续需要修改
-    return project
+def _get_project_path(project: str) -> Optional[str]:
+    """获取项目路径 - 使用 ProjectRegistry 统一解析"""
+    from backend.core.project_registry import resolve_project_path
+    return resolve_project_path(project)

@@ -561,7 +561,7 @@ async def add_files_to_rag(project_name: str, request: Request):
 # 辅助函数
 # ============================================
 
-def _get_project_path(project: str) -> str:
-    """获取项目路径（临时实现，后续需要与 project_registry 集成）"""
-    # TODO: 使用 project_registry 获取项目路径
-    return project
+def _get_project_path(project: str) -> Optional[str]:
+    """获取项目路径 - 使用 ProjectRegistry 统一解析"""
+    from backend.core.project_registry import resolve_project_path
+    return resolve_project_path(project)
