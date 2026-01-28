@@ -237,8 +237,16 @@ const InterviewPreparation = ({ selectedProject }) => {
                   <div className="font-bold text-green-500">优</div>
                 </div>
               </div>
-              <button 
-                onClick={() => { setChatMessages(item.messages); setActiveSection('practice'); }}
+              <button
+                onClick={() => {
+                  // 为历史消息重新生成唯一 id，避免与现有消息冲突
+                  const messagesWithNewIds = item.messages?.map(msg => ({
+                    ...msg,
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${Math.random().toString(36).substr(2, 9)}`
+                  })) || [];
+                  setChatMessages(messagesWithNewIds);
+                  setActiveSection('practice');
+                }}
                 className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-blue-600 hover:text-white rounded-xl text-sm font-bold transition-all"
               >
                 回顾对话内容
