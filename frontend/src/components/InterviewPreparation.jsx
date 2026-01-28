@@ -161,9 +161,9 @@ const InterviewPreparation = ({ selectedProject }) => {
           chatMessages.map((msg, idx) => (
             <div key={msg.id || idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-2xl px-5 py-3 shadow-md ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-tl-none'}`}>
-                <ReactMarkdown className="prose dark:prose-invert prose-sm max-w-none">
-                  {msg.content}
-                </ReactMarkdown>
+                <div className="prose dark:prose-invert prose-sm max-w-none">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
               </div>
             </div>
           ))
