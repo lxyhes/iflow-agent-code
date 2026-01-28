@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿/**
  * useChatState Hook
  * 管理聊天的核心状态
  */
@@ -89,7 +89,8 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
       type: 'user',
       content,
       images,
-      timestamp: new Date()
+      timestamp: new Date(),
+      status: 'sending' // 'sending' | 'sent' | 'error'
     };
     
     setChatMessages(prev => [...prev, userMessage]);
@@ -103,6 +104,23 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
 
     return userMessage;
   }, [chatMessages, currentSessionId, selectedSession?.id, setChatMessages]);
+  
+  // 更新消息状态
+  const updateMessageStatus = useCallback((messageId, status) => {
+    setChatMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, status } : msg
+    ));
+  }, [setChatMessages]);
+  
+  // 重发消息
+  const retryMessage = useCallback((messageId) => {
+    const message = chatMessages.find(msg => msg.id === messageId);
+    if (message) {
+      updateMessageStatus(messageId, 'sending');
+      return message;
+    }
+    return null;
+  }, [chatMessages, updateMessageStatus]);
 
   // 添加错误消息
   const addErrorMessage = useCallback((error) => {

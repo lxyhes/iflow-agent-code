@@ -216,7 +216,8 @@ const ChatInterfaceMinimal = memo(({
         // ============================================
         // 💬 第二步：添加用户消息到列表
         // ============================================
-        chatState.addUserMessage(content, uploadedImages);
+        const userMessage = chatState.addUserMessage(content, uploadedImages);
+        const userMessageId = userMessage.id;
 
         // ============================================
         // 🧠 第三步：智能 RAG 检索（带缓存）
@@ -309,6 +310,11 @@ const ChatInterfaceMinimal = memo(({
         // ============================================
         chatState.setIsLoading(true);
         chatState.setCanAbortSession(true);
+        
+        // 标记消息为已发送
+        setTimeout(() => {
+          chatState.updateMessageStatus(userMessageId, 'sent');
+        }, 300);
 
         // 创建空的 AI 消息用于流式响应
         chatState.setChatMessages(prev => [...prev, {
@@ -565,6 +571,42 @@ const ChatInterfaceMinimal = memo(({
   ], []);
 
   // ============================================
+  // 📁 收集项目文件路径（用于 @ 提及功能）
+  // ============================================
+  const projectFilePaths = useMemo(() => {
+    if (!selectedProject) return [];
+    
+    // 如果 project.files 已经是字符串数组，直接使用
+    if (Array.isArray(selectedProject.files)) {
+      const files = selectedProject.files;
+      if (files.length > 0 && typeof files[0] === 'string') {
+        return files;
+      }
+      // 如果是对象数组，提取路径
+      return files.map(f => typeof f === 'string' ? f : (f.path || f.name || '')).filter(Boolean);
+    }
+    
+    // 如果有 fileTree，递归收集所有文件
+    if (selectedProject.fileTree) {
+      const collectFiles = (node, path = '') => {
+        const files = [];
+        if (node.type === 'file') {
+          files.push(path ? `${path}/${node.name}` : node.name);
+        } else if (node.children) {
+          node.children.forEach(child => {
+            files.push(...collectFiles(child, path ? `${path}/${node.name}` : node.name));
+          });
+        }
+        return files;
+      };
+      return collectFiles(selectedProject.fileTree);
+    }
+    
+    // 返回空数组
+    return [];
+  }, [selectedProject]);
+
+  // ============================================
   // 👁️ 获取可见消息列表（已优化：使用 useMemo 缓存）
   // ============================================
   const visibleMessages = chatState.visibleMessages;
@@ -702,6 +744,7 @@ const ChatInterfaceMinimal = memo(({
           handlePaste={inputState.handlePaste}
           handleSubmit={inputState.handleSubmit}
           tokenUsage={tokenUsage}
+          projectFiles={projectFilePaths}
           isInputFocused={inputState.isInputFocused}
           setIsInputFocused={inputState.setIsInputFocused}
           attachedImages={inputState.attachedImages}
