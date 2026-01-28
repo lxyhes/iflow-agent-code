@@ -78,7 +78,7 @@ const InterviewPreparation = ({ selectedProject }) => {
 
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
-    const userMsg = { role: 'user', content: chatInput, id: Date.now() };
+    const userMsg = { role: 'user', content: chatInput, id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput('');
     setIsChatLoading(true);
@@ -88,7 +88,7 @@ const InterviewPreparation = ({ selectedProject }) => {
       const aiReply = { 
         role: 'ai', 
         content: `针对你的回答，我建议从 ${selectedProject?.name || '项目'} 的实际应用场景出发。你能详细说说你是如何处理并发请求的吗？`, 
-        id: Date.now() + 1 
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       };
       setChatMessages(prev => [...prev, aiReply]);
       setIsChatLoading(false);
@@ -149,7 +149,7 @@ const InterviewPreparation = ({ selectedProject }) => {
             </div>
             <button 
               onClick={() => {
-                const welcomeMsg = { role: 'ai', content: `你好！我是你的 AI 面试官。我已经浏览了项目 **${selectedProject?.name}**。让我们先聊聊你在这个项目中最有成就感的一个技术点吧？`, id: Date.now() };
+                const welcomeMsg = { role: 'ai', content: `你好！我是你的 AI 面试官。我已经浏览了项目 **${selectedProject?.name}**。让我们先聊聊你在这个项目中最有成就感的一个技术点吧？`, id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
                 setChatMessages([welcomeMsg]);
               }}
               className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition-all active:scale-95"
