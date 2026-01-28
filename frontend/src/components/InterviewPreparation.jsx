@@ -176,7 +176,7 @@ const InterviewPreparation = ({ selectedProject }) => {
           </div>
         ) : (
           chatMessages.map((msg, idx) => (
-            <div key={msg.id || idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={`${msg.id || idx}-${msg.role}-${idx}`} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-2xl px-5 py-3 shadow-md ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-tl-none'}`}>
                 <div className="prose dark:prose-invert prose-sm max-w-none">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -231,8 +231,8 @@ const InterviewPreparation = ({ selectedProject }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {interviewHistory.map(item => (
-            <div key={item.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all group">
+          {interviewHistory.map((item, idx) => (
+            <div key={`${item.id}-${idx}`} className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all group">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h4 className="font-bold text-lg group-hover:text-blue-600 transition-colors">{item.projectName}</h4>
@@ -382,7 +382,7 @@ const InterviewPreparation = ({ selectedProject }) => {
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                     {['阅读 React 并发机制源码', '完成 3 组算法中等题训练', '复习 WebSocket 协议细节'].map((rec, i) => (
-                      <div key={i} className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <div key={`rec-${rec}`} className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
                         <div className="w-2 h-2 rounded-full bg-purple-500" />
                         <span className="text-sm font-medium">{rec}</span>
                       </div>
