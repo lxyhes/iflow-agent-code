@@ -736,25 +736,111 @@ const InterviewPreparation = ({ selectedProject }) => {
 
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
+    
     const userMsg = { role: 'user', content: chatInput, id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput('');
     setIsChatLoading(true);
 
-    // 根据不同模式生成不同的 AI 响应
-    setTimeout(() => {
-      let aiContent = '';
-
+    try {
+      // 构建面试上下文
+      let interviewContext = '';
+      
       if (isResumeMode && resumeContent) {
-        // 简历模式
-        aiContent = `根据你的简历，我看到你在 ${selectedProject?.name || '项目'} 中有相关经验。能否结合你提到的技能，详细说明一下你在这个项目中遇到的最大技术挑战是如何解决的？`;
-      } else if (isJobMode && jobDescription) {
-        // JD 模式
-        aiContent = `根据职位要求，我注意到需要你具备扎实的技术基础。能否详细说明你在以下方面的经验：\n\n1. 核心技术栈的掌握程度\n2. 相关项目的实际应用\n3. 遇到技术问题时的解决思路\n\n请结合具体案例来说明。`;
-      } else {
-        // 默认模式
-        aiContent = `针对你的回答，我建议从 ${selectedProject?.name || '项目'} 的实际应用场景出发。你能详细说说你是如何处理并发请求的吗？`;
+        interviewContext += `
+【简历模式】
+候选人简历信息:
+${resumeContent}
+
+请基于这份简历进行针对性的面试提问和评价。
+`;
       }
+      
+      if (isJobMode && jobDescription) {
+        interviewContext += `
+【JD模式】
+职位描述(JD):
+${jobDescription}
+
+识别到的关键要求:
+${jobRequirements.join('\n- ')}
+
+请基于这些职位要求进行针对性的面试。
+`;
+      }
+      
+      if (selectedProject) {
+        interviewContext += `
+【项目信息】
+项目名称: ${selectedProject.name}
+项目路径: ${selectedProject.path || selectedProject.id}
+
+请结合这个项目的实际情况进行面试。
+`;
+      }
+
+      if (multiRoundMode) {
+        interviewContext += `
+【多轮面试模式】
+当前轮次: ${currentRound}/${totalRounds}
+`;
+      }
+
+      if (aiInterviewerMode) {
+        const personalityInfo = {
+          professional: '专业严谨',
+          friendly: '友好鼓励',
+          challenging: '挑战压力'
+        };
+        interviewContext += `
+【AI面试官风格】
+风格: ${personalityInfo[aiInterviewerPersonality]}
+请采用这种风格进行面试。
+`;
+      }
+
+      // 构建完整的系统提示词
+      const systemPrompt = `你是一位专业的AI面试官,负责对候选人进行技术面试。
+
+${interviewContext}
+
+面试要求:
+1. 根据上下文信息提出针对性的技术问题
+2. 评估候选人的回答质量
+3. 可以追问更深层次的问题
+4. 保持专业、客观的态度
+5. 使用Markdown格式输出
+
+当前对话历史:
+${chatMessages.map(msg => `${msg.role === 'user' ? '候选人' : '面试官'}: ${msg.content}`).join('\n\n')}
+
+请回复面试官的下一个问题或评价:`;
+
+      // 调用后端API
+      const response = await fetch('/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...chatMessages.map(msg => ({
+              role: msg.role === 'ai' ? 'assistant' : 'user',
+              content: msg.content
+            }))
+          ],
+          model: selectedModel,
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiContent = data.content || data.message || data.reply || '抱歉,我暂时无法回复。';
 
       const aiReply = {
         role: 'ai',
@@ -762,8 +848,31 @@ const InterviewPreparation = ({ selectedProject }) => {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       };
       setChatMessages(prev => [...prev, aiReply]);
+      
+    } catch (error) {
+      console.error('AI响应失败:', error);
+      
+      // 如果AI调用失败,回退到模拟响应
+      let fallbackContent = '';
+      
+      if (isResumeMode && resumeContent) {
+        fallbackContent = `根据你的简历，我看到你在 ${selectedProject?.name || '项目'} 中有相关经验。能否结合你提到的技能，详细说明一下你在这个项目中遇到的最大技术挑战是如何解决的？`;
+      } else if (isJobMode && jobDescription) {
+        fallbackContent = `根据职位要求，我注意到需要你具备扎实的技术基础。能否详细说明你在以下方面的经验：\n\n1. 核心技术栈的掌握程度\n2. 相关项目的实际应用\n3. 遇到技术问题时的解决思路\n\n请结合具体案例来说明。`;
+      } else {
+        fallbackContent = `针对你的回答，我建议从 ${selectedProject?.name || '项目'} 的实际应用场景出发。你能详细说说你是如何处理并发请求的吗？`;
+      }
+
+      const aiReply = {
+        role: 'ai',
+        content: fallbackContent + `\n\n*(注: AI服务暂时不可用,这是预设回复)*`,
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      };
+      setChatMessages(prev => [...prev, aiReply]);
+      
+    } finally {
       setIsChatLoading(false);
-    }, 1000);
+    }
   };
 
   // 渲染子组件
@@ -835,9 +944,91 @@ const InterviewPreparation = ({ selectedProject }) => {
               <p className="text-gray-500 max-w-sm">点击下方按钮，AI 面试官将根据项目源码开始向你发起提问。</p>
             </div>
             <button 
-              onClick={() => {
-                const welcomeMsg = { role: 'ai', content: `你好！我是你的 AI 面试官。我已经浏览了项目 **${selectedProject?.name}**。让我们先聊聊你在这个项目中最有成就感的一个技术点吧？`, id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
-                setChatMessages([welcomeMsg]);
+              onClick={async () => {
+                setIsChatLoading(true);
+                try {
+                  // 构建面试上下文
+                  let interviewContext = '';
+                  
+                  if (isResumeMode && resumeContent) {
+                    interviewContext += `
+【简历模式】
+候选人简历信息:
+${resumeContent}
+`;
+                  }
+                  
+                  if (isJobMode && jobDescription) {
+                    interviewContext += `
+【JD模式】
+职位描述:
+${jobDescription}
+
+关键要求:
+${jobRequirements.join('\n- ')}
+`;
+                  }
+                  
+                  if (selectedProject) {
+                    interviewContext += `
+【项目信息】
+项目名称: ${selectedProject.name}
+`;
+                  }
+
+                  // 调用AI生成第一个问题
+                  const response = await fetch('/stream', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      messages: [
+                        { 
+                          role: 'system', 
+                          content: `你是一位专业的AI面试官,负责对候选人进行技术面试。
+
+${interviewContext}
+
+请生成一个开场白和第一个面试问题。要求:
+1. 亲切友好地介绍自己
+2. 说明面试模式(简历模式/JD模式/普通模式)
+3. 提出第一个针对性问题
+4. 使用Markdown格式输出
+`
+                        }
+                      ],
+                      model: selectedModel,
+                      stream: false
+                    })
+                  });
+
+                  if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
+                  }
+
+                  const data = await response.json();
+                  const aiContent = data.content || data.message || data.reply || '你好！我是你的 AI 面试官。';
+                  
+                  const welcomeMsg = { 
+                    role: 'ai', 
+                    content: aiContent,
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
+                  };
+                  setChatMessages([welcomeMsg]);
+                  
+                } catch (error) {
+                  console.error('AI调用失败:', error);
+                  // 回退到固定消息
+                  const welcomeMsg = { 
+                    role: 'ai', 
+                    content: `你好！我是你的 AI 面试官。我已经浏览了项目 **${selectedProject?.name}**。让我们先聊聊你在这个项目中最有成就感的一个技术点吧？\n\n*(注: AI服务暂时不可用)*`, 
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
+                  };
+                  setChatMessages([welcomeMsg]);
+                } finally {
+                  setIsChatLoading(false);
+                }
               }}
               className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition-all active:scale-95"
             >
