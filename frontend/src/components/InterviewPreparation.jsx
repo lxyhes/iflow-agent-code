@@ -47,8 +47,25 @@ const InterviewPreparation = ({ selectedProject }) => {
   // 加载数据
   useEffect(() => {
     const savedHistory = localStorage.getItem('interview_history');
-    if (savedHistory) setInterviewHistory(JSON.parse(savedHistory));
-    
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory);
+        // 为历史记录中的消息重新生成唯一 id，避免重复
+        const cleanedHistory = parsed.map(record => ({
+          ...record,
+          messages: record.messages?.map((msg, idx) => ({
+            ...msg,
+            id: `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`
+          })) || []
+        }));
+        setInterviewHistory(cleanedHistory);
+        // 更新 localStorage 中的数据
+        localStorage.setItem('interview_history', JSON.stringify(cleanedHistory));
+      } catch (e) {
+        console.error('Failed to parse interview history:', e);
+      }
+    }
+
     const savedKP = localStorage.getItem('interview-knowledge-points');
     if (savedKP) setKnowledgePoints(JSON.parse(savedKP));
   }, []);
