@@ -697,7 +697,7 @@ def create_sdk_client(
         mcp_servers: MCP 服务器配置
         persona: AI 性格
         system_prompt: 系统提示词
-        auth_method_id: 认证方法 ID
+        auth_method_id: 认证方法 ID，默认使用 "/auth" 方式自动续期
         auth_method_info: 认证信息
         file_access: 是否启用文件访问
         file_allowed_dirs: 允许访问的目录列表
@@ -740,6 +740,21 @@ def create_sdk_client(
         ...     if message["type"] == "assistant":
         ...         print(message["content"])
     """
+    # 如果没有指定认证方式，尝试从环境变量读取 API Key
+    # 或者使用 iFlow 默认方式（需要提前运行 `iflow /auth` 登录）
+    if auth_method_id is None:
+        import os
+        api_key = os.getenv("IFLOW_API_KEY") or os.getenv("IFLOW_SDK_API_KEY")
+        if api_key:
+            auth_method_id = "iflow"
+            auth_method_info = {"api_key": api_key}
+            logger.info("使用环境变量中的 API Key 进行认证")
+        else:
+            # 使用 iFlow 默认认证方式（需要提前运行 iflow /auth 登录）
+            auth_method_id = "iflow"
+            auth_method_info = None
+            logger.info("使用 iFlow 默认认证方式（请确保已运行 `iflow /auth` 登录）")
+
     return IFlowSDKClient(
         cwd=cwd,
         approval_mode=mode,

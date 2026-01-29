@@ -12,6 +12,21 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       proxy: {
+        // WebSocket 代理 - 必须放在 HTTP 代理之前
+        // Proxy WebSocket for interview
+        '/api/interview/ws': {
+          target: BACKEND_URL,
+          ws: true,
+          changeOrigin: true,
+          secure: false
+        },
+        // Proxy WebSocket for shell
+        '/shell': {
+          target: BACKEND_URL,
+          ws: true,
+          changeOrigin: true,
+          rewrite: (path) => path
+        },
         // 工作流相关 API - 优先匹配
         '^/api/workflows(/|$)': {
           target: BACKEND_URL,
@@ -45,13 +60,6 @@ export default defineConfig(({ command, mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: false
-        },
-        // Proxy WebSocket for shell
-        '/shell': {
-          target: BACKEND_URL,
-          ws: true,
-          changeOrigin: true,
-          rewrite: (path) => path
         }
       }
     },

@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.routers import files
 from backend.app.routers import frameworks
 from backend.app.routers import ocr
+from backend.app.routers import interview
 
 # Import legacy app to keep existing endpoints working
 # This also initializes the global variables in server.py
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(files.router)
 app.include_router(frameworks.router)
 app.include_router(ocr.router)
+app.include_router(interview.router)
 
 # Include legacy routes
 # This brings in all the endpoints defined in server.py

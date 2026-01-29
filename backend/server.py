@@ -90,6 +90,14 @@ try:
 except Exception as e:
     logger.error(f"Failed to include new OCR router: {e}")
 
+# Include the interview router for multi-agent interview system
+try:
+    from backend.app.routers import interview
+    app.include_router(interview.router, prefix="/api")
+    logger.info("Successfully included interview router")
+except Exception as e:
+    logger.error(f"Failed to include interview router: {e}")
+
 # --- CACHE MANAGER ---
 class CacheManager:
     """缓存管理器，支持自动清理和大小限制"""
@@ -6481,6 +6489,11 @@ async def analyze_project_for_interview(request: Request):
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(path_name: str, request: Request):
     """Catch-all 路由 - 处理未实现的 API 端点"""
+
+    # 排除 interview 路由，让 interview router 处理
+    if path_name.startswith("interview/"):
+        raise HTTPException(status_code=404, detail=f"Interview endpoint '/api/{path_name}' not found")
+
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
 
     # MCP 相关的 API

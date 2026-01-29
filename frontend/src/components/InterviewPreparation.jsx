@@ -1,6 +1,7 @@
 /**
  * Interview Preparation Component
  * 项目面试准备页面 - 针对选中的项目生成面试问题
+ * 集成多智能体面试系统
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -10,7 +11,7 @@ import {
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
-  BarChart3, Zap, AlertCircle
+  BarChart3, Zap, AlertCircle, Users, Bot
 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
@@ -19,6 +20,7 @@ import { authenticatedFetch } from '../utils/api';
 import IFlowModelSelector from './IFlowModelSelector';
 import ReactMarkdown from 'react-markdown';
 import OCRBlocksOverlay from './OCRBlocksOverlay';
+import MultiAgentInterview from './MultiAgentInterview';
 
 const InterviewPreparation = ({ selectedProject }) => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -117,6 +119,10 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [resumePreview, setResumePreview] = useState(null);
   const [resumePreviewPageIndex, setResumePreviewPageIndex] = useState(0);
   const [resumePreviewBlockIndex, setResumePreviewBlockIndex] = useState(null);
+
+  // 多智能体面试模式状态
+  const [multiAgentMode, setMultiAgentMode] = useState(false);
+  const [multiAgentCandidateProfile, setMultiAgentCandidateProfile] = useState(null);
   
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -1315,7 +1321,52 @@ const InterviewPreparation = ({ selectedProject }) => {
 
   const [showResumePanel, setShowResumePanel] = useState(true);
 
-  const renderPractice = () => (
+  const renderPractice = () => {
+    // 多智能体面试模式
+    if (multiAgentMode && multiAgentCandidateProfile) {
+      return (
+        <div className="flex h-full min-h-0">
+          <MultiAgentInterview
+            candidateProfile={multiAgentCandidateProfile}
+            config={{
+              total_rounds: 5,
+              agent_order: ['technical', 'behavioral', 'hr'],
+              enable_follow_up: true,
+            }}
+            onComplete={(result) => {
+              console.log('多智能体面试完成:', result);
+              // 可以保存结果到面试历史
+              const record = {
+                id: Date.now(),
+                projectId: selectedProject?.id,
+                projectName: selectedProject?.name,
+                date: new Date().toISOString(),
+                duration: result.duration,
+                messages: [],
+                model: 'Multi-Agent System',
+                chatOnlyMode: false,
+                multiAgentResult: result,
+              };
+              const history = JSON.parse(localStorage.getItem('interview_history') || '[]');
+              const updatedHistory = [record, ...history].slice(0, 50);
+              localStorage.setItem('interview_history', JSON.stringify(updatedHistory));
+              setInterviewHistory(updatedHistory);
+              
+              // 退出多智能体模式
+              setMultiAgentMode(false);
+              setMultiAgentCandidateProfile(null);
+              alert('✅ 多智能体面试已完成！结果已保存到历史记录。');
+            }}
+            onCancel={() => {
+              setMultiAgentMode(false);
+              setMultiAgentCandidateProfile(null);
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
     <div className="flex h-full min-h-0 gap-4">
       {/* 左侧：聊天主区域 */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -1325,34 +1376,65 @@ const InterviewPreparation = ({ selectedProject }) => {
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-blue-500" />
               <h3 className="font-semibold text-gray-900 dark:text-white">
-                {multiRoundMode ? `多轮面试 (第 ${currentRound + 1}/${totalRounds} 轮)` : '模拟面试'}
+                {multiAgentMode ? '多智能体面试' : multiRoundMode ? `多轮面试 (第 ${currentRound + 1}/${totalRounds} 轮)` : '模拟面试'}
               </h3>
             </div>
             <div className="flex items-center gap-3">
-              {/* 多轮面试模式开关 */}
+              {/* 多智能体面试模式开关 */}
               <button
                 onClick={() => {
-                  if (multiRoundMode) {
-                    setMultiRoundMode(false);
-                    setCurrentRound(0);
-                    setRoundQuestions([]);
-                    setCurrentRoundQuestionIndex(0);
-                    setRoundAnswers([]);
-                    setShowRoundSummary(false);
+                  if (multiAgentMode) {
+                    setMultiAgentMode(false);
+                    setMultiAgentCandidateProfile(null);
                   } else {
-                    startMultiRoundInterview();
+                    // 准备候选人画像并启动多智能体面试
+                    const profile = {
+                      name: selectedProject?.name || '候选人',
+                      skills: projectAnalysis?.tech_stack?.languages || [],
+                      experience_years: 3,
+                      target_position: '软件工程师',
+                      previous_roles: [],
+                    };
+                    setMultiAgentCandidateProfile(profile);
+                    setMultiAgentMode(true);
                   }
                 }}
                 className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors text-xs font-medium ${
-                  multiRoundMode
-                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                    : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                  multiAgentMode
+                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                    : 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400 hover:bg-purple-100'
                 }`}
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                {multiRoundMode ? '退出多轮' : '多轮面试'}
+                <Users className="w-3.5 h-3.5" />
+                {multiAgentMode ? '退出多智能体' : '多智能体面试'}
               </button>
-              
+
+              {/* 多轮面试模式开关 */}
+              {!multiAgentMode && (
+                <button
+                  onClick={() => {
+                    if (multiRoundMode) {
+                      setMultiRoundMode(false);
+                      setCurrentRound(0);
+                      setRoundQuestions([]);
+                      setCurrentRoundQuestionIndex(0);
+                      setRoundAnswers([]);
+                      setShowRoundSummary(false);
+                    } else {
+                      startMultiRoundInterview();
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors text-xs font-medium ${
+                    multiRoundMode
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                      : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                  }`}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {multiRoundMode ? '退出多轮' : '多轮面试'}
+                </button>
+              )}
+
               {/* 计时器显示 */}
               <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 px-3 py-1.5 rounded-lg text-xs font-mono">
                 <Timer className="w-3.5 h-3.5 text-blue-500" />
@@ -2247,6 +2329,7 @@ const InterviewPreparation = ({ selectedProject }) => {
       )}
     </div>
   );
+  };
 
   // 计算面试评分
   const calculateScores = () => {
