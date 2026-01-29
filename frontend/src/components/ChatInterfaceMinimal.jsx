@@ -41,12 +41,14 @@ import { useMessageActions } from '../hooks/useMessageActions';
 import { useChatInput } from '../hooks/useChatInput';
 import { useScrollManagement } from '../hooks/useScrollManagement';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useTokenUsage } from '../hooks/useTokenUsage';
 
 // 导入 UI 组件
 import ChatInput from './chat/ChatInput';
 import ChatToolbar from './chat/ChatToolbar';
 import EmptyState from './chat/EmptyState';
 import MessageList from './chat/MessageList';
+import PromptSuggestions from './chat/PromptSuggestions';
 
 /**
  * 🎨 极简布局的 Chat 界面
@@ -104,6 +106,9 @@ const ChatInterfaceMinimal = memo(({
 
   // 模型选择状态
   const [model] = React.useState(() => localStorage.getItem('iflow-model') || 'GLM-4.7');
+  
+  // Token 用量追踪
+  const tokenUsage = useTokenUsage(model, chatState.chatMessages);
 
   // ============================================
   // 🎯 2. 消息操作 Hook
@@ -211,7 +216,8 @@ const ChatInterfaceMinimal = memo(({
         // ============================================
         // 💬 第二步：添加用户消息到列表
         // ============================================
-        chatState.addUserMessage(content, uploadedImages);
+        const userMessage = chatState.addUserMessage(content, uploadedImages);
+        const userMessageId = userMessage.id;
 
         // ============================================
         // 🧠 第三步：智能 RAG 检索（带缓存）
@@ -304,6 +310,11 @@ const ChatInterfaceMinimal = memo(({
         // ============================================
         chatState.setIsLoading(true);
         chatState.setCanAbortSession(true);
+        
+        // 标记消息为已发送
+        setTimeout(() => {
+          chatState.updateMessageStatus(userMessageId, 'sent');
+        }, 300);
 
         // 创建空的 AI 消息用于流式响应
         chatState.setChatMessages(prev => [...prev, {
@@ -388,9 +399,9 @@ const ChatInterfaceMinimal = memo(({
                           if (!updated[i].tools) {
                             updated[i].tools = [];
                           }
-                          // 添加工具信息
+                          // 添加工具信息 - 使用时间戳 + 随机数确保唯一性
                           updated[i].tools.push({
-                            id: `tool-${Date.now()}`,
+                            id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                             toolName: data.tool_name,
                             toolType: data.tool_type,
                             toolLabel: data.label,
@@ -560,6 +571,42 @@ const ChatInterfaceMinimal = memo(({
   ], []);
 
   // ============================================
+  // 📁 收集项目文件路径（用于 @ 提及功能）
+  // ============================================
+  const projectFilePaths = useMemo(() => {
+    if (!selectedProject) return [];
+    
+    // 如果 project.files 已经是字符串数组，直接使用
+    if (Array.isArray(selectedProject.files)) {
+      const files = selectedProject.files;
+      if (files.length > 0 && typeof files[0] === 'string') {
+        return files;
+      }
+      // 如果是对象数组，提取路径
+      return files.map(f => typeof f === 'string' ? f : (f.path || f.name || '')).filter(Boolean);
+    }
+    
+    // 如果有 fileTree，递归收集所有文件
+    if (selectedProject.fileTree) {
+      const collectFiles = (node, path = '') => {
+        const files = [];
+        if (node.type === 'file') {
+          files.push(path ? `${path}/${node.name}` : node.name);
+        } else if (node.children) {
+          node.children.forEach(child => {
+            files.push(...collectFiles(child, path ? `${path}/${node.name}` : node.name));
+          });
+        }
+        return files;
+      };
+      return collectFiles(selectedProject.fileTree);
+    }
+    
+    // 返回空数组
+    return [];
+  }, [selectedProject]);
+
+  // ============================================
   // 👁️ 获取可见消息列表（已优化：使用 useMemo 缓存）
   // ============================================
   const visibleMessages = chatState.visibleMessages;
@@ -662,6 +709,19 @@ const ChatInterfaceMinimal = memo(({
       </div>
 
       {/* ============================================
+          💡 智能提示词建议（独立区域）
+      ============================================ */}
+      <PromptSuggestions
+        messages={chatState.chatMessages}
+        selectedProject={selectedProject}
+        onApplySuggestion={(suggestion) => {
+          inputState.setInput(suggestion);
+          inputState.textareaRef.current?.focus();
+        }}
+        isLoading={chatState.isLoading}
+      />
+
+      {/* ============================================
           ⌨️ 输入区域
       ============================================ */}
       <div className="flex items-center gap-3 w-full p-4 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-t border-gray-200/50 dark:border-gray-700/50">
@@ -672,6 +732,7 @@ const ChatInterfaceMinimal = memo(({
           selectedProject={selectedProject}
           selectedSession={selectedSession}
         />
+        
         <ChatInput
           input={inputState.input}
           isLoading={chatState.isLoading}
@@ -682,6 +743,8 @@ const ChatInterfaceMinimal = memo(({
           handleKeyDown={inputState.handleKeyDown}
           handlePaste={inputState.handlePaste}
           handleSubmit={inputState.handleSubmit}
+          tokenUsage={tokenUsage}
+          projectFiles={projectFilePaths}
           isInputFocused={inputState.isInputFocused}
           setIsInputFocused={inputState.setIsInputFocused}
           attachedImages={inputState.attachedImages}

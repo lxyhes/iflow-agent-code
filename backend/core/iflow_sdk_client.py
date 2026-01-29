@@ -379,11 +379,17 @@ class IFlowSDKClient:
 
                 # 接收消息流
                 async for message in client.receive_messages():
+                    logger.debug(f"📨 Received message: type={type(message).__name__}")
+                    
                     if isinstance(message, AssistantMessage):
                         # AI 助手响应
+                        content = message.chunk.text or ""
+                        logger.info(f"📝 AssistantMessage: content_length={len(content)}, content_preview={content[:100] if content else '(empty)'}")
+                        
+                        # 发送所有内容，包括空的（让后端决定是否过滤）
                         yield {
                             "type": "assistant",
-                            "content": message.chunk.text,
+                            "content": content,
                             "metadata": {
                                 "agent_info": self._serialize_agent_info(message.agent_info) if message.agent_info else None
                             }

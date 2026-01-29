@@ -103,13 +103,19 @@ const MessageList = memo(({
     if (!el) return;
 
     const last = sortedMessages[sortedMessages.length - 1];
+    const isLastMessageStreaming = last?.isStreaming === true;
+
+    // 如果最后一条消息正在流式输出，强制滚动到底部
+    // 否则，只有当用户在底部或正在加载时才滚动
     const shouldForce =
-      (last && last.type === 'user') || isLoading || pinnedToBottomRef.current;
+      (last && last.type === 'user') || isLoading || isLastMessageStreaming || pinnedToBottomRef.current;
 
     if (!shouldForce) return;
 
     const now = Date.now();
-    if (now - lastScrollAtRef.current < 120) return;
+    // 流式输出时减少节流时间，确保更流畅的滚动
+    const throttleTime = isLastMessageStreaming ? 50 : 120;
+    if (now - lastScrollAtRef.current < throttleTime) return;
     lastScrollAtRef.current = now;
     setTimeout(() => smoothScrollToBottom(380), 0);
   }, [lastMessageKey, isLoading, sortedMessages, scrollContainerRef]);

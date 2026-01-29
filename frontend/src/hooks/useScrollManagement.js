@@ -90,12 +90,23 @@ export const useScrollManagement = (chatMessages, autoScrollToBottom) => {
 
   // 自动滚动到底部
   useEffect(() => {
-    if (!scrollContainerRef.current || chatMessages.length === 0 || isUserScrolledUp || !autoScrollToBottom) return;
+    if (!scrollContainerRef.current || chatMessages.length === 0 || !autoScrollToBottom) return;
+
+    // 检查最后一条消息是否正在流式输出
+    const lastMessage = chatMessages[chatMessages.length - 1];
+    const isLastMessageStreaming = lastMessage?.isStreaming === true;
+
+    // 如果最后一条消息正在流式输出，强制滚动到底部（忽略用户是否向上滚动）
+    // 否则，只有当用户在底部时才自动滚动
+    if (!isLastMessageStreaming && isUserScrolledUp) return;
+
     const now = Date.now();
-    if (now - lastAutoScrollAtRef.current < 120) return;
+    // 流式输出时减少节流时间，确保更流畅的滚动
+    const throttleTime = isLastMessageStreaming ? 50 : 120;
+    if (now - lastAutoScrollAtRef.current < throttleTime) return;
     lastAutoScrollAtRef.current = now;
     scrollToBottom('auto');
-  }, [chatMessages.length, isUserScrolledUp, autoScrollToBottom]);
+  }, [chatMessages, isUserScrolledUp, autoScrollToBottom]);
 
   // 处理滚动事件
   const handleScroll = useCallback((e) => {
