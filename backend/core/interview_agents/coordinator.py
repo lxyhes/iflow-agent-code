@@ -441,12 +441,17 @@ class AgentCoordinator:
             category=category,
         )
 
-        return Question(
+        question = Question(
             content=smart_question["content"],
             type=smart_question["category"],
             difficulty=smart_question["difficulty"],
             category=smart_question["skill"],
         )
+
+        # 将问题添加到 agent 的问题池
+        agent.question_pool.append(question)
+
+        return question
 
     def _determine_candidate_level(self) -> str:
         """确定候选人级别"""

@@ -175,11 +175,11 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${currentAgentInfo?.color || 'bg-gray-500'}`}>
                 <span className="text-lg">{currentAgentInfo?.icon || '🤖'}</span>
               </div>
-              <div className="flex-1 bg-blue-50 rounded-lg p-4">
-                <div className="font-medium text-blue-900 mb-1">
+              <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                <div className="font-medium text-blue-900 dark:text-blue-300 mb-1">
                   {message.agent?.name || '面试官'}
                 </div>
-                <div className="text-gray-700">{message.content}</div>
+                <div className="text-gray-700 dark:text-gray-300">{message.content}</div>
               </div>
             </div>
           );
@@ -187,19 +187,19 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
         case 'answer':
           return (
             <div key={index} className="flex gap-3 mb-4 flex-row-reverse">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${message.isDemo ? 'bg-purple-200' : 'bg-gray-200'}`}>
-                <User className={`w-5 h-5 ${message.isDemo ? 'text-purple-600' : 'text-gray-600'}`} />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${message.isDemo ? 'bg-purple-200 dark:bg-purple-800' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                <User className={`w-5 h-5 ${message.isDemo ? 'text-purple-600 dark:text-purple-300' : 'text-gray-600 dark:text-gray-300'}`} />
               </div>
-              <div className={`flex-1 rounded-lg p-4 ${message.isDemo ? 'bg-purple-50 border border-purple-200' : 'bg-gray-100'}`}>
-                <div className="font-medium text-gray-900 mb-1 flex items-center gap-2">
+              <div className={`flex-1 rounded-lg p-4 ${message.isDemo ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                <div className="font-medium text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
                   候选人
                   {message.isDemo && (
-                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                    <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full">
                       自动回答
                     </span>
                   )}
                 </div>
-                <div className="text-gray-700">{message.content}</div>
+                <div className="text-gray-700 dark:text-gray-300">{message.content}</div>
               </div>
             </div>
           );
@@ -207,42 +207,42 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
         case 'evaluation':
           return (
             <div key={index} className="flex gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-yellow-600" />
+              <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <BarChart3 className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
               </div>
-              <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="font-medium text-yellow-900 mb-2 flex items-center gap-2">
+              <div className="flex-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <div className="font-medium text-yellow-900 dark:text-yellow-300 mb-2 flex items-center gap-2">
                   评估结果
                   {message.smart_analysis && (
-                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                    <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full">
                       AI深度分析
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-4 mb-2">
-                  <span className="text-2xl font-bold text-yellow-700">{message.score}分</span>
-                  <span className="text-sm text-gray-600">{message.agent_name}</span>
+                  <span className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{message.score}分</span>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">{message.agent_name}</span>
                 </div>
-                <div className="text-gray-700 text-sm mb-2">{message.feedback}</div>
+                <div className="text-gray-700 dark:text-gray-300 text-sm mb-2">{message.feedback}</div>
                 {message.strengths?.length > 0 && (
-                  <div className="text-sm text-green-700">
+                  <div className="text-sm text-green-700 dark:text-green-400">
                     <span className="font-medium">优点:</span> {message.strengths.join(', ')}
                   </div>
                 )}
                 {message.weaknesses?.length > 0 && (
-                  <div className="text-sm text-red-700">
+                  <div className="text-sm text-red-700 dark:text-red-400">
                     <span className="font-medium">改进:</span> {message.weaknesses.join(', ')}
                   </div>
                 )}
 
                 {/* 智能分析详情 */}
                 {message.smart_analysis && (
-                  <div className="mt-3 pt-3 border-t border-yellow-200">
-                    <div className="text-sm font-medium text-yellow-800 mb-2">🤖 AI深度分析</div>
+                  <div className="mt-3 pt-3 border-t border-yellow-200 dark:border-yellow-800">
+                    <div className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">🤖 AI深度分析</div>
 
                     {/* 回答深度 */}
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs text-gray-600">回答深度:</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">回答深度:</span>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((level) => (
                           <div
@@ -250,19 +250,19 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                             className={`w-4 h-4 rounded-full ${
                               level <= message.smart_analysis.depth_value
                                 ? 'bg-blue-500'
-                                : 'bg-gray-200'
+                                : 'bg-gray-200 dark:bg-gray-700'
                             }`}
                           />
                         ))}
                       </div>
-                      <span className="text-xs text-blue-600 font-medium">
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                         {message.smart_analysis.depth_level}
                       </span>
                     </div>
 
                     {/* 关键点 */}
                     {message.smart_analysis.key_points?.length > 0 && (
-                      <div className="text-xs text-gray-600 mb-1">
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                         <span className="font-medium">提及要点:</span>{' '}
                         {message.smart_analysis.key_points.join(', ')}
                       </div>
@@ -270,7 +270,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
                     {/* 缺失方面 */}
                     {message.smart_analysis.missing_aspects?.length > 0 && (
-                      <div className="text-xs text-orange-600 mb-1">
+                      <div className="text-xs text-orange-600 dark:text-orange-400 mb-1">
                         <span className="font-medium">未涉及:</span>{' '}
                         {message.smart_analysis.missing_aspects.join(', ')}
                       </div>
@@ -278,7 +278,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
                     {/* 模糊区域 */}
                     {message.smart_analysis.vague_areas?.length > 0 && (
-                      <div className="text-xs text-red-600 mb-1">
+                      <div className="text-xs text-red-600 dark:text-red-400 mb-1">
                         <span className="font-medium">表述模糊:</span>{' '}
                         {message.smart_analysis.vague_areas.join('; ')}
                       </div>
@@ -286,7 +286,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
                     {/* 追问建议 */}
                     {message.smart_analysis.follow_up_suggestions?.length > 0 && (
-                      <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300">
                         <span className="font-medium">💡 追问建议:</span>
                         <ul className="mt-1 space-y-1">
                           {message.smart_analysis.follow_up_suggestions.map((suggestion, i) => (
@@ -304,17 +304,17 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
         case 'deep_follow_up':
           return (
             <div key={index} className="flex gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-indigo-600" />
+              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div className="flex-1 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <div className="font-medium text-indigo-900 mb-1 flex items-center gap-2">
+              <div className="flex-1 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+                <div className="font-medium text-indigo-900 dark:text-indigo-300 mb-1 flex items-center gap-2">
                   <span>🤖 智能追问</span>
-                  <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                  <span className="text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-full">
                     {message.agent}
                   </span>
                 </div>
-                <div className="text-xs text-indigo-600">{message.reason}</div>
+                <div className="text-xs text-indigo-600 dark:text-indigo-400">{message.reason}</div>
               </div>
             </div>
           );
@@ -325,8 +325,8 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${currentAgentInfo?.color || 'bg-gray-500'}`}>
                 <span className="text-lg">{currentAgentInfo?.icon || '🤖'}</span>
               </div>
-              <div className="flex-1 bg-blue-50 rounded-lg p-4">
-                <div className="text-gray-700 whitespace-pre-wrap">{message.content}</div>
+              <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{message.content}</div>
                 {interview.isProcessing && index === interview.messages.length - 1 && (
                   <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse" />
                 )}
@@ -354,8 +354,8 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
     }));
 
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
           <Sparkles className="w-6 h-6 text-yellow-500" />
           面试评估报告
         </h2>
@@ -363,12 +363,12 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
         {/* 总体评分 */}
         <div className="flex items-center gap-8 mb-8">
           <div className="text-center">
-            <div className="text-5xl font-bold text-blue-600">{overall_score}</div>
-            <div className="text-gray-500">总体分数</div>
+            <div className="text-5xl font-bold text-blue-600 dark:text-blue-400">{overall_score}</div>
+            <div className="text-gray-500 dark:text-gray-400">总体分数</div>
           </div>
           <div className="text-center">
-            <div className="text-5xl font-bold text-green-600">{grade}</div>
-            <div className="text-gray-500">等级</div>
+            <div className="text-5xl font-bold text-green-600 dark:text-green-400">{grade}</div>
+            <div className="text-gray-500 dark:text-gray-400">等级</div>
           </div>
         </div>
 
@@ -394,24 +394,24 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
         {/* 优势和劣势 */}
         <div className="grid grid-cols-2 gap-6 mb-6">
-          <div className="bg-green-50 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">优势</h3>
-            <ul className="list-disc list-inside text-green-800">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+            <h3 className="font-semibold text-green-900 dark:text-green-300 mb-2">优势</h3>
+            <ul className="list-disc list-inside text-green-800 dark:text-green-400">
               {strengths?.map((s, i) => <li key={i}>{s}</li>)}
             </ul>
           </div>
-          <div className="bg-red-50 rounded-lg p-4">
-            <h3 className="font-semibold text-red-900 mb-2">待提升</h3>
-            <ul className="list-disc list-inside text-red-800">
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+            <h3 className="font-semibold text-red-900 dark:text-red-300 mb-2">待提升</h3>
+            <ul className="list-disc list-inside text-red-800 dark:text-red-400">
               {weaknesses?.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           </div>
         </div>
 
         {/* 建议 */}
-        <div className="bg-blue-50 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">建议</h3>
-          <ul className="list-disc list-inside text-blue-800">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
+          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">建议</h3>
+          <ul className="list-disc list-inside text-blue-800 dark:text-blue-400">
             {recommendations?.map((r, i) => <li key={i}>{r}</li>)}
           </ul>
         </div>
@@ -427,7 +427,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
           >
             导出报告
           </button>
@@ -439,7 +439,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
   // 如果显示结果
   if (showResult) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
         {renderResultPanel()}
       </div>
     );
@@ -450,17 +450,17 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {/* 头部 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">多智能体面试</h1>
-          <p className="text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">多智能体面试</h1>
+          <p className="text-gray-500 dark:text-gray-400">
             候选人: {candidateProfile?.name || '未命名'}
           </p>
         </div>
         <div className="flex items-center gap-4">
           {renderStatusIndicator()}
           {currentAgentInfo && interview.status === InterviewStatus.IN_PROGRESS && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full">
+            <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full">
               <span className="text-lg">{currentAgentInfo.icon}</span>
-              <span className="text-sm font-medium text-blue-800">
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
                 {currentAgentInfo.name}
               </span>
             </div>
@@ -470,7 +470,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
       {/* 错误提示 */}
       {interview.error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
           <AlertCircle className="w-5 h-5" />
           {interview.error.message}
         </div>
@@ -480,11 +480,11 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {(interview.status === InterviewStatus.IDLE || interview.status === InterviewStatus.CREATING) && (
         <div className="text-center py-12">
           <div className="mb-6">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <RotateCcw className="w-10 h-10 text-blue-600 animate-spin" />
+            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <RotateCcw className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">正在准备面试...</h2>
-            <p className="text-gray-500">
+            <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">正在准备面试...</h2>
+            <p className="text-gray-500 dark:text-gray-400">
               正在创建面试会话，请稍候
             </p>
           </div>
@@ -495,11 +495,11 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {interview.status === InterviewStatus.READY && (
         <div className="text-center py-12">
           <div className="mb-6">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-10 h-10 text-blue-600" />
+            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Sparkles className="w-10 h-10 text-blue-600 dark:text-blue-400" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">面试准备就绪</h2>
-            <p className="text-gray-500">
+            <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">面试准备就绪</h2>
+            <p className="text-gray-500 dark:text-gray-400">
               本次面试将由技术面试官、行为面试官和HR面试官轮流进行
             </p>
           </div>
@@ -531,9 +531,9 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
         interview.status === InterviewStatus.PROCESSING) && (
         <>
           {/* 消息列表 */}
-          <div className="bg-white rounded-lg shadow mb-4 p-4 h-96 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-4 p-4 h-96 overflow-y-auto">
             {interview.messages.length === 0 ? (
-              <div className="text-center text-gray-400 py-12">
+              <div className="text-center text-gray-400 dark:text-gray-500 py-12">
                 等待第一个问题...
               </div>
             ) : (
@@ -543,12 +543,12 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
           </div>
 
           {/* 输入区域 */}
-          <div className="bg-white rounded-lg shadow p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
             <div className="flex gap-2">
               <button
                 onClick={() => setIsRecording(!isRecording)}
                 className={`p-2 rounded-lg ${
-                  isRecording ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+                  isRecording ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                 }`}
                 title={isRecording ? '停止录音' : '开始录音'}
               >
@@ -561,7 +561,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                 onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
                 placeholder="输入你的回答..."
                 disabled={interview.isProcessing || interview.status === InterviewStatus.PAUSED}
-                className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
               <button
                 onClick={handleSubmitAnswer}
@@ -574,11 +574,11 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
             </div>
 
             {/* 控制按钮 */}
-            <div className="flex justify-between mt-4 pt-4 border-t">
+            <div className="flex justify-between mt-4 pt-4 border-t dark:border-gray-700">
               <div className="flex gap-2">
                 <button
                   onClick={handlePauseResume}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
                 >
                   {interview.status === InterviewStatus.PAUSED ? (
                     <><Play className="w-4 h-4" /> 继续</>
@@ -588,7 +588,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                 </button>
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                  className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   取消
                 </button>
@@ -608,9 +608,9 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {/* 加载状态 */}
       {interview.isLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 flex items-center gap-3">
-            <RotateCcw className="w-6 h-6 animate-spin text-blue-600" />
-            <span>处理中...</span>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 flex items-center gap-3">
+            <RotateCcw className="w-6 h-6 animate-spin text-blue-600 dark:text-blue-400" />
+            <span className="text-gray-900 dark:text-white">处理中...</span>
           </div>
         </div>
       )}

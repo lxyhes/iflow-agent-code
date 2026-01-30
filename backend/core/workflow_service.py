@@ -30,7 +30,8 @@ class WorkflowService:
     
     def __init__(self):
         self.workflows: Dict[str, Workflow] = {}
-        self.storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "workflows")
+        # 使用E盘缓存目录
+        self.storage_dir = os.environ.get('AGENT_PROJECT_WORKFLOWS', 'E:/cache/agent_project/workflows')
         os.makedirs(self.storage_dir, exist_ok=True)
         self._load_workflows()
     

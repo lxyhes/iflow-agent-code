@@ -6,6 +6,7 @@ export default defineConfig(({ command, mode }) => {
   
   // Target our Python FastAPI backend
   const BACKEND_URL = 'http://localhost:8000';
+  const BACKEND_WS_URL = 'ws://localhost:8000';
 
   return {
     plugins: [react()],
@@ -15,14 +16,21 @@ export default defineConfig(({ command, mode }) => {
         // WebSocket 代理 - 必须放在 HTTP 代理之前
         // Proxy WebSocket for interview
         '/api/interview/ws': {
-          target: BACKEND_URL,
+          target: BACKEND_WS_URL,
           ws: true,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path
+        },
+        // Proxy interview API endpoints (must be before generic /api rule)
+        '/api/interview': {
+          target: BACKEND_URL,
           changeOrigin: true,
           secure: false
         },
         // Proxy WebSocket for shell
         '/shell': {
-          target: BACKEND_URL,
+          target: BACKEND_WS_URL,
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path

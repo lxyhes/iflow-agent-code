@@ -9,6 +9,12 @@ import platform
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 设置缓存目录到E盘（必须在导入其他模块之前）
+import tempfile
+os.environ['TEMP'] = 'E:/cache/agent_project/temp'
+os.environ['TMP'] = 'E:/cache/agent_project/temp'
+tempfile.tempdir = 'E:/cache/agent_project/temp'
+
 try:
     from backend.core.ocr_service import get_ocr_service
 except Exception:

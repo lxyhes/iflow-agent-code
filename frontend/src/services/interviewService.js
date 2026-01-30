@@ -275,8 +275,12 @@ export class InterviewWebSocket {
    */
   connect() {
     return new Promise((resolve, reject) => {
-      // 使用相对路径，让浏览器自动处理 host 和协议
-      const wsUrl = `${API_BASE_URL}/ws/${this.sessionId}`;
+      // 构建完整的 WebSocket URL
+      // 在开发环境中直接连接后端，生产环境使用相对路径
+      const isDev = import.meta.env.DEV;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = isDev ? 'localhost:8000' : window.location.host;
+      const wsUrl = `${protocol}//${host}/api/interview/ws/${this.sessionId}`;
 
       console.log('正在连接 WebSocket:', wsUrl);
       

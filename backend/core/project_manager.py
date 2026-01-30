@@ -8,8 +8,9 @@ from datetime import datetime
 
 PROJECTS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS_FILE = os.path.join(PROJECTS_DIR, "projects.json")
-BACKUP_DIR = os.path.join(PROJECTS_DIR, "storage", "backups")
-STORAGE_DIR = os.path.join(PROJECTS_DIR, "storage")
+# 使用E盘缓存目录
+BACKUP_DIR = os.environ.get('AGENT_PROJECT_BACKUPS', 'E:/cache/agent_project/backups')
+STORAGE_DIR = os.environ.get('AGENT_PROJECT_STORAGE', 'E:/cache/agent_project/storage')
 
 logger = logging.getLogger("ProjectManager")
 

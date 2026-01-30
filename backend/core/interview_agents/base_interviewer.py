@@ -171,6 +171,10 @@ class BaseInterviewerAgent(ABC):
         self.state.questions_asked.append(question.id)
         self.state.last_activity = datetime.now()
 
+        # 将问题添加到问题池，以便后续查找
+        if question not in self.question_pool:
+            self.question_pool.append(question)
+
         # 只发送问题内容，不调用 LLM 生成额外内容
         # 这样可以避免 LLM 生成开场白等不必要的内容
         yield {

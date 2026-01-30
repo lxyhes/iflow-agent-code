@@ -71,8 +71,9 @@ class JsonlMemoryProvider(MemoryProvider):
 
 
 def get_memory_provider(project_path: str, provider: str = "business") -> MemoryProvider:
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    storage_dir = os.path.join(root, "storage", "llm_memory")
+    # 使用E盘缓存目录
+    storage_dir = os.environ.get('AGENT_PROJECT_CACHE', 'E:/cache/agent_project/llm_memory')
+    os.makedirs(storage_dir, exist_ok=True)
     project_name = os.path.basename(os.path.abspath(project_path or "."))
     provider = (provider or "business").strip().lower()
 

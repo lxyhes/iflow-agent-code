@@ -451,6 +451,9 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
             await websocket.close()
             return
 
+        # 打印会话状态用于调试
+        print(f"[WebSocket] 会话 {session_id} 连接成功，当前状态: {session.metadata.status.value}")
+
         while True:
             # 接收客户端消息
             data = await websocket.receive_json()
@@ -459,6 +462,16 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
             if action == "answer":
                 # 处理候选人回答
                 answer = data.get("answer", "")
+
+                # 检查会话状态
+                if session.metadata.status.value != "in_progress":
+                    await websocket.send_json({
+                        "type": "error",
+                        "error_type": "INVALID_SESSION_STATE",
+                        "message": f"会话不在进行中状态，当前状态: {session.metadata.status.value}",
+                        "detail": "请先发送 'start' 动作开始面试",
+                    })
+                    continue
 
                 # 发送处理中状态
                 await websocket.send_json({
@@ -483,11 +496,22 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
                         "message": f"演示模式已启用，自动回答延迟 {session.config.demo_delay} 秒",
                     })
 
+                # 检查当前状态
+                current_status = session.metadata.status.value
                 success = await session.start()
-                await websocket.send_json({
-                    "type": "status",
-                    "status": "started" if success else "error",
-                })
+
+                if success:
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": "started",
+                        "message": "面试已开始",
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": "error",
+                        "message": f"无法开始面试，当前状态: {current_status}，需要状态: ready",
+                    })
 
                 # 演示模式下自动开始第一轮
                 if demo_mode and success:

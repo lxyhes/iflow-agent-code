@@ -255,6 +255,27 @@ export const useMultiAgentInterview = (options = {}) => {
 
       case 'status':
         // 处理状态更新
+        if (data.status === 'started') {
+          console.log('面试已开始:', data.message);
+        } else if (data.status === 'error') {
+          const errorMsg = data.message || data.error || '面试启动失败';
+          console.error('面试开始失败:', errorMsg);
+          setError({
+            type: 'START_ERROR',
+            message: errorMsg,
+          });
+        }
+        break;
+
+      case 'error':
+        // 处理错误消息
+        const errorMessage = data.message || data.error || '发生错误';
+        console.error('WebSocket 错误:', errorMessage, data);
+        setError({
+          type: data.error_type || 'WEBSOCKET_ERROR',
+          message: errorMessage,
+          detail: data.detail || '',
+        });
         break;
 
       default:

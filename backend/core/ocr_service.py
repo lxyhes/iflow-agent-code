@@ -77,14 +77,13 @@ class OCRService:
             logger.info(f"正在加载 LightOnOCR-2-1B 模型...")
 
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            default_cache_root = os.path.join(
-                os.path.expanduser("~"), ".cache", "iflow-agent", "ocr_cache"
-            )
+            # 使用E盘缓存目录
+            default_cache_root = os.environ.get('AGENT_PROJECT_OCR', 'E:/cache/agent_project/ocr_cache')
             cache_root = os.getenv("IFLOW_OCR_CACHE_DIR") or default_cache_root
             try:
                 os.makedirs(cache_root, exist_ok=True)
             except Exception:
-                cache_root = os.path.join(base_dir, "storage", "ocr_cache")
+                cache_root = os.environ.get('AGENT_PROJECT_OCR', 'E:/cache/agent_project/ocr_cache')
                 os.makedirs(cache_root, exist_ok=True)
             os.environ.setdefault("HF_HOME", os.path.join(cache_root, "hf_home"))
             os.environ.setdefault(
