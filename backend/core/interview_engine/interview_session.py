@@ -111,6 +111,9 @@ class InterviewSession:
         if self.metadata.status == SessionStatus.READY:
             self.metadata.status = SessionStatus.IN_PROGRESS
             return True
+        # 幂等性：如果已经是进行中状态，也返回成功
+        if self.metadata.status == SessionStatus.IN_PROGRESS:
+            return True
         return False
 
     async def process_turn(self, candidate_answer: Optional[str] = None):

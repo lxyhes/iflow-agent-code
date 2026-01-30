@@ -267,7 +267,7 @@ class AgentCoordinator:
                         smart_analysis and
                         self.deep_dive_engine.should_continue_deep_dive(
                             smart_analysis,
-                            follow_up_count=self.current_turn.follow_up_count or 0,
+                            follow_up_count=getattr(self.current_turn, 'follow_up_count', 0),
                             max_follow_ups=2,
                         )):
 

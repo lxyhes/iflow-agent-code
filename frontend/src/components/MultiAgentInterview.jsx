@@ -171,35 +171,36 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       switch (message.type) {
         case 'question':
           return (
-            <div key={index} className="flex gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${currentAgentInfo?.color || 'bg-gray-500'}`}>
-                <span className="text-lg">{currentAgentInfo?.icon || '🤖'}</span>
+            <div key={index} className="flex gap-4 mb-6">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${currentAgentInfo?.color || 'bg-gray-500'}`}>
+                <span className="text-xl">{currentAgentInfo?.icon || '🤖'}</span>
               </div>
-              <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                <div className="font-medium text-blue-900 dark:text-blue-300 mb-1">
+              <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-2xl rounded-tl-sm p-5 shadow-sm border border-blue-100 dark:border-blue-800">
+                <div className="font-semibold text-blue-900 dark:text-blue-300 mb-2 flex items-center gap-2">
                   {message.agent?.name || '面试官'}
+                  <span className="text-xs px-2 py-0.5 bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 rounded-full">面试官</span>
                 </div>
-                <div className="text-gray-700 dark:text-gray-300">{message.content}</div>
+                <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed">{message.content}</div>
               </div>
             </div>
           );
 
         case 'answer':
           return (
-            <div key={index} className="flex gap-3 mb-4 flex-row-reverse">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${message.isDemo ? 'bg-purple-200 dark:bg-purple-800' : 'bg-gray-200 dark:bg-gray-700'}`}>
-                <User className={`w-5 h-5 ${message.isDemo ? 'text-purple-600 dark:text-purple-300' : 'text-gray-600 dark:text-gray-300'}`} />
+            <div key={index} className="flex gap-4 mb-6 flex-row-reverse">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${message.isDemo ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700'}`}>
+                <User className="w-6 h-6 text-white" />
               </div>
-              <div className={`flex-1 rounded-lg p-4 ${message.isDemo ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                <div className="font-medium text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
+              <div className={`flex-1 rounded-2xl rounded-tr-sm p-5 shadow-sm ${message.isDemo ? 'bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 border border-purple-200 dark:border-purple-800' : 'bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700/50 border border-gray-200 dark:border-gray-700'}`}>
+                <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
                   候选人
                   {message.isDemo && (
-                    <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full">
+                    <span className="text-xs px-2 py-0.5 bg-purple-200 dark:bg-purple-700 text-purple-800 dark:text-purple-200 rounded-full font-medium">
                       自动回答
                     </span>
                   )}
                 </div>
-                <div className="text-gray-700 dark:text-gray-300">{message.content}</div>
+                <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed">{message.content}</div>
               </div>
             </div>
           );
@@ -446,9 +447,9 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* 头部 */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="w-full h-full flex flex-col overflow-hidden">
+      {/* 头部 - 固定 */}
+      <div className="flex items-center justify-between mb-4 flex-shrink-0 px-4 pt-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">多智能体面试</h1>
           <p className="text-gray-500 dark:text-gray-400">
@@ -470,7 +471,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
       {/* 错误提示 */}
       {interview.error && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400 flex-shrink-0 mx-4">
           <AlertCircle className="w-5 h-5" />
           {interview.error.message}
         </div>
@@ -478,8 +479,8 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
       {/* 创建会话中 */}
       {(interview.status === InterviewStatus.IDLE || interview.status === InterviewStatus.CREATING) && (
-        <div className="text-center py-12">
-          <div className="mb-6">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
             <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <RotateCcw className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
             </div>
@@ -493,8 +494,8 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
 
       {/* 准备界面 */}
       {interview.status === InterviewStatus.READY && (
-        <div className="text-center py-12">
-          <div className="mb-6">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
             <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <Sparkles className="w-10 h-10 text-blue-600 dark:text-blue-400" />
             </div>
@@ -502,25 +503,25 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
             <p className="text-gray-500 dark:text-gray-400">
               本次面试将由技术面试官、行为面试官和HR面试官轮流进行
             </p>
-          </div>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={handleStart}
-              disabled={!interview.sessionId}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <Play className="w-5 h-5" />
-              开始面试
-            </button>
-            <button
-              onClick={handleStartDemo}
-              disabled={!interview.sessionId}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              title="演示模式：系统自动回答所有问题"
-            >
-              <Sparkles className="w-5 h-5" />
-              演示模式（自问自答）
-            </button>
+            <div className="flex gap-4 justify-center mt-6">
+              <button
+                onClick={handleStart}
+                disabled={!interview.sessionId}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Play className="w-5 h-5" />
+                开始面试
+              </button>
+              <button
+                onClick={handleStartDemo}
+                disabled={!interview.sessionId}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                title="演示模式：系统自动回答所有问题"
+              >
+                <Sparkles className="w-5 h-5" />
+                演示模式（自问自答）
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -529,9 +530,9 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {(interview.status === InterviewStatus.IN_PROGRESS ||
         interview.status === InterviewStatus.PAUSED ||
         interview.status === InterviewStatus.PROCESSING) && (
-        <>
-          {/* 消息列表 */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-4 p-4 h-96 overflow-y-auto">
+        <div className="flex flex-col flex-1 min-h-0 px-4 pb-4">
+          {/* 消息列表 - 自适应高度，独立滚动 */}
+          <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg mb-4 p-6 overflow-y-auto border border-gray-100 dark:border-gray-700 min-h-0">
             {interview.messages.length === 0 ? (
               <div className="text-center text-gray-400 dark:text-gray-500 py-12">
                 等待第一个问题...
@@ -542,13 +543,15 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 输入区域 */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-            <div className="flex gap-2">
+          {/* 输入区域 - 固定在底部 */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 lg:p-6 border border-gray-100 dark:border-gray-700 flex-shrink-0">
+            <div className="flex gap-3">
               <button
                 onClick={() => setIsRecording(!isRecording)}
-                className={`p-2 rounded-lg ${
-                  isRecording ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                className={`p-3 rounded-xl transition-all duration-200 ${
+                  isRecording
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-inner'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
                 title={isRecording ? '停止录音' : '开始录音'}
               >
@@ -561,24 +564,24 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                 onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
                 placeholder="输入你的回答..."
                 disabled={interview.isProcessing || interview.status === InterviewStatus.PAUSED}
-                className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="flex-1 px-5 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:disabled:bg-gray-800 text-gray-900 dark:text-white text-base transition-all duration-200"
               />
               <button
                 onClick={handleSubmitAnswer}
                 disabled={!answer.trim() || interview.isProcessing || interview.status === InterviewStatus.PAUSED}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 flex items-center gap-2"
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:bg-gray-300 disabled:from-gray-300 disabled:to-gray-400 flex items-center gap-2 font-medium shadow-lg shadow-blue-500/30 transition-all duration-200"
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-5 h-5" />
                 发送
               </button>
             </div>
 
             {/* 控制按钮 */}
-            <div className="flex justify-between mt-4 pt-4 border-t dark:border-gray-700">
-              <div className="flex gap-2">
+            <div className="flex justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex gap-3">
                 <button
                   onClick={handlePauseResume}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
+                  className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium transition-all duration-200"
                 >
                   {interview.status === InterviewStatus.PAUSED ? (
                     <><Play className="w-4 h-4" /> 继续</>
@@ -588,21 +591,21 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                 </button>
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="px-5 py-2.5 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-all duration-200"
                 >
                   取消
                 </button>
               </div>
               <button
                 onClick={handleComplete}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 flex items-center gap-2 font-medium shadow-lg shadow-green-500/30 transition-all duration-200"
               >
-                <StopCircle className="w-4 h-4" />
+                <StopCircle className="w-5 h-5" />
                 完成面试
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* 加载状态 */}

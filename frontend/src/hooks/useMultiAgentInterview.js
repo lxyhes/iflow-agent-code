@@ -336,7 +336,14 @@ export const useMultiAgentInterview = (options = {}) => {
     ]);
 
     // 发送回答
-    wsRef.current.sendAnswer(answer, duration);
+    try {
+      wsRef.current.sendAnswer(answer, duration);
+    } catch (err) {
+      const errorInfo = handleInterviewError(err);
+      setError(errorInfo);
+      setIsProcessing(false);
+      if (onError) onError(errorInfo);
+    }
   }, [onError]);
 
   /**
