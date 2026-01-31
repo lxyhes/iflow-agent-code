@@ -11,7 +11,7 @@ import {
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
-  BarChart3, Zap, AlertCircle, Users, Bot, Scan
+  BarChart3, Zap, AlertCircle, Users, Bot, Scan, X
 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
@@ -46,6 +46,7 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [evaluation, setEvaluation] = useState(null);
   const [showHints, setShowHints] = useState(false);
   const [currentHint, setCurrentHint] = useState('');
+  const [selectedQuestion, setSelectedQuestion] = useState(null); // 选中的问题详情
   
   // 多轮面试模式状态
   const [multiRoundMode, setMultiRoundMode] = useState(false);
@@ -1133,8 +1134,7 @@ const InterviewPreparation = ({ selectedProject }) => {
                   key={q.id}
                   className="bg-white dark:bg-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
                   onClick={() => {
-                    setCurrentQuestionIndex(qIndex);
-                    setActiveSection(`question-${catIndex}`);
+                    setSelectedQuestion({ ...q, category: category.category });
                   }}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -3297,11 +3297,137 @@ ${conversation}
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 p-6 pb-2">
         {activeSection === 'overview' && renderOverview()}
-        {activeSection === 'questions' && renderQuestions()}
+        {(activeSection === 'questions' || activeSection.startsWith('question-')) && renderQuestions()}
         {activeSection === 'practice' && renderPractice()}
         {activeSection === 'faq' && renderFAQ()}
         {activeSection === 'history' && renderHistory()}
       </div>
+
+      {/* 问题详情弹窗 */}
+      {selectedQuestion && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-sm">
+                  {selectedQuestion.category}
+                </span>
+                <span className={`px-2 py-1 rounded text-sm ${
+                  selectedQuestion.difficulty === '基础' ? 'bg-green-100 text-green-700' :
+                  selectedQuestion.difficulty === '中等' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {selectedQuestion.difficulty}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedQuestion(null)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* 问题 */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {selectedQuestion.question}
+                </h3>
+              </div>
+
+              {/* 考察点 */}
+              {selectedQuestion.keyPoints && selectedQuestion.keyPoints.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4 text-blue-500" />
+                    考察点
+                  </h4>
+                  <ul className="space-y-1">
+                    {selectedQuestion.keyPoints.map((point, idx) => (
+                      <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* 参考答案 */}
+              {selectedQuestion.answer && (
+                <div>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-yellow-500" />
+                    参考答案
+                  </h4>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-sm text-gray-600 dark:text-gray-400">
+                    {selectedQuestion.answer}
+                  </div>
+                </div>
+              )}
+
+              {/* 提示 */}
+              {selectedQuestion.hints && selectedQuestion.hints.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    答题提示
+                  </h4>
+                  <ul className="space-y-1">
+                    {selectedQuestion.hints.map((hint, idx) => (
+                      <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                        {hint}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* 相关知识点 */}
+              {selectedQuestion.tags && selectedQuestion.tags.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">相关知识点</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedQuestion.tags.map((tag, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 操作按钮 */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    setSelectedQuestion(null);
+                    setActiveSection('practice');
+                  }}
+                  className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <PlayCircle className="w-4 h-4" />
+                  开始练习
+                </button>
+                <button
+                  onClick={() => {
+                    toggleFavoriteQuestion(selectedQuestion.id);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                    favoriteQuestions.includes(selectedQuestion.id)
+                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                  }`}
+                >
+                  <Star className={`w-4 h-4 ${favoriteQuestions.includes(selectedQuestion.id) ? 'fill-current' : ''}`} />
+                  {favoriteQuestions.includes(selectedQuestion.id) ? '已收藏' : '收藏'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 招聘分析面板 */}
       {showJobAnalysis && (
