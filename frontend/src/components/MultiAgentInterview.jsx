@@ -1,10 +1,11 @@
 /**
- * 多智能体面试组件
+ * 多智能体面试组件 - 重新设计版
  *
- * 提供完整的多智能体面试界面
+ * 采用现代化聊天界面设计，优化用户体验
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useMultiAgentInterview, InterviewStatus } from '../hooks/useMultiAgentInterview';
 import {
   Mic,
   MicOff,
@@ -25,9 +26,10 @@ import {
   Target,
   TrendingUp,
   Award,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { useMultiAgentInterview, InterviewStatus } from '../hooks/useMultiAgentInterview';
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 
 // 智能体头像配置
 const AGENT_AVATARS = {
@@ -37,22 +39,39 @@ const AGENT_AVATARS = {
   hr: { icon: '👔', color: 'bg-purple-500', name: 'HR面试官' },
 };
 
-/**
- * 多智能体面试组件
- */
-const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel }) => {
-  // 使用面试 Hook
-  const interview = useMultiAgentInterview({
-    onMessage: (data) => {
-      console.log('收到消息:', data);
-    },
-    onEvaluation: (data) => {
-      console.log('收到评估:', data);
-    },
-    onAgentSwitch: (data) => {
-      console.log('智能体切换:', data);
-    },
+const MultiAgentInterview = ({ candidateProfile, onComplete, onCancel }) => {
+  const messagesEndRef = useRef(null);
+  const [answer, setAnswer] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [expandedEvaluations, setExpandedEvaluations] = useState({});
+
+  const {
+    sessionId,
+    status,
+    error,
+    candidateProfile: interviewCandidateProfile,
+    currentAgent,
+    currentQuestion,
+    messages,
+    evaluation,
+    result,
+    isLoading,
+    isProcessing,
+    progress,
+    duration,
+    createSession,
+    startInterview,
+    submitAnswer,
+    pauseInterview,
+    resumeInterview,
+    completeInterview,
+    cancelInterview,
+    reset,
+    InterviewStatus: StatusEnum,
+  } = useMultiAgentInterview({
     onComplete: (result) => {
+      setShowResult(true);
       if (onComplete) onComplete(result);
     },
     onError: (error) => {
@@ -60,645 +79,482 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
     },
   });
 
-  // 本地状态
-  const [answer, setAnswer] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [showResult, setShowResult] = useState(false);
-  const messagesEndRef = useRef(null);
-
   // 自动滚动到底部
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [interview.messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   // 创建会话
   useEffect(() => {
-    if (candidateProfile && interview.status === InterviewStatus.IDLE) {
-      interview.createSession(candidateProfile, config);
+    if (candidateProfile && status === StatusEnum.IDLE) {
+      createSession(candidateProfile);
     }
-  }, [candidateProfile, config]);
+  }, [candidateProfile, status]);
 
   // 处理开始面试
   const handleStart = async () => {
-    if (!interview.sessionId) {
-      console.warn('会话尚未创建，请稍候...');
-      return;
-    }
-    if (interview.status === InterviewStatus.READY) {
-      await interview.startInterview();
-    }
-  };
-
-  // 处理开始演示模式（自问自答）
-  const handleStartDemo = async () => {
-    if (!interview.sessionId) {
-      console.warn('会话尚未创建，请稍候...');
-      return;
-    }
-    if (interview.status === InterviewStatus.READY) {
-      await interview.startInterview(true, 3); // 启用演示模式，3秒延迟
-    }
+    await startInterview();
   };
 
   // 处理提交回答
-  const handleSubmitAnswer = () => {
+  const handleSubmitAnswer = async () => {
     if (!answer.trim()) return;
-    interview.submitAnswer(answer);
+    const currentAnswer = answer;
     setAnswer('');
+    await submitAnswer(currentAnswer);
   };
 
-  // 处理暂停/恢复
-  const handlePauseResume = () => {
-    if (interview.status === InterviewStatus.IN_PROGRESS) {
-      interview.pauseInterview();
-    } else if (interview.status === InterviewStatus.PAUSED) {
-      interview.resumeInterview();
+  // 处理暂停/继续
+  const handlePauseResume = async () => {
+    if (interview.status === InterviewStatus.PAUSED) {
+      await resumeInterview();
+    } else {
+      await pauseInterview();
     }
   };
 
-  // 处理完成面试
+  // 处理完成
   const handleComplete = async () => {
-    await interview.completeInterview();
-    setShowResult(true);
+    await completeInterview();
   };
 
-  // 处理取消面试
-  const handleCancel = () => {
-    interview.cancelInterview();
+  // 处理取消
+  const handleCancel = async () => {
+    await cancelInterview();
     if (onCancel) onCancel();
   };
 
-  // 处理重新开始
+  // 处理重置
   const handleReset = () => {
-    interview.reset();
+    reset();
     setShowResult(false);
-    if (candidateProfile) {
-      interview.createSession(candidateProfile, config);
-    }
+  };
+
+  // 切换评估详情展开/收起
+  const toggleEvaluation = (index) => {
+    setExpandedEvaluations(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
   };
 
   // 获取当前智能体信息
-  const currentAgentInfo = interview.currentAgent
-    ? AGENT_AVATARS[interview.currentAgent.type] || { icon: '🤖', color: 'bg-gray-500', name: '面试官' }
+  const currentAgentInfo = currentAgent
+    ? AGENT_AVATARS[currentAgent.type]
     : null;
 
-  // 渲染状态指示器
-  const renderStatusIndicator = () => {
-    const statusConfig = {
-      [InterviewStatus.IDLE]: { text: '准备中', color: 'text-gray-500', icon: Clock },
-      [InterviewStatus.CREATING]: { text: '创建会话', color: 'text-blue-500', icon: RotateCcw },
-      [InterviewStatus.READY]: { text: '就绪', color: 'text-green-500', icon: CheckCircle2 },
-      [InterviewStatus.IN_PROGRESS]: { text: '面试中', color: 'text-blue-500', icon: MessageSquare },
-      [InterviewStatus.PAUSED]: { text: '已暂停', color: 'text-yellow-500', icon: Pause },
-      [InterviewStatus.PROCESSING]: { text: '处理中', color: 'text-blue-500', icon: RotateCcw },
-      [InterviewStatus.COMPLETED]: { text: '已完成', color: 'text-green-500', icon: CheckCircle2 },
-      [InterviewStatus.CANCELLED]: { text: '已取消', color: 'text-red-500', icon: AlertCircle },
-      [InterviewStatus.ERROR]: { text: '错误', color: 'text-red-500', icon: AlertCircle },
-    };
+  // 渲染头部
+  const renderHeader = () => (
+    <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Bot className="w-5 h-5 text-blue-600" />
+          <h1 className="font-semibold text-gray-900 dark:text-white">多智能体面试</h1>
+        </div>
+        {interviewCandidateProfile && (
+          <span className="text-sm text-gray-500">
+            {interviewCandidateProfile.name}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {renderStatusBadge()}
+        {currentAgentInfo && (
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white text-xs ${currentAgentInfo.color}`}>
+            <span>{currentAgentInfo.icon}</span>
+            <span>{currentAgentInfo.name.replace('面试官', '')}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-    const config = statusConfig[interview.status] || statusConfig[InterviewStatus.IDLE];
-    const Icon = config.icon;
+  // 渲染状态标签
+  const renderStatusBadge = () => {
+    const statusConfig = {
+      [StatusEnum.IDLE]: { text: '准备中', color: 'bg-gray-100 text-gray-600' },
+      [StatusEnum.CREATING]: { text: '创建中', color: 'bg-blue-100 text-blue-600' },
+      [StatusEnum.READY]: { text: '就绪', color: 'bg-green-100 text-green-600' },
+      [StatusEnum.IN_PROGRESS]: { text: '面试中', color: 'bg-blue-100 text-blue-600' },
+      [StatusEnum.PAUSED]: { text: '已暂停', color: 'bg-yellow-100 text-yellow-600' },
+      [StatusEnum.PROCESSING]: { text: '处理中', color: 'bg-purple-100 text-purple-600' },
+      [StatusEnum.COMPLETED]: { text: '已完成', color: 'bg-green-100 text-green-600' },
+      [StatusEnum.ERROR]: { text: '错误', color: 'bg-red-100 text-red-600' },
+    };
+    const config = statusConfig[status] || statusConfig[StatusEnum.IDLE];
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        {config.text}
+      </span>
+    );
+  };
+
+  // 渲染进度条
+  const renderProgress = () => {
+    if (status !== StatusEnum.IN_PROGRESS && status !== StatusEnum.PAUSED) {
+      return null;
+    }
+
+    const progressData = progress || { current: 0, total: 5, percentage: 0 };
+    const agentOrder = ['technical', 'system_design', 'behavioral', 'hr'];
+    const currentIndex = agentOrder.indexOf(currentAgent?.type);
 
     return (
-      <div className={`flex items-center gap-2 ${config.color}`}>
-        <Icon className="w-4 h-4" />
-        <span className="text-sm font-medium">{config.text}</span>
+      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-4">
+          {/* 进度条 */}
+          <div className="flex-1">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>进度 {progressData.current}/{progressData.total}</span>
+              <span>{duration || '00:00'}</span>
+            </div>
+            <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${progressData.percentage}%` }}
+              />
+            </div>
+          </div>
+          
+          {/* 智能体指示器 */}
+          <div className="flex items-center gap-1">
+            {agentOrder.map((type, idx) => {
+              const info = AGENT_AVATARS[type];
+              const isActive = idx === currentIndex;
+              const isDone = idx < currentIndex;
+              
+              return (
+                <div
+                  key={type}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs
+                    ${isActive ? `${info.color} text-white ring-2 ring-offset-1 ring-blue-300` : 
+                      isDone ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}
+                  title={info.name}
+                >
+                  {isDone ? '✓' : info.icon}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
+  };
+
+  // 渲染消息气泡
+  const renderMessage = (message, index) => {
+    switch (message.type) {
+      case 'question':
+        return (
+          <div key={index} className="flex gap-3 mb-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 ${currentAgentInfo?.color || 'bg-gray-500'}`}>
+              {currentAgentInfo?.icon || '🤖'}
+            </div>
+            <div className="flex-1 max-w-[85%]">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">{message.agent?.name}</div>
+                <div className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed">
+                  {message.content}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'answer':
+        return (
+          <div key={index} className="flex gap-3 mb-4 flex-row-reverse">
+            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-gray-600" />
+            </div>
+            <div className="flex-1 max-w-[85%]">
+              <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                <div className="text-xs text-blue-100 mb-1">你</div>
+                <div className="text-sm leading-relaxed">{message.content}</div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'evaluation':
+        const isExpanded = expandedEvaluations[index];
+        return (
+          <div key={index} className="flex gap-3 mb-4">
+            <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+              <BarChart3 className="w-4 h-4 text-yellow-600" />
+            </div>
+            <div className="flex-1 max-w-[90%]">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800 overflow-hidden">
+                {/* 评估头部 - 可点击展开 */}
+                <button
+                  onClick={() => toggleEvaluation(index)}
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-yellow-100/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-bold text-yellow-600">{message.score}分</span>
+                    <span className="text-sm text-gray-600">{message.agent_name}</span>
+                    {message.smart_analysis && (
+                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                        AI分析
+                      </span>
+                    )}
+                  </div>
+                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                
+                {/* 展开的详情 */}
+                {isExpanded && (
+                  <div className="px-4 pb-3 border-t border-yellow-200">
+                    <p className="text-sm text-gray-700 mt-2">{message.feedback}</p>
+                    
+                    {message.strengths?.length > 0 && (
+                      <div className="mt-2 text-sm">
+                        <span className="text-green-600 font-medium">优点:</span>
+                        <span className="text-gray-600 ml-1">{message.strengths.join(', ')}</span>
+                      </div>
+                    )}
+                    
+                    {message.weaknesses?.length > 0 && (
+                      <div className="mt-1 text-sm">
+                        <span className="text-red-600 font-medium">改进:</span>
+                        <span className="text-gray-600 ml-1">{message.weaknesses.join(', ')}</span>
+                      </div>
+                    )}
+
+                    {message.smart_analysis && (
+                      <div className="mt-3 pt-3 border-t border-yellow-200">
+                        <div className="text-xs text-gray-500 mb-2">回答深度</div>
+                        <div className="flex gap-1 mb-2">
+                          {[1, 2, 3, 4, 5].map((level) => (
+                            <div
+                              key={level}
+                              className={`w-3 h-3 rounded-full ${
+                                level <= message.smart_analysis.depth_value ? 'bg-blue-500' : 'bg-gray-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        {message.smart_analysis.follow_up_suggestions?.length > 0 && (
+                          <div className="text-xs text-blue-600 mt-2">
+                            💡 {message.smart_analysis.follow_up_suggestions[0]}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
   };
 
   // 渲染消息列表
-  const renderMessages = () => {
-    return interview.messages.map((message, index) => {
-      switch (message.type) {
-        case 'question':
-          return (
-            <div key={index} className="flex gap-4 mb-6">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${currentAgentInfo?.color || 'bg-gray-500'}`}>
-                <span className="text-xl">{currentAgentInfo?.icon || '🤖'}</span>
-              </div>
-              <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-2xl rounded-tl-sm p-5 shadow-sm border border-blue-100 dark:border-blue-800">
-                <div className="font-semibold text-blue-900 dark:text-blue-300 mb-2 flex items-center gap-2">
-                  {message.agent?.name || '面试官'}
-                  <span className="text-xs px-2 py-0.5 bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-200 rounded-full">面试官</span>
-                </div>
-                <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed">{message.content}</div>
-              </div>
-            </div>
-          );
+  const renderMessages = () => (
+    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+      {messages.length === 0 ? (
+        <div className="text-center text-gray-400 py-12">
+          <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>等待第一个问题...</p>
+        </div>
+      ) : (
+        messages.map((msg, idx) => renderMessage(msg, idx))
+      )}
+      <div ref={messagesEndRef} />
+    </div>
+  );
 
-        case 'answer':
-          return (
-            <div key={index} className="flex gap-4 mb-6 flex-row-reverse">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${message.isDemo ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700'}`}>
-                <User className="w-6 h-6 text-white" />
-              </div>
-              <div className={`flex-1 rounded-2xl rounded-tr-sm p-5 shadow-sm ${message.isDemo ? 'bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 border border-purple-200 dark:border-purple-800' : 'bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700/50 border border-gray-200 dark:border-gray-700'}`}>
-                <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
-                  候选人
-                  {message.isDemo && (
-                    <span className="text-xs px-2 py-0.5 bg-purple-200 dark:bg-purple-700 text-purple-800 dark:text-purple-200 rounded-full font-medium">
-                      自动回答
-                    </span>
-                  )}
-                </div>
-                <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed">{message.content}</div>
-              </div>
-            </div>
-          );
-
-        case 'evaluation':
-          return (
-            <div key={index} className="flex gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div className="flex-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <div className="font-medium text-yellow-900 dark:text-yellow-300 mb-2 flex items-center gap-2">
-                  评估结果
-                  {message.smart_analysis && (
-                    <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full">
-                      AI深度分析
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-4 mb-2">
-                  <span className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{message.score}分</span>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">{message.agent_name}</span>
-                </div>
-                <div className="text-gray-700 dark:text-gray-300 text-sm mb-2">{message.feedback}</div>
-                {message.strengths?.length > 0 && (
-                  <div className="text-sm text-green-700 dark:text-green-400">
-                    <span className="font-medium">优点:</span> {message.strengths.join(', ')}
-                  </div>
-                )}
-                {message.weaknesses?.length > 0 && (
-                  <div className="text-sm text-red-700 dark:text-red-400">
-                    <span className="font-medium">改进:</span> {message.weaknesses.join(', ')}
-                  </div>
-                )}
-
-                {/* 智能分析详情 */}
-                {message.smart_analysis && (
-                  <div className="mt-3 pt-3 border-t border-yellow-200 dark:border-yellow-800">
-                    <div className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">🤖 AI深度分析</div>
-
-                    {/* 回答深度 */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">回答深度:</span>
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((level) => (
-                          <div
-                            key={level}
-                            className={`w-4 h-4 rounded-full ${
-                              level <= message.smart_analysis.depth_value
-                                ? 'bg-blue-500'
-                                : 'bg-gray-200 dark:bg-gray-700'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                        {message.smart_analysis.depth_level}
-                      </span>
-                    </div>
-
-                    {/* 关键点 */}
-                    {message.smart_analysis.key_points?.length > 0 && (
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                        <span className="font-medium">提及要点:</span>{' '}
-                        {message.smart_analysis.key_points.join(', ')}
-                      </div>
-                    )}
-
-                    {/* 缺失方面 */}
-                    {message.smart_analysis.missing_aspects?.length > 0 && (
-                      <div className="text-xs text-orange-600 dark:text-orange-400 mb-1">
-                        <span className="font-medium">未涉及:</span>{' '}
-                        {message.smart_analysis.missing_aspects.join(', ')}
-                      </div>
-                    )}
-
-                    {/* 模糊区域 */}
-                    {message.smart_analysis.vague_areas?.length > 0 && (
-                      <div className="text-xs text-red-600 dark:text-red-400 mb-1">
-                        <span className="font-medium">表述模糊:</span>{' '}
-                        {message.smart_analysis.vague_areas.join('; ')}
-                      </div>
-                    )}
-
-                    {/* 追问建议 */}
-                    {message.smart_analysis.follow_up_suggestions?.length > 0 && (
-                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300">
-                        <span className="font-medium">💡 追问建议:</span>
-                        <ul className="mt-1 space-y-1">
-                          {message.smart_analysis.follow_up_suggestions.map((suggestion, i) => (
-                            <li key={i}>• {suggestion}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-
-        case 'deep_follow_up':
-          return (
-            <div key={index} className="flex gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div className="flex-1 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                <div className="font-medium text-indigo-900 dark:text-indigo-300 mb-1 flex items-center gap-2">
-                  <span>🤖 智能追问</span>
-                  <span className="text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-full">
-                    {message.agent}
-                  </span>
-                </div>
-                <div className="text-xs text-indigo-600 dark:text-indigo-400">{message.reason}</div>
-              </div>
-            </div>
-          );
-
-        case 'stream':
-          return (
-            <div key={index} className="flex gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${currentAgentInfo?.color || 'bg-gray-500'}`}>
-                <span className="text-lg">{currentAgentInfo?.icon || '🤖'}</span>
-              </div>
-              <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{message.content}</div>
-                {interview.isProcessing && index === interview.messages.length - 1 && (
-                  <span className="inline-block w-2 h-4 bg-blue-500 ml-1 animate-pulse" />
-                )}
-              </div>
-            </div>
-          );
-
-        default:
-          return null;
-      }
-    });
-  };
-
-  // 渲染结果面板
-  const renderResultPanel = () => {
-    if (!interview.result) return null;
-
-    const { overall_score, grade, dimension_scores, strengths, weaknesses, recommendations } = interview.result;
-
-    // 准备雷达图数据
-    const radarData = Object.entries(dimension_scores || {}).map(([key, value]) => ({
-      dimension: key,
-      score: value,
-      fullMark: 100,
-    }));
+  // 渲染输入区域
+  const renderInput = () => {
+    if (status !== StatusEnum.IN_PROGRESS && status !== StatusEnum.PAUSED) {
+      return null;
+    }
 
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
-          <Sparkles className="w-6 h-6 text-yellow-500" />
-          面试评估报告
-        </h2>
-
-        {/* 总体评分 */}
-        <div className="flex items-center gap-8 mb-8">
-          <div className="text-center">
-            <div className="text-5xl font-bold text-blue-600 dark:text-blue-400">{overall_score}</div>
-            <div className="text-gray-500 dark:text-gray-400">总体分数</div>
-          </div>
-          <div className="text-center">
-            <div className="text-5xl font-bold text-green-600 dark:text-green-400">{grade}</div>
-            <div className="text-gray-500 dark:text-gray-400">等级</div>
-          </div>
-        </div>
-
-        {/* 雷达图 */}
-        {radarData.length > 0 && (
-          <div className="h-64 mb-8">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="dimension" />
-                <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                <Radar
-                  name="候选人"
-                  dataKey="score"
-                  stroke="#3b82f6"
-                  fill="#3b82f6"
-                  fillOpacity={0.3}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* 优势和劣势 */}
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 dark:text-green-300 mb-2">优势</h3>
-            <ul className="list-disc list-inside text-green-800 dark:text-green-400">
-              {strengths?.map((s, i) => <li key={i}>{s}</li>)}
-            </ul>
-          </div>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
-            <h3 className="font-semibold text-red-900 dark:text-red-300 mb-2">待提升</h3>
-            <ul className="list-disc list-inside text-red-800 dark:text-red-400">
-              {weaknesses?.map((w, i) => <li key={i}>{w}</li>)}
-            </ul>
-          </div>
-        </div>
-
-        {/* 建议 */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">建议</h3>
-          <ul className="list-disc list-inside text-blue-800 dark:text-blue-400">
-            {recommendations?.map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-4">
+      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+        <div className="flex gap-2 mb-3">
           <button
-            onClick={handleReset}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            onClick={() => setIsRecording(!isRecording)}
+            className={`p-2.5 rounded-xl transition-colors ${
+              isRecording
+                ? 'bg-red-100 text-red-600'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
           >
-            <RotateCcw className="w-4 h-4" />
-            重新开始
+            {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </button>
+          <input
+            type="text"
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
+            placeholder="输入你的回答..."
+            disabled={isProcessing || status === StatusEnum.PAUSED}
+            className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          />
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+            onClick={handleSubmitAnswer}
+            disabled={!answer.trim() || isProcessing}
+            className="px-5 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            导出报告
+            <Send className="w-4 h-4" />
+            发送
+          </button>
+        </div>
+
+        {/* 控制按钮 */}
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <button
+              onClick={handlePauseResume}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1.5"
+            >
+              {status === StatusEnum.PAUSED ? (
+                <><Play className="w-4 h-4" /> 继续</>
+              ) : (
+                <><Pause className="w-4 h-4" /> 暂停</>
+              )}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+            >
+              结束
+            </button>
+          </div>
+          <button
+            onClick={handleComplete}
+            className="px-4 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-1.5"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            完成面试
           </button>
         </div>
       </div>
     );
   };
 
-  // 渲染进度面板
-  const renderProgressPanel = () => {
-    const progress = interview.progress || { current: 0, total: 5, percentage: 0 };
-    const currentRound = progress.current || 0;
-    const totalRounds = progress.total || 5;
-    const percentage = progress.percentage || 0;
+  // 渲染准备界面
+  const renderReady = () => (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="text-center max-w-md px-4">
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Sparkles className="w-10 h-10 text-blue-600" />
+        </div>
+        <h2 className="text-xl font-semibold mb-2">面试准备就绪</h2>
+        <p className="text-gray-500 mb-6">
+          本次面试将由4位AI面试官进行，涵盖技术、系统设计、行为和HR四个维度
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={handleStart}
+            disabled={!sessionId}
+            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+          >
+            <Play className="w-5 h-5" />
+            开始面试
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
-    // 智能体顺序
-    const agentOrder = ['technical', 'system_design', 'behavioral', 'hr'];
-    const currentAgentIndex = agentOrder.indexOf(interview.currentAgent?.type);
+  // 渲染结果界面
+  const renderResult = () => {
+    if (!result) return null;
 
+    const { overall_score, dimension_scores, strengths, weaknesses, recommendations } = result;
+    
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-700">
-        {/* 进度条和状态信息 - 同一行 */}
-        <div className="flex items-center gap-4 mb-3">
-          <div className="flex-1">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                面试进度 {currentRound}/{totalRounds} 轮
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-500">
-                {interview.duration || '00:00'} · 剩余{totalRounds - currentRound}轮
-              </span>
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-2xl mx-auto">
+          {/* 总分 */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-3xl font-bold mb-4">
+              {overall_score}
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${percentage}%` }}
-              ></div>
-            </div>
+            <h2 className="text-2xl font-bold mb-1">面试完成</h2>
+            <p className="text-gray-500">综合评分</p>
           </div>
-        </div>
 
-        {/* 智能体进度 - 更紧凑 */}
-        <div className="flex items-center justify-between px-2">
-          {agentOrder.map((agentType, index) => {
-            const agentInfo = AGENT_AVATARS[agentType];
-            const isCompleted = index < currentAgentIndex;
-            const isCurrent = index === currentAgentIndex;
-
-            return (
-              <div key={agentType} className="flex flex-col items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-base transition-all duration-300 ${
-                    isCompleted
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                      : isCurrent
-                      ? `${agentInfo.color} text-white ring-2 ring-blue-200 dark:ring-blue-900/50`
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
-                  }`}
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-4 h-4" />
-                  ) : (
-                    agentInfo.icon
-                  )}
-                </div>
-                <span
-                  className={`text-[10px] mt-0.5 ${
-                    isCurrent
-                      ? 'text-blue-600 dark:text-blue-400 font-medium'
-                      : 'text-gray-500 dark:text-gray-500'
-                  }`}
-                >
-                  {isCurrent ? '进行中' : agentInfo.name.replace('面试官', '')}
-                </span>
+          {/* 维度分数 */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {Object.entries(dimension_scores || {}).map(([dim, score]) => (
+              <div key={dim} className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100">
+                <div className="text-sm text-gray-500 mb-1">{dim}</div>
+                <div className="text-xl font-bold text-gray-800">{score}分</div>
               </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  // 如果显示结果
-  if (showResult) {
-    return (
-      <div className="max-w-4xl mx-auto p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-        {renderResultPanel()}
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
-      {/* 头部 - 更紧凑 */}
-      <div className="flex items-center justify-between py-3 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-gray-900 dark:text-white">多智能体面试</h1>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {candidateProfile?.name || '未命名'}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {renderStatusIndicator()}
-          {currentAgentInfo && interview.status === InterviewStatus.IN_PROGRESS && (
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white ${currentAgentInfo.color}`}>
-              <span className="text-sm">{currentAgentInfo.icon}</span>
-              <span className="text-xs font-medium">
-                {currentAgentInfo.name.replace('面试官', '')}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 进度面板 - 只在面试进行中显示 */}
-      {interview.status === InterviewStatus.IN_PROGRESS && (
-        <div className="px-4">
-          {renderProgressPanel()}
-        </div>
-      )}
-
-      {/* 错误提示 */}
-      {interview.error && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400 flex-shrink-0 mx-4">
-          <AlertCircle className="w-5 h-5" />
-          {interview.error.message}
-        </div>
-      )}
-
-      {/* 创建会话中 */}
-      {(interview.status === InterviewStatus.IDLE || interview.status === InterviewStatus.CREATING) && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <RotateCcw className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">正在准备面试...</h2>
-            <p className="text-gray-500 dark:text-gray-400">
-              正在创建面试会话，请稍候
-            </p>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* 准备界面 */}
-      {interview.status === InterviewStatus.READY && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">面试准备就绪</h2>
-            <p className="text-gray-500 dark:text-gray-400">
-              本次面试将由技术面试官、行为面试官和HR面试官轮流进行
-            </p>
-            <div className="flex gap-4 justify-center mt-6">
-              <button
-                onClick={handleStart}
-                disabled={!interview.sessionId}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Play className="w-5 h-5" />
-                开始面试
-              </button>
-              <button
-                onClick={handleStartDemo}
-                disabled={!interview.sessionId}
-                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-                title="演示模式：系统自动回答所有问题"
-              >
-                <Sparkles className="w-5 h-5" />
-                演示模式（自问自答）
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 面试界面 */}
-      {(interview.status === InterviewStatus.IN_PROGRESS ||
-        interview.status === InterviewStatus.PAUSED ||
-        interview.status === InterviewStatus.PROCESSING) && (
-        <div className="flex flex-col flex-1 min-h-0 px-4 py-3 gap-3">
-          {/* 消息列表 - 自适应高度，独立滚动 */}
-          <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 overflow-y-auto border border-gray-200 dark:border-gray-700 min-h-0">
-            {interview.messages.length === 0 ? (
-              <div className="text-center text-gray-400 dark:text-gray-500 py-12">
-                等待第一个问题...
+          {/* 优势和改进 */}
+          <div className="space-y-4 mb-6">
+            {strengths?.length > 0 && (
+              <div className="bg-green-50 rounded-xl p-4">
+                <h3 className="font-semibold text-green-800 mb-2">优势</h3>
+                <ul className="list-disc list-inside text-green-700 text-sm">
+                  {strengths.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
               </div>
-            ) : (
-              renderMessages()
             )}
-            <div ref={messagesEndRef} />
+            {weaknesses?.length > 0 && (
+              <div className="bg-red-50 rounded-xl p-4">
+                <h3 className="font-semibold text-red-800 mb-2">待提升</h3>
+                <ul className="list-disc list-inside text-red-700 text-sm">
+                  {weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
 
-          {/* 输入区域 - 固定在底部 */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <div className="flex gap-3">
-              <button
-                onClick={() => setIsRecording(!isRecording)}
-                className={`p-3 rounded-xl transition-all duration-200 ${
-                  isRecording
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-inner'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-                title={isRecording ? '停止录音' : '开始录音'}
-              >
-                {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-              <input
-                type="text"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
-                placeholder="输入你的回答..."
-                disabled={interview.isProcessing || interview.status === InterviewStatus.PAUSED}
-                className="flex-1 px-5 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:disabled:bg-gray-800 text-gray-900 dark:text-white text-base transition-all duration-200"
-              />
-              <button
-                onClick={handleSubmitAnswer}
-                disabled={!answer.trim() || interview.isProcessing || interview.status === InterviewStatus.PAUSED}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:bg-gray-300 disabled:from-gray-300 disabled:to-gray-400 flex items-center gap-2 font-medium shadow-lg shadow-blue-500/30 transition-all duration-200"
-              >
-                <Send className="w-5 h-5" />
-                发送
-              </button>
-            </div>
-
-            {/* 控制按钮 */}
-            <div className="flex justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-              <div className="flex gap-2">
-                <button
-                  onClick={handlePauseResume}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 text-gray-700 dark:text-gray-300 text-sm font-medium transition-all duration-200"
-                >
-                  {interview.status === InterviewStatus.PAUSED ? (
-                    <><Play className="w-4 h-4" /> 继续</>
-                  ) : (
-                    <><Pause className="w-4 h-4" /> 暂停</>
-                  )}
-                </button>
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-medium transition-all duration-200"
-                >
-                  取消
-                </button>
-              </div>
-              <button
-                onClick={handleComplete}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1.5 text-sm font-medium transition-all duration-200"
-              >
-                <StopCircle className="w-4 h-4" />
-                完成
-              </button>
-            </div>
+          {/* 操作按钮 */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleReset}
+              className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600"
+            >
+              重新开始
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50"
+            >
+              导出报告
+            </button>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  // 主渲染
+  return (
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+      {renderHeader()}
+      {renderProgress()}
+
+      {status === StatusEnum.READY && renderReady()}
+
+      {(status === StatusEnum.IN_PROGRESS ||
+        status === StatusEnum.PAUSED ||
+        status === StatusEnum.PROCESSING) && (
+        <>
+          {renderMessages()}
+          {renderInput()}
+        </>
       )}
 
-      {/* 加载状态 */}
-      {interview.isLoading && (
+      {status === StatusEnum.COMPLETED && renderResult()}
+
+      {isLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 flex items-center gap-3">
-            <RotateCcw className="w-6 h-6 animate-spin text-blue-600 dark:text-blue-400" />
-            <span className="text-gray-900 dark:text-white">处理中...</span>
+          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
+            <RotateCcw className="w-6 h-6 animate-spin text-blue-500" />
+            <span>处理中...</span>
           </div>
         </div>
       )}

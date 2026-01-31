@@ -11,7 +11,7 @@ import {
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
-  BarChart3, Zap, AlertCircle, Users, Bot
+  BarChart3, Zap, AlertCircle, Users, Bot, Scan
 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
@@ -21,6 +21,7 @@ import IFlowModelSelector from './IFlowModelSelector';
 import ReactMarkdown from 'react-markdown';
 import OCRBlocksOverlay from './OCRBlocksOverlay';
 import MultiAgentInterview from './MultiAgentInterview';
+import JobAnalysisPanel from './JobAnalysisPanel';
 
 const InterviewPreparation = ({ selectedProject }) => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -123,6 +124,9 @@ const InterviewPreparation = ({ selectedProject }) => {
   // 多智能体面试模式状态
   const [multiAgentMode, setMultiAgentMode] = useState(false);
   const [multiAgentCandidateProfile, setMultiAgentCandidateProfile] = useState(null);
+
+  // 招聘分析面板状态
+  const [showJobAnalysis, setShowJobAnalysis] = useState(false);
   
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -1380,6 +1384,15 @@ const InterviewPreparation = ({ selectedProject }) => {
               </h3>
             </div>
             <div className="flex items-center gap-3">
+              {/* 招聘分析按钮 */}
+              <button
+                onClick={() => setShowJobAnalysis(true)}
+                className="px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors text-xs font-medium bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100"
+              >
+                <Scan className="w-3.5 h-3.5" />
+                招聘分析
+              </button>
+
               {/* 多智能体面试模式开关 */}
               <button
                 onClick={() => {
@@ -3289,6 +3302,28 @@ ${conversation}
         {activeSection === 'faq' && renderFAQ()}
         {activeSection === 'history' && renderHistory()}
       </div>
+
+      {/* 招聘分析面板 */}
+      {showJobAnalysis && (
+        <JobAnalysisPanel
+          onAnalysisComplete={(analysisResult) => {
+            // 根据分析结果更新候选人画像
+            const profile = {
+              name: selectedProject?.name || '候选人',
+              skills: analysisResult.skills || [],
+              experience_years: parseInt(analysisResult.experience) || 3,
+              target_position: analysisResult.job_title || '软件工程师',
+              previous_roles: [],
+            };
+            setMultiAgentCandidateProfile(profile);
+            setShowJobAnalysis(false);
+            // 自动切换到多智能体面试模式
+            setMultiAgentMode(true);
+            setActiveSection('practice');
+          }}
+          onClose={() => setShowJobAnalysis(false)}
+        />
+      )}
     </div>
   );
 };

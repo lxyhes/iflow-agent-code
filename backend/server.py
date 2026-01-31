@@ -6500,6 +6500,10 @@ async def catch_all(path_name: str, request: Request):
     if path_name.startswith("interview/"):
         raise HTTPException(status_code=404, detail=f"Interview endpoint '/api/{path_name}' not found")
 
+    # 排除 job-analysis 路由，让 job_analysis router 处理
+    if path_name.startswith("job-analysis/"):
+        raise HTTPException(status_code=404, detail=f"Job analysis endpoint '/api/{path_name}' not found")
+
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
 
     # MCP 相关的 API

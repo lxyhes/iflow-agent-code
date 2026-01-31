@@ -2,6 +2,19 @@ import sys
 import os
 import logging
 
+# 加载 .env 文件
+try:
+    from dotenv import load_dotenv
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    env_path = os.path.join(project_root, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"Loaded .env from {env_path}")
+    else:
+        print(f".env file not found at {env_path}")
+except ImportError:
+    print("python-dotenv not installed, skipping .env loading")
+
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 backend_dir = os.path.join(project_root, "backend")
 for p in (project_root, backend_dir):
@@ -14,6 +27,8 @@ from backend.app.routers import files
 from backend.app.routers import frameworks
 from backend.app.routers import ocr
 from backend.app.routers import interview
+from backend.app.routers import job_analysis
+from backend.app.routers import job_analysis_text
 
 # Import legacy app to keep existing endpoints working
 # This also initializes the global variables in server.py
@@ -57,6 +72,8 @@ app.include_router(files.router)
 app.include_router(frameworks.router)
 app.include_router(ocr.router)
 app.include_router(interview.router)
+app.include_router(job_analysis.router)
+app.include_router(job_analysis_text.router)
 
 # Include legacy routes
 # This brings in all the endpoints defined in server.py
