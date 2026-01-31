@@ -22,6 +22,9 @@ import {
   AlertCircle,
   ChevronRight,
   Sparkles,
+  Target,
+  TrendingUp,
+  Award,
 } from 'lucide-react';
 import { useMultiAgentInterview, InterviewStatus } from '../hooks/useMultiAgentInterview';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
@@ -29,6 +32,7 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Responsi
 // 智能体头像配置
 const AGENT_AVATARS = {
   technical: { icon: '💻', color: 'bg-blue-500', name: '技术面试官' },
+  system_design: { icon: '🏗️', color: 'bg-orange-500', name: '系统设计面试官' },
   behavioral: { icon: '🤝', color: 'bg-green-500', name: '行为面试官' },
   hr: { icon: '👔', color: 'bg-purple-500', name: 'HR面试官' },
 };
@@ -437,6 +441,80 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
     );
   };
 
+  // 渲染进度面板
+  const renderProgressPanel = () => {
+    const progress = interview.progress || { current: 0, total: 5, percentage: 0 };
+    const currentRound = progress.current || 0;
+    const totalRounds = progress.total || 5;
+    const percentage = progress.percentage || 0;
+
+    // 智能体顺序
+    const agentOrder = ['technical', 'system_design', 'behavioral', 'hr'];
+    const currentAgentIndex = agentOrder.indexOf(interview.currentAgent?.type);
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-3 mb-3 shadow-sm border border-gray-200 dark:border-gray-700">
+        {/* 进度条和状态信息 - 同一行 */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                面试进度 {currentRound}/{totalRounds} 轮
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">
+                {interview.duration || '00:00'} · 剩余{totalRounds - currentRound}轮
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${percentage}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        {/* 智能体进度 - 更紧凑 */}
+        <div className="flex items-center justify-between px-2">
+          {agentOrder.map((agentType, index) => {
+            const agentInfo = AGENT_AVATARS[agentType];
+            const isCompleted = index < currentAgentIndex;
+            const isCurrent = index === currentAgentIndex;
+
+            return (
+              <div key={agentType} className="flex flex-col items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-base transition-all duration-300 ${
+                    isCompleted
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                      : isCurrent
+                      ? `${agentInfo.color} text-white ring-2 ring-blue-200 dark:ring-blue-900/50`
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
+                  }`}
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : (
+                    agentInfo.icon
+                  )}
+                </div>
+                <span
+                  className={`text-[10px] mt-0.5 ${
+                    isCurrent
+                      ? 'text-blue-600 dark:text-blue-400 font-medium'
+                      : 'text-gray-500 dark:text-gray-500'
+                  }`}
+                >
+                  {isCurrent ? '进行中' : agentInfo.name.replace('面试官', '')}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // 如果显示结果
   if (showResult) {
     return (
@@ -447,27 +525,34 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
   }
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
-      {/* 头部 - 固定 */}
-      <div className="flex items-center justify-between mb-4 flex-shrink-0 px-4 pt-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">多智能体面试</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            候选人: {candidateProfile?.name || '未命名'}
-          </p>
+    <div className="w-full h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
+      {/* 头部 - 更紧凑 */}
+      <div className="flex items-center justify-between py-3 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white">多智能体面试</h1>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {candidateProfile?.name || '未命名'}
+          </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {renderStatusIndicator()}
           {currentAgentInfo && interview.status === InterviewStatus.IN_PROGRESS && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-              <span className="text-lg">{currentAgentInfo.icon}</span>
-              <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                {currentAgentInfo.name}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-white ${currentAgentInfo.color}`}>
+              <span className="text-sm">{currentAgentInfo.icon}</span>
+              <span className="text-xs font-medium">
+                {currentAgentInfo.name.replace('面试官', '')}
               </span>
             </div>
           )}
         </div>
       </div>
+
+      {/* 进度面板 - 只在面试进行中显示 */}
+      {interview.status === InterviewStatus.IN_PROGRESS && (
+        <div className="px-4">
+          {renderProgressPanel()}
+        </div>
+      )}
 
       {/* 错误提示 */}
       {interview.error && (
@@ -530,9 +615,9 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
       {(interview.status === InterviewStatus.IN_PROGRESS ||
         interview.status === InterviewStatus.PAUSED ||
         interview.status === InterviewStatus.PROCESSING) && (
-        <div className="flex flex-col flex-1 min-h-0 px-4 pb-4">
+        <div className="flex flex-col flex-1 min-h-0 px-4 py-3 gap-3">
           {/* 消息列表 - 自适应高度，独立滚动 */}
-          <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg mb-4 p-6 overflow-y-auto border border-gray-100 dark:border-gray-700 min-h-0">
+          <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 overflow-y-auto border border-gray-200 dark:border-gray-700 min-h-0">
             {interview.messages.length === 0 ? (
               <div className="text-center text-gray-400 dark:text-gray-500 py-12">
                 等待第一个问题...
@@ -544,7 +629,7 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
           </div>
 
           {/* 输入区域 - 固定在底部 */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 lg:p-6 border border-gray-100 dark:border-gray-700 flex-shrink-0">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 flex-shrink-0">
             <div className="flex gap-3">
               <button
                 onClick={() => setIsRecording(!isRecording)}
@@ -577,11 +662,11 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
             </div>
 
             {/* 控制按钮 */}
-            <div className="flex justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <div className="flex gap-3">
+            <div className="flex justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex gap-2">
                 <button
                   onClick={handlePauseResume}
-                  className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300 font-medium transition-all duration-200"
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 text-gray-700 dark:text-gray-300 text-sm font-medium transition-all duration-200"
                 >
                   {interview.status === InterviewStatus.PAUSED ? (
                     <><Play className="w-4 h-4" /> 继续</>
@@ -591,17 +676,17 @@ const MultiAgentInterview = ({ candidateProfile, config, onComplete, onCancel })
                 </button>
                 <button
                   onClick={handleCancel}
-                  className="px-5 py-2.5 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 font-medium transition-all duration-200"
+                  className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-medium transition-all duration-200"
                 >
                   取消
                 </button>
               </div>
               <button
                 onClick={handleComplete}
-                className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 flex items-center gap-2 font-medium shadow-lg shadow-green-500/30 transition-all duration-200"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1.5 text-sm font-medium transition-all duration-200"
               >
-                <StopCircle className="w-5 h-5" />
-                完成面试
+                <StopCircle className="w-4 h-4" />
+                完成
               </button>
             </div>
           </div>

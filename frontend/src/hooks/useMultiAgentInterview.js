@@ -56,6 +56,15 @@ export const useMultiAgentInterview = (options = {}) => {
   const [evaluation, setEvaluation] = useState(null);
   const [result, setResult] = useState(null);
 
+  // 进度信息
+  const [progress, setProgress] = useState({
+    current: 0,
+    total: 5,
+    percentage: 0,
+  });
+  const [duration, setDuration] = useState('00:00');
+  const startTimeRef = useRef(null);
+
   // 加载状态
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -140,6 +149,20 @@ export const useMultiAgentInterview = (options = {}) => {
       wsRef.current = ws;
 
       setStatus(InterviewStatus.IN_PROGRESS);
+      startTimeRef.current = Date.now();
+
+      // 开始计时器
+      const timerInterval = setInterval(() => {
+        if (startTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+          const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+          const seconds = (elapsed % 60).toString().padStart(2, '0');
+          setDuration(`${minutes}:${seconds}`);
+        }
+      }, 1000);
+
+      // 保存计时器引用以便清理
+      ws.timerInterval = timerInterval;
 
       // 开始面试流程（支持演示模式）
       ws.startInterview(demoMode, demoDelay);
@@ -163,6 +186,14 @@ export const useMultiAgentInterview = (options = {}) => {
           type: data.agent_type,
           name: data.agent_name,
           persona: data.persona,
+        });
+        // 更新进度
+        const agentOrder = ['technical', 'system_design', 'behavioral', 'hr'];
+        const currentIndex = agentOrder.indexOf(data.agent_type);
+        setProgress({
+          current: currentIndex + 1,
+          total: 5,
+          percentage: ((currentIndex + 1) / 5) * 100,
         });
         if (onAgentSwitch) onAgentSwitch(data);
         break;
@@ -463,6 +494,10 @@ export const useMultiAgentInterview = (options = {}) => {
   const reset = useCallback(() => {
     // 关闭 WebSocket
     if (wsRef.current) {
+      // 清理计时器
+      if (wsRef.current.timerInterval) {
+        clearInterval(wsRef.current.timerInterval);
+      }
       wsRef.current.disconnect();
       wsRef.current = null;
     }
@@ -479,6 +514,9 @@ export const useMultiAgentInterview = (options = {}) => {
     setResult(null);
     setIsLoading(false);
     setIsProcessing(false);
+    setProgress({ current: 0, total: 5, percentage: 0 });
+    setDuration('00:00');
+    startTimeRef.current = null;
   }, []);
 
   /**
@@ -505,6 +543,10 @@ export const useMultiAgentInterview = (options = {}) => {
     result,
     isLoading,
     isProcessing,
+
+    // 进度信息
+    progress,
+    duration,
 
     // 操作方法
     createSession,

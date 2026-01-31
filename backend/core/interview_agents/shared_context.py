@@ -228,8 +228,16 @@ class SharedInterviewContext:
             "flags": self.flags,
         }
 
-    def get_evaluation_summary(self) -> Dict[str, Any]:
-        """获取评估摘要"""
+    def get_evaluation_summary(self, weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+        """
+        获取评估摘要（支持权重配置）
+
+        Args:
+            weights: 维度权重配置，如 {"system_design": 0.25, "technical_depth": 0.20}
+
+        Returns:
+            评估摘要
+        """
         evaluations = []
         for turn in self.interview_turns:
             if turn.evaluation:
@@ -239,6 +247,15 @@ class SharedInterviewContext:
                     "score": turn.evaluation.score,
                     "confidence": turn.evaluation.confidence,
                 })
+
+        if not evaluations:
+            return {
+                "evaluations": [],
+                "dimension_averages": {},
+                "agent_averages": {},
+                "overall_average": 0,
+                "weighted_overall": 0,
+            }
 
         # 按维度汇总
         dimension_scores = {}
@@ -266,11 +283,84 @@ class SharedInterviewContext:
             for agent, scores in agent_scores.items()
         }
 
+        # 计算简单平均分
+        simple_average = sum(e["score"] for e in evaluations) / len(evaluations)
+
+        # 计算加权平均分
+        weighted_overall = self._calculate_weighted_score(
+            dimension_averages, weights
+        )
+
         return {
             "evaluations": evaluations,
             "dimension_averages": dimension_averages,
             "agent_averages": agent_averages,
-            "overall_average": sum(e["score"] for e in evaluations) / len(evaluations) if evaluations else 0,
+            "overall_average": simple_average,
+            "weighted_overall": weighted_overall,
+            "weights_used": weights or self._get_default_weights(),
+        }
+
+    def _calculate_weighted_score(
+        self,
+        dimension_averages: Dict[str, float],
+        weights: Optional[Dict[str, float]] = None
+    ) -> float:
+        """
+        计算加权分数
+
+        Args:
+            dimension_averages: 各维度平均分
+            weights: 权重配置
+
+        Returns:
+            加权总分
+        """
+        if not dimension_averages:
+            return 0
+
+        weights = weights or self._get_default_weights()
+
+        total_weight = 0
+        weighted_sum = 0
+
+        for dimension, score in dimension_averages.items():
+            weight = weights.get(dimension, 0.1)  # 默认权重0.1
+            weighted_sum += score * weight
+            total_weight += weight
+
+        # 归一化
+        if total_weight > 0:
+            return weighted_sum / total_weight
+        return 0
+
+    def _get_default_weights(self) -> Dict[str, float]:
+        """
+        获取默认权重配置
+
+        针对高薪职位的权重配置
+        """
+        return {
+            # 系统设计（高薪职位核心）
+            "system_design": 0.20,
+            "scalability": 0.05,
+            "availability": 0.05,
+            "consistency": 0.05,
+            "performance": 0.05,
+
+            # 技术深度
+            "technical_depth": 0.15,
+            "coding_ability": 0.10,
+            "problem_solving": 0.10,
+
+            # 领导力（P7+必备）
+            "leadership": 0.10,
+            "technical_influence": 0.05,
+            "cross_team_collaboration": 0.05,
+
+            # 其他
+            "communication": 0.05,
+            "adaptability": 0.05,
+            "cultural_fit": 0.05,
         }
 
     def _update_metrics(self, turn: InterviewTurn):

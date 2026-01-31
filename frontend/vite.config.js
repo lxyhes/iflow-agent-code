@@ -13,16 +13,16 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 5173,
       proxy: {
-        // WebSocket 代理 - 必须放在 HTTP 代理之前
-        // Proxy WebSocket for interview
+        // ===== Interview API (最高优先级) =====
+        // WebSocket for interview - 直接代理，不重写
         '/api/interview/ws': {
           target: BACKEND_WS_URL,
           ws: true,
           changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path
+          secure: false
         },
-        // Proxy interview API endpoints (must be before generic /api rule)
+        // Interview REST API endpoints - 直接代理，不重写
+        // 后端已经有 /api/interview 路由
         '/api/interview': {
           target: BACKEND_URL,
           changeOrigin: true,
@@ -35,30 +35,30 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           rewrite: (path) => path
         },
-        // 工作流相关 API - 优先匹配
-        '^/api/workflows(/|$)': {
+        // 工作流相关 API
+        '/api/workflows': {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: false
         },
         // 前端服务器 API 路由（认证、项目、设置、用户）
-        '^/api/auth(/|$)': {
+        '/api/auth': {
           target: 'http://localhost:3001',
           changeOrigin: true,
           secure: false
         },
-        '^/api/settings(/|$)': {
+        '/api/settings': {
           target: 'http://localhost:3001',
           changeOrigin: true,
           secure: false
         },
-        '^/api/user(/|$)': {
+        '/api/user': {
           target: 'http://localhost:3001',
           changeOrigin: true,
           secure: false
         },
-        // 后端 Python FastAPI 路由（其他所有 /api 请求，包括 snippets、command-shortcuts、review、solutions、business-flow）
-        '^/api(/|$)': {
+        // 后端 Python FastAPI 路由（其他所有 /api 请求）
+        '/api': {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: false

@@ -28,9 +28,12 @@ from .hr_interviewer import HRInterviewerAgent
 from .message_bus import MessageBus, MessagePriority, MessageType
 from .shared_context import CandidateProfile, InterviewTurn, SharedInterviewContext
 from .technical_interviewer import TechnicalInterviewerAgent
+from .system_design_interviewer import SystemDesignInterviewerAgent
 from .smart_question_generator import SmartQuestionGenerator, QuestionContext, QuestionCategory
 from .deep_dive_engine import DeepDiveEngine, AnswerDepth
 from .smart_strategy_engine import SmartStrategyEngine, StrategyContext, InterviewStrategy, InterviewPhase
+from .learning_feedback_generator import LearningFeedbackGenerator
+from .pressure_test_engine import PressureTestEngine, PressureTestConfig
 
 
 class CoordinationMode(Enum):
@@ -58,11 +61,14 @@ class InterviewConfig:
     max_duration: int = 3600  # 最大时长（秒）
     agent_order: List[InterviewerType] = field(default_factory=lambda: [
         InterviewerType.TECHNICAL,
+        InterviewerType.SYSTEM_DESIGN,
         InterviewerType.BEHAVIORAL,
         InterviewerType.HR,
     ])
     enable_follow_up: bool = True
     enable_stress_test: bool = False
+    enable_pressure_test: bool = False  # 启用压力测试
+    pressure_test_level: str = "medium"  # low, medium, high
     auto_transition: bool = True
     demo_mode: bool = False  # 演示模式：自动回答
     demo_delay: int = 3  # 演示模式下自动回答的延迟（秒）
@@ -100,8 +106,25 @@ class AgentCoordinator:
         self.question_generator = SmartQuestionGenerator()
         self.deep_dive_engine = DeepDiveEngine()
         self.strategy_engine = SmartStrategyEngine()
+        self.learning_feedback_generator = LearningFeedbackGenerator()
+        self.pressure_test_engine = PressureTestEngine(
+            PressureTestConfig(
+                enabled=self.config.enable_pressure_test,
+                level=self._parse_pressure_level(self.config.pressure_test_level),
+            )
+        )
         self.strategy_context: Optional[StrategyContext] = None
         self.performance_history: List[Dict[str, Any]] = []
+
+        # 智能体问题计数
+        self.agent_question_count: Dict[str, int] = {}
+        self.current_agent_id: Optional[str] = None
+        self.questions_per_agent: int = 2  # 每个智能体默认问2个问题
+
+    def _parse_pressure_level(self, level: str):
+        """解析压力等级"""
+        from .pressure_test_engine import PressureLevel
+        return PressureLevel(level) if level in ["low", "medium", "high"] else PressureLevel.MEDIUM
 
     def register_agent(self, agent: BaseInterviewerAgent) -> str:
         """
@@ -115,6 +138,7 @@ class AgentCoordinator:
         """
         agent_id = f"{agent.interviewer_type.value}_{len(self.agents)}"
         self.agents[agent_id] = agent
+        self.agent_question_count[agent_id] = 0
 
         # 订阅消息
         self.message_bus.subscribe(agent_id, self._create_message_handler(agent_id))
@@ -262,15 +286,14 @@ class AgentCoordinator:
 
                     yield evaluation_result
 
-                    # 智能深度追问
-                    if (self.config.enable_deep_dive and
-                        smart_analysis and
-                        self.deep_dive_engine.should_continue_deep_dive(
-                            smart_analysis,
-                            follow_up_count=getattr(self.current_turn, 'follow_up_count', 0),
-                            max_follow_ups=2,
-                        )):
+                    # 确定追问类型（优先级：深度追问 > 普通追问 > 无追问）
+                    follow_up_type = self._determine_follow_up_type(
+                        smart_analysis,
+                        self.current_turn.evaluation if self.current_turn else None
+                    )
 
+                    if follow_up_type == "deep_dive":
+                        # 智能深度追问
                         deep_follow_up = self.deep_dive_engine.generate_deep_dive_question(
                             analysis=smart_analysis,
                             original_question=self.current_turn.question.content,
@@ -299,35 +322,29 @@ class AgentCoordinator:
                                 yield chunk
                             return
 
-            # 检查是否需要进行普通追问（基于分数）
-            if (self.config.enable_follow_up and
-                self.current_turn and
-                self.current_turn.evaluation and
-                self.current_turn.evaluation.score < 85):
-
-                agent = self._get_current_agent()
-                if agent:
-                    follow_up = await agent.generate_follow_up(
-                        self.current_turn.question,
-                        self.current_turn.answer,
-                        self.current_turn.evaluation,
-                    )
-                    if follow_up:
-                        self.current_turn = InterviewTurn(
-                            agent_type=agent.interviewer_type.value,
-                            agent_name=agent.name,
-                            question=follow_up,
+                    elif follow_up_type == "standard":
+                        # 普通追问（基于分数）
+                        follow_up = await agent.generate_follow_up(
+                            self.current_turn.question,
+                            self.current_turn.answer,
+                            self.current_turn.evaluation,
                         )
+                        if follow_up:
+                            self.current_turn = InterviewTurn(
+                                agent_type=agent.interviewer_type.value,
+                                agent_name=agent.name,
+                                question=follow_up,
+                            )
 
-                        yield {
-                            "type": "follow_up",
-                            "agent_type": agent.interviewer_type.value,
-                            "agent_name": agent.name,
-                        }
+                            yield {
+                                "type": "follow_up",
+                                "agent_type": agent.interviewer_type.value,
+                                "agent_name": agent.name,
+                            }
 
-                        async for chunk in agent.ask_question(follow_up):
-                            yield chunk
-                        return
+                            async for chunk in agent.ask_question(follow_up):
+                                yield chunk
+                            return
 
             # 更新智能策略上下文
             if self.config.enable_smart_strategy and self.strategy_context:
@@ -337,19 +354,43 @@ class AgentCoordinator:
                         self.performance_history[-1]
                     )
 
-            # 切换到下一个智能体
-            next_agent_id = self._get_next_agent_id()
-            if not next_agent_id:
-                yield {"type": "error", "message": "没有可用的智能体"}
-                return
+            # 检查当前智能体是否还需要继续提问
+            should_switch_agent = True
+            if self.current_agent_id:
+                current_count = self.agent_question_count.get(self.current_agent_id, 0)
+                if current_count < self.questions_per_agent:
+                    # 当前智能体还没问够，继续提问
+                    should_switch_agent = False
+                    agent = self.agents.get(self.current_agent_id)
 
-            agent = self.agents.get(next_agent_id)
-            if not agent:
-                yield {"type": "error", "message": f"智能体 {next_agent_id} 未找到"}
-                return
+            if should_switch_agent:
+                # 切换到下一个智能体
+                next_agent_id = self._get_next_agent_id()
+                if not next_agent_id:
+                    yield {"type": "error", "message": "没有可用的智能体"}
+                    return
 
-            # 激活智能体
-            agent.activate()
+                self.current_agent_id = next_agent_id
+                self.agent_question_count[next_agent_id] = 0
+
+                agent = self.agents.get(next_agent_id)
+                if not agent:
+                    yield {"type": "error", "message": f"智能体 {next_agent_id} 未找到"}
+                    return
+
+                # 激活智能体
+                agent.activate()
+
+                # 发送智能体切换消息
+                yield {
+                    "type": "agent_switch",
+                    "agent_type": agent.interviewer_type.value,
+                    "agent_name": agent.name,
+                    "persona": agent.persona,
+                }
+            else:
+                # 继续使用当前智能体
+                agent = self.agents.get(self.current_agent_id)
 
             # 生成问题（使用智能问题生成或原方法）
             if self.config.enable_smart_questions:
@@ -359,6 +400,10 @@ class AgentCoordinator:
                     candidate_profile=self.context.candidate_profile.to_dict() if self.context.candidate_profile else {},
                     interview_history=self.context.get_interview_history(),
                 )
+
+            # 增加问题计数
+            if self.current_agent_id:
+                self.agent_question_count[self.current_agent_id] += 1
 
             # 创建新回合
             self.current_turn = InterviewTurn(
@@ -377,13 +422,6 @@ class AgentCoordinator:
                 },
                 sender=agent.interviewer_type.value,
             )
-
-            yield {
-                "type": "agent_switch",
-                "agent_type": agent.interviewer_type.value,
-                "agent_name": agent.name,
-                "persona": agent.persona,
-            }
 
             # 提问
             async for chunk in agent.ask_question(question):
@@ -453,6 +491,50 @@ class AgentCoordinator:
 
         return question
 
+    def _determine_follow_up_type(
+        self,
+        smart_analysis: Optional[Any],
+        evaluation: Optional[Any]
+    ) -> str:
+        """
+        确定追问类型
+
+        优先级：深度追问 > 普通追问 > 无追问
+
+        Returns:
+            "deep_dive": 深度追问
+            "standard": 普通追问
+            "none": 无需追问
+        """
+        # 检查是否启用深度追问
+        if not self.config.enable_deep_dive:
+            # 只考虑普通追问
+            if (self.config.enable_follow_up and
+                evaluation and
+                evaluation.score < 85):
+                return "standard"
+            return "none"
+
+        # 检查深度追问条件
+        if smart_analysis:
+            follow_up_count = getattr(self.current_turn, 'follow_up_count', 0)
+            should_deep_dive = self.deep_dive_engine.should_continue_deep_dive(
+                smart_analysis,
+                follow_up_count=follow_up_count,
+                max_follow_ups=2,
+            )
+
+            if should_deep_dive:
+                return "deep_dive"
+
+        # 检查普通追问条件（深度追问不满足时）
+        if (self.config.enable_follow_up and
+            evaluation and
+            evaluation.score < 85):
+            return "standard"
+
+        return "none"
+
     def _determine_candidate_level(self) -> str:
         """确定候选人级别"""
         if not self.performance_history:
@@ -482,7 +564,7 @@ class AgentCoordinator:
         结束面试
 
         Returns:
-            面试结果摘要
+            面试结果摘要（包含个性化学习反馈）
         """
         async with self._lock:
             if self.status not in [InterviewStatus.IN_PROGRESS, InterviewStatus.PAUSED]:
@@ -509,7 +591,41 @@ class AgentCoordinator:
                 sender="coordinator",
             )
 
-            return self.get_interview_result()
+            # 生成面试结果
+            result = self.get_interview_result()
+
+            # 生成个性化学习反馈
+            learning_feedback = self._generate_learning_feedback()
+            result["learning_feedback"] = learning_feedback
+
+            return result
+
+    def _generate_learning_feedback(self) -> Dict[str, Any]:
+        """生成个性化学习反馈"""
+        # 准备评估结果
+        evaluation_results = []
+        for turn in self.context.interview_turns:
+            if turn.evaluation:
+                evaluation_results.append({
+                    "dimension": turn.evaluation.dimension,
+                    "score": turn.evaluation.score,
+                    "feedback": turn.evaluation.feedback,
+                })
+
+        # 获取候选人信息
+        candidate_profile = self.context.candidate_profile
+        target_position = candidate_profile.target_position if candidate_profile else ""
+        experience_years = candidate_profile.experience_years if candidate_profile else 0
+
+        # 生成反馈
+        feedback = self.learning_feedback_generator.generate_feedback(
+            evaluation_results=evaluation_results,
+            target_position=target_position,
+            experience_years=experience_years,
+        )
+
+        # 转换为字典
+        return self.learning_feedback_generator.to_dict(feedback)
 
     def get_interview_result(self) -> Dict[str, Any]:
         """获取面试结果"""
@@ -658,6 +774,12 @@ class AgentCoordinator:
             tech_stack=["Python", "JavaScript", "React", "FastAPI"],
         )
         coordinator.register_agent(technical_agent)
+
+        system_design_agent = SystemDesignInterviewerAgent(
+            agent=base_agent,
+            name="系统设计面试官",
+        )
+        coordinator.register_agent(system_design_agent)
 
         behavioral_agent = BehavioralInterviewerAgent(
             agent=base_agent,

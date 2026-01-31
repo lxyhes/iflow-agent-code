@@ -16,12 +16,19 @@ from backend.core.interview_agents import (
     InterviewConfig,
 )
 from backend.core.interview_engine import InterviewSessionManager
+from backend.core.interview_agents.practice_session import (
+    PracticeSessionManager,
+    PracticeSessionConfig,
+    PracticeMode,
+    PracticeDifficulty,
+)
 from backend.core.evaluation import ScoringEngine, WeightedScore
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
 # 全局会话管理器
 session_manager = InterviewSessionManager()
+practice_session_manager = PracticeSessionManager()
 
 
 # ============ 数据模型 ============
@@ -565,3 +572,180 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
             "message": str(e),
         })
         interview_ws.disconnect(session_id)
+
+
+# ============ 练习模式 API ============
+
+class CreatePracticeRequest(BaseModel):
+    """创建练习请求"""
+    mode: str = "mixed"  # system_design, coding, behavioral, technical, mixed
+    difficulty: str = "intermediate"  # beginner, intermediate, advanced, expert
+    question_count: int = 5
+    focus_areas: List[str] = []
+
+
+@router.post("/practice", response_model=InterviewResponse)
+async def create_practice_session(request: CreatePracticeRequest):
+    """
+    创建练习会话
+
+    创建一个新的练习会话，用于专项技能训练。
+    """
+    try:
+        # 解析模式和难度
+        try:
+            mode = PracticeMode(request.mode)
+            difficulty = PracticeDifficulty(request.difficulty)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的模式或难度: {e}")
+
+        # 创建配置
+        config = PracticeSessionConfig(
+            mode=mode,
+            difficulty=difficulty,
+            question_count=request.question_count,
+            focus_areas=request.focus_areas,
+        )
+
+        # 创建会话
+        session = practice_session_manager.create_session(config)
+
+        # 启动会话
+        success = await session.start()
+        if not success:
+            raise HTTPException(status_code=500, detail="练习会话启动失败")
+
+        # 获取第一个问题
+        question = session.get_current_question()
+
+        return InterviewResponse(
+            session_id=session.config.session_id,
+            status="created",
+            message="练习会话创建成功",
+            data={
+                "mode": mode.value,
+                "difficulty": difficulty.value,
+                "total_questions": config.question_count,
+                "current_question": {
+                    "id": question.question.id if question else None,
+                    "content": question.question.content if question else None,
+                    "category": question.category if question else None,
+                    "hints": question.hints if question else [],
+                } if question else None,
+            }
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建练习会话失败: {str(e)}")
+
+
+@router.get("/practice/{session_id}")
+async def get_practice_session(session_id: str):
+    """
+    获取练习会话信息
+    """
+    session = practice_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="练习会话不存在")
+
+    question = session.get_current_question()
+
+    return {
+        "session_id": session_id,
+        "mode": session.config.mode.value,
+        "difficulty": session.config.difficulty.value,
+        "progress": session.get_progress(),
+        "stats": session.get_stats(),
+        "current_question": {
+            "id": question.question.id if question else None,
+            "content": question.question.content if question else None,
+            "category": question.category if question else None,
+            "hints": question.hints if question else [],
+        } if question else None,
+    }
+
+
+@router.post("/practice/{session_id}/answer")
+async def submit_practice_answer(session_id: str, request: AnswerRequest):
+    """
+    提交练习回答
+    """
+    session = practice_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="练习会话不存在")
+
+    # 提交回答并获取评估
+    result = await session.submit_answer(request.answer, request.duration or 0)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    # 获取下一个问题（如果有）
+    next_question = session.get_current_question()
+
+    return {
+        "evaluation": result["evaluation"],
+        "expected_points": result["expected_points"],
+        "detailed_feedback": result.get("detailed_feedback"),
+        "progress": result["progress"],
+        "is_complete": result["is_complete"],
+        "next_question": {
+            "id": next_question.question.id if next_question else None,
+            "content": next_question.question.content if next_question else None,
+            "category": next_question.category if next_question else None,
+            "hints": next_question.hints if next_question else [],
+        } if next_question else None,
+    }
+
+
+@router.post("/practice/{session_id}/hint")
+async def get_practice_hint(session_id: str):
+    """
+    获取提示
+    """
+    session = practice_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="练习会话不存在")
+
+    hint = session.get_hint()
+
+    return {
+        "hint": hint,
+        "has_more_hints": hint is not None,
+    }
+
+
+@router.post("/practice/{session_id}/complete")
+async def complete_practice_session(session_id: str):
+    """
+    完成练习会话
+    """
+    session = practice_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="练习会话不存在")
+
+    result = await session.end()
+
+    return {
+        "session_id": session_id,
+        "status": "completed",
+        "stats": result["stats"],
+        "total_time": result["total_time"],
+        "summary": result["summary"],
+    }
+
+
+@router.delete("/practice/{session_id}")
+async def delete_practice_session(session_id: str):
+    """
+    删除练习会话
+    """
+    success = practice_session_manager.delete_session(session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="练习会话不存在")
+
+    return InterviewResponse(
+        session_id=session_id,
+        status="deleted",
+        message="练习会话已删除",
+    )

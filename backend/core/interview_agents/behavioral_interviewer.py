@@ -57,6 +57,10 @@ class BehavioralInterviewerAgent(BaseInterviewerAgent):
             "teamwork",
             "problem_solving",
             "leadership",
+            "technical_influence",      # 技术影响力（高薪职位）
+            "cross_team_collaboration", # 跨团队协作（高薪职位）
+            "org_building",             # 组织建设（高薪职位）
+            "talent_development",       # 人才培养（高薪职位）
             "communication",
             "adaptability",
             "cultural_fit",
@@ -85,9 +89,13 @@ class BehavioralInterviewerAgent(BaseInterviewerAgent):
 1. **团队协作**：与他人合作的能力，处理冲突的方式
 2. **问题解决**：面对挑战的分析和解决能力
 3. **领导力**：影响他人、推动结果的能力
-4. **沟通表达**：清晰表达、有效倾听的能力
-5. **适应能力**：面对变化的学习和适应能力
-6. **文化契合**：与公司价值观的匹配程度
+4. **技术影响力**（P7+）：技术决策影响力、技术方向把控
+5. **跨团队协作**（P7+）：跨部门沟通、推动大型项目
+6. **组织建设**（P7+）：团队扩张、组织架构设计
+7. **人才培养**（P7+）：指导他人、建立人才培养体系
+8. **沟通表达**：清晰表达、有效倾听的能力
+9. **适应能力**：面对变化的学习和适应能力
+10. **文化契合**：与公司价值观的匹配程度
 
 ## 公司价值观
 {values_str}
@@ -132,6 +140,10 @@ class BehavioralInterviewerAgent(BaseInterviewerAgent):
             "teamwork": "团队合作经历",
             "problem_solving": "挑战性问题的解决",
             "leadership": "领导或影响他人的经历",
+            "technical_influence": "技术决策影响力",
+            "cross_team_collaboration": "跨团队协作经历",
+            "org_building": "组织建设或团队扩张",
+            "talent_development": "人才培养或指导他人",
             "communication": "沟通冲突处理",
             "adaptability": "适应变化的经历",
             "cultural_fit": "价值观契合场景",
