@@ -11,7 +11,7 @@ import {
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
-  BarChart3, Zap, AlertCircle, Users, Bot, Scan, X, Loader2
+  BarChart3, Zap, AlertCircle, Users, Bot, Scan, X, Loader2, Crown
 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
@@ -23,6 +23,13 @@ import OCRBlocksOverlay from './OCRBlocksOverlay';
 import MultiAgentInterview from './MultiAgentInterview';
 import JobAnalysisPanel from './JobAnalysisPanel';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
+import STARTrainer from './STARTrainer';
+import SalaryNegotiation from './SalaryNegotiation';
+import InterviewReview from './InterviewReview';
+import DeepDiveInterview from './DeepDiveInterview';
+import PressureInterview from './PressureInterview';
+import InterviewMaster from './InterviewMaster';
+import { companyQuestions, getQuestionsByLevel, getQuestionsByCompany, getAllQuestions } from '../data/companyQuestions';
 
 const InterviewPreparation = ({ selectedProject }) => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -50,6 +57,18 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [selectedQuestion, setSelectedQuestion] = useState(null); // 选中的问题详情
   const [generatedAnswer, setGeneratedAnswer] = useState(null); // LLM生成的答案
   const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false); // 是否正在生成答案
+  const [isInterviewStarted, setIsInterviewStarted] = useState(false); // 面试是否已开始
+  
+  // 高薪面试功能状态
+  const [showSTARTrainer, setShowSTARTrainer] = useState(false); // STAR法则训练器
+  const [showSalaryNegotiation, setShowSalaryNegotiation] = useState(false); // 薪资谈判模拟器
+  const [showCompanyQuestions, setShowCompanyQuestions] = useState(false); // 大厂真题库
+  const [showInterviewReview, setShowInterviewReview] = useState(false); // 面试复盘AI助手
+  const [showDeepDive, setShowDeepDive] = useState(false); // 技术深度追问模式
+  const [showPressureInterview, setShowPressureInterview] = useState(false); // 压力面试模式
+  const [showInterviewMaster, setShowInterviewMaster] = useState(false); // 面试高手模式
+  const [selectedCompany, setSelectedCompany] = useState(null); // 选中的公司
+  const [selectedLevel, setSelectedLevel] = useState('middle'); // 选中的级别
   
   // 多轮面试模式状态
   const [multiRoundMode, setMultiRoundMode] = useState(false);
@@ -162,14 +181,16 @@ const InterviewPreparation = ({ selectedProject }) => {
     loadInterviewHistory();
   }, []);
 
-  // 计时器
+  // 计时器 - 只在面试开始后启动
   useEffect(() => {
+    if (!isInterviewStarted) return;
+    
     const interval = setInterval(() => {
       setTimer(prev => prev + 1);
       setQuestionTimer(prev => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isInterviewStarted]);
 
   const loadInterviewHistory = () => {
     try {
@@ -238,6 +259,7 @@ const InterviewPreparation = ({ selectedProject }) => {
     setResumePreview(null);
     setResumePreviewPageIndex(0);
     setResumePreviewBlockIndex(null);
+    setIsInterviewStarted(false); // 重置计时器状态
   };
 
   const revokePreviewUrls = (preview) => {
@@ -1525,6 +1547,15 @@ const InterviewPreparation = ({ selectedProject }) => {
                   >
                     挑战型
                   </button>
+                  
+                  {/* 面试高手助手按钮 */}
+                  <button
+                    onClick={() => setShowInterviewMaster(true)}
+                    className="ml-2 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded text-xs font-medium hover:from-amber-600 hover:to-yellow-600 transition-colors flex items-center gap-1 shadow-md"
+                  >
+                    <Crown className="w-3 h-3" />
+                    面试高手
+                  </button>
                 </div>
               )}
             </div>
@@ -2650,6 +2681,7 @@ const InterviewPreparation = ({ selectedProject }) => {
   // AI面试官模式
   const startAIInterviewer = () => {
     setAiInterviewerMode(true);
+    setIsInterviewStarted(true); // 开始计时
     let openingMessage = '';
     
     switch(aiInterviewerPersonality) {
@@ -2745,6 +2777,11 @@ const InterviewPreparation = ({ selectedProject }) => {
 
   const handleSendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
+
+    // 如果是第一次发送消息，启动计时器
+    if (!isInterviewStarted) {
+      setIsInterviewStarted(true);
+    }
 
     const userMessage = chatInput;
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -3347,6 +3384,65 @@ ${conversation}
         </div>
       </div>
 
+      {/* 高薪面试功能按钮 */}
+      <div className="px-6 py-3 bg-gradient-to-r from-amber-50 via-purple-50 to-blue-50 dark:from-amber-900/20 dark:via-purple-900/20 dark:to-blue-900/20 border-y border-amber-200 dark:border-amber-800">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2">
+            <Crown className="w-4 h-4" />
+            高薪面试工具：
+          </span>
+
+          {/* 面试高手模式 - 最突出的按钮 */}
+          <button
+            onClick={() => setShowInterviewMaster(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-white rounded-lg text-sm font-bold hover:from-amber-600 hover:to-yellow-600 transition-all shadow-md hover:shadow-lg flex items-center gap-2 animate-pulse"
+          >
+            <Crown className="w-4 h-4" />
+            面试高手模式
+            <Star className="w-3 h-3 fill-white" />
+          </button>
+
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+
+          <button
+            onClick={() => setShowSTARTrainer(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors border border-purple-200 dark:border-purple-800"
+          >
+            STAR法则训练
+          </button>
+          <button
+            onClick={() => setShowSalaryNegotiation(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-green-600 dark:text-green-400 rounded-lg text-sm font-medium hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors border border-green-200 dark:border-green-800"
+          >
+            薪资谈判模拟
+          </button>
+          <button
+            onClick={() => setShowCompanyQuestions(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors border border-blue-200 dark:border-blue-800"
+          >
+            大厂真题库
+          </button>
+          <button
+            onClick={() => setShowInterviewReview(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 rounded-lg text-sm font-medium hover:bg-orange-50 dark:hover:bg-orange-900/30 transition-colors border border-orange-200 dark:border-orange-800"
+          >
+            面试复盘
+          </button>
+          <button
+            onClick={() => setShowDeepDive(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors border border-indigo-200 dark:border-indigo-800"
+          >
+            深度追问
+          </button>
+          <button
+            onClick={() => setShowPressureInterview(true)}
+            className="px-3 py-1.5 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border border-red-200 dark:border-red-800"
+          >
+            压力面试
+          </button>
+        </div>
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 p-6 pb-2">
         {activeSection === 'overview' && renderOverview()}
@@ -3355,6 +3451,175 @@ ${conversation}
         {activeSection === 'faq' && renderFAQ()}
         {activeSection === 'history' && renderHistory()}
       </div>
+
+      {/* STAR法则训练器 */}
+      {showSTARTrainer && (
+        <STARTrainer
+          question="请描述一次你在项目中解决技术难题的经历"
+          onClose={() => setShowSTARTrainer(false)}
+          onComplete={(analysis) => {
+            console.log('STAR训练完成:', analysis);
+            setShowSTARTrainer(false);
+          }}
+        />
+      )}
+
+      {/* 薪资谈判模拟器 */}
+      {showSalaryNegotiation && (
+        <SalaryNegotiation
+          onClose={() => setShowSalaryNegotiation(false)}
+        />
+      )}
+
+      {/* 面试复盘AI助手 */}
+      {showInterviewReview && (
+        <InterviewReview
+          onClose={() => setShowInterviewReview(false)}
+        />
+      )}
+
+      {/* 技术深度追问模式 */}
+      {showDeepDive && (
+        <DeepDiveInterview
+          onClose={() => setShowDeepDive(false)}
+        />
+      )}
+
+      {/* 压力面试模式 */}
+      {showPressureInterview && (
+        <PressureInterview
+          onClose={() => setShowPressureInterview(false)}
+        />
+      )}
+
+      {/* 面试高手模式 */}
+      {showInterviewMaster && (
+        <InterviewMaster
+          onClose={() => setShowInterviewMaster(false)}
+        />
+      )}
+
+      {/* 大厂真题库 */}
+      {showCompanyQuestions && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-5xl h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">大厂真题库</h3>
+                  <p className="text-sm text-gray-500">阿里、字节、腾讯、美团等公司真实面试题</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCompanyQuestions(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 flex overflow-hidden">
+              {/* 左侧公司列表 */}
+              <div className="w-64 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3">选择公司</h4>
+                <div className="space-y-2">
+                  {Object.entries(companyQuestions).map(([key, company]) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedCompany(key)}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        selectedCompany === key
+                          ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{company.icon}</span>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white">{company.name}</div>
+                          <div className="text-xs text-gray-500">{company.description}</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* 级别筛选 */}
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3 mt-6">选择级别</h4>
+                <div className="space-y-2">
+                  {['junior', 'middle', 'senior'].map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setSelectedLevel(level)}
+                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                        selectedLevel === level
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                          : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      {level === 'junior' ? '初级' : level === 'middle' ? '中级' : '高级'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 右侧题目列表 */}
+              <div className="flex-1 p-4 overflow-y-auto">
+                {selectedCompany ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-3xl">{companyQuestions[selectedCompany].icon}</span>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {companyQuestions[selectedCompany].name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {companyQuestions[selectedCompany].levels[selectedLevel]?.name} 面试题
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {companyQuestions[selectedCompany].levels[selectedLevel]?.questions.map((q, index) => (
+                        <div
+                          key={q.id}
+                          className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => setSelectedQuestion({ ...q, category: q.category })}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center text-sm font-medium">
+                                {index + 1}
+                              </span>
+                              <span className="text-sm text-gray-500">{q.category}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              q.difficulty === '基础' ? 'bg-green-100 text-green-700' :
+                              q.difficulty === '中等' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {q.difficulty}
+                            </span>
+                          </div>
+                          <p className="text-gray-800 dark:text-gray-200 font-medium">{q.question}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <BookOpen className="w-16 h-16 mb-4 opacity-50" />
+                    <p>请选择左侧公司查看面试题</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 问题详情弹窗 */}
       {selectedQuestion && (
