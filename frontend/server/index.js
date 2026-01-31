@@ -98,6 +98,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import gitRoutes from './routes/git.js';
+import githubRoutes from './routes/github.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import cursorRoutes from './routes/cursor.js';
@@ -275,6 +276,9 @@ app.use('/api/projects', authenticateToken, projectsRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
+
+// GitHub API Routes (protected)
+app.use('/api/github', authenticateToken, githubRoutes);
 
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);

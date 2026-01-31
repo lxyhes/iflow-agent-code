@@ -25,6 +25,7 @@ except Exception:
 import subprocess
 import logging
 from datetime import datetime
+import httpx
 
 # Windows 事件循环策略设置 - 必须在任何异步操作之前设置
 if platform.system() == 'Windows':
@@ -6494,7 +6495,7 @@ async def analyze_project_for_interview(request: Request):
 
 @app.api_route("/api/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def catch_all(path_name: str, request: Request):
-    """Catch-all 路由 - 处理未实现的 API 端点"""
+    """Catch-all 路由 - 处理未实现的 API 端点，转发到 Node.js 服务器"""
 
     # 排除 interview 路由，让 interview router 处理
     if path_name.startswith("interview/"):
@@ -6503,6 +6504,51 @@ async def catch_all(path_name: str, request: Request):
     # 排除 job-analysis 路由，让 job_analysis router 处理
     if path_name.startswith("job-analysis/"):
         raise HTTPException(status_code=404, detail=f"Job analysis endpoint '/api/{path_name}' not found")
+
+    # 转发 GitHub API 请求到 Node.js 服务器
+    if path_name.startswith("github/"):
+        try:
+            # Node.js 服务器地址
+            nodejs_url = "http://localhost:3001"
+            target_url = f"{nodejs_url}/api/{path_name}"
+
+            # 获取原始请求的查询参数
+            query_params = dict(request.query_params)
+
+            # 获取请求体（如果有）
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                try:
+                    body = await request.json()
+                except:
+                    body = await request.body()
+
+            # 获取请求头
+            headers = dict(request.headers)
+            # 移除一些不需要转发的头
+            headers.pop("host", None)
+            headers.pop("content-length", None)
+
+            # 使用 httpx 转发请求
+            async with httpx.AsyncClient() as client:
+                response = await client.request(
+                    method=request.method,
+                    url=target_url,
+                    params=query_params,
+                    json=body if isinstance(body, dict) else None,
+                    content=body if not isinstance(body, dict) else None,
+                    headers=headers,
+                    timeout=30.0
+                )
+
+                # 返回 Node.js 服务器的响应
+                return JSONResponse(
+                    content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
+                    status_code=response.status_code
+                )
+        except Exception as e:
+            logger.error(f"转发 GitHub API 请求失败: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to forward request to Node.js server: {str(e)}")
 
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
 

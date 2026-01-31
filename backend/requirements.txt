@@ -4,6 +4,7 @@ python-multipart
 pydantic
 pyjwt
 requests
+httpx
 aiofiles
 pyyaml
 toml

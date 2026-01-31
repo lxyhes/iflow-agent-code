@@ -29,6 +29,7 @@ const ProjectFileExplorer = lazy(() => import('./ProjectFileExplorer'));
 const CodeEditor = lazy(() => import('./CodeEditor'));
 const StandaloneShell = lazy(() => import('./StandaloneShell'));
 const GitPanel = lazy(() => import('./GitPanel'));
+const GitHubPanel = lazy(() => import('./GitHubPanel'));
 const RAGPanel = lazy(() => import('./RAGPanel'));
 const SmartRequirementAnalysis = lazy(() => import('./SmartRequirementAnalysis'));
 const TaskDetail = lazy(() => import('./TaskDetail'));
@@ -359,13 +360,14 @@ function MainContent({
                         <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
                           {activeTab === 'files' ? 'Project Files' :
                               activeTab === 'git' ? 'Source Control' :
-                                  (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
-                                      activeTab === 'rag' ? 'RAG Knowledge Base' :
-                                          activeTab === 'database' ? 'Database Query' :
-                                              activeTab === 'workflow' ? 'Workflow Editor' :
-                                                  activeTab === 'interview' ? 'Interview Preparation' :
-                                                      activeTab === 'smart-req' ? 'Smart Requirement Analysis' :
-                                                          'Project'}
+                                  activeTab === 'github' ? 'GitHub' :
+                                      (activeTab === 'tasks' && shouldShowTasksTab) ? 'TaskMaster' :
+                                          activeTab === 'rag' ? 'RAG Knowledge Base' :
+                                              activeTab === 'database' ? 'Database Query' :
+                                                  activeTab === 'workflow' ? 'Workflow Editor' :
+                                                      activeTab === 'interview' ? 'Interview Preparation' :
+                                                          activeTab === 'smart-req' ? 'Smart Requirement Analysis' :
+                                                              'Project'}
                         </h2>
                         <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                           {selectedProject.displayName}
@@ -452,6 +454,13 @@ function MainContent({
                 <div className="h-full overflow-hidden">
                   <Suspense fallback={null}>
                     <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpenLocal} />
+                  </Suspense>
+                </div>
+            )}
+            {activeTab === 'github' && (
+                <div className="h-full overflow-hidden">
+                  <Suspense fallback={null}>
+                    <GitHubPanel isMobile={isMobile} />
                   </Suspense>
                 </div>
             )}
