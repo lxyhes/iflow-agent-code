@@ -1126,7 +1126,17 @@ const InterviewPreparation = ({ selectedProject }) => {
 
       {/* 问题列表 */}
       <div className="space-y-4">
-        {questions.map((category, catIndex) => (
+        {questions.map((category, catIndex) => {
+          // 如果点击了某个分类标签，只显示该分类的问题
+          const isCategorySelected = activeSection === `question-${catIndex}`;
+          const showCategory = activeSection === 'questions' || activeSection.startsWith('question-');
+          
+          // 如果点击了具体分类，只显示该分类；否则显示所有
+          if (activeSection !== 'questions' && !isCategorySelected) {
+            return null;
+          }
+          
+          return (
           <div key={catIndex} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
               {category.category}
@@ -1177,7 +1187,8 @@ const InterviewPreparation = ({ selectedProject }) => {
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
