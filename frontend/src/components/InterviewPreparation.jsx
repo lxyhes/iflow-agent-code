@@ -11,7 +11,7 @@ import {
   ChevronRight, PlayCircle, PauseCircle, RefreshCw,
   Sparkles, FolderTree, GitBranch, Database, Globe, MessageSquare, Send,
   Save, Download, History, Mic, MicOff, Timer, Star, TrendingUp as TrendingUpIcon,
-  BarChart3, Zap, AlertCircle, Users, Bot, Scan, X
+  BarChart3, Zap, AlertCircle, Users, Bot, Scan, X, Loader2
 } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import jsPDF from 'jspdf';
@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import OCRBlocksOverlay from './OCRBlocksOverlay';
 import MultiAgentInterview from './MultiAgentInterview';
 import JobAnalysisPanel from './JobAnalysisPanel';
+import MarkdownRenderer from './markdown/MarkdownRenderer';
 
 const InterviewPreparation = ({ selectedProject }) => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -47,6 +48,8 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [showHints, setShowHints] = useState(false);
   const [currentHint, setCurrentHint] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null); // 选中的问题详情
+  const [generatedAnswer, setGeneratedAnswer] = useState(null); // LLM生成的答案
+  const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false); // 是否正在生成答案
   
   // 多轮面试模式状态
   const [multiRoundMode, setMultiRoundMode] = useState(false);
@@ -2683,6 +2686,45 @@ const InterviewPreparation = ({ selectedProject }) => {
     alert('笔记已保存');
   };
 
+  // 使用LLM生成答案
+  const generateAnswer = async (question) => {
+    if (!question) return;
+    
+    setIsGeneratingAnswer(true);
+    setGeneratedAnswer(null);
+    
+    try {
+      const response = await fetch('/api/interview/generate-answer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question.question,
+          category: question.category,
+          keyPoints: question.keyPoints || [],
+          projectContext: selectedProject ? {
+            name: selectedProject.name,
+            description: selectedProject.description,
+            techStack: selectedProject.tech_stack || []
+          } : null
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('生成答案失败');
+      }
+      
+      const data = await response.json();
+      setGeneratedAnswer(data.answer);
+    } catch (error) {
+      console.error('生成答案失败:', error);
+      setGeneratedAnswer('生成答案时出错，请稍后重试。');
+    } finally {
+      setIsGeneratingAnswer(false);
+    }
+  };
+
   useEffect(() => {
     const savedNotes = localStorage.getItem(`interview-notes-${currentInterviewId || 'default'}`);
     if (savedNotes) {
@@ -3353,8 +3395,44 @@ ${conversation}
                 </div>
               )}
 
-              {/* 参考答案 */}
-              {selectedQuestion.answer && (
+              {/* 获取答案按钮 */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => generateAnswer(selectedQuestion)}
+                  disabled={isGeneratingAnswer}
+                  className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg shadow-purple-500/30"
+                >
+                  {isGeneratingAnswer ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      正在生成答案...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      {generatedAnswer ? '重新生成答案' : '获取 AI 参考答案'}
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* AI 生成的答案 */}
+              {generatedAnswer && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-purple-500" />
+                    AI 参考答案
+                  </h4>
+                  <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 border border-purple-200 dark:border-purple-800">
+                    <MarkdownRenderer className="prose prose-sm dark:prose-invert max-w-none prose-p:mb-3 prose-strong:text-purple-700 dark:prose-strong:text-purple-300 prose-headings:text-purple-800 dark:prose-headings:text-purple-200">
+                      {generatedAnswer}
+                    </MarkdownRenderer>
+                  </div>
+                </div>
+              )}
+
+              {/* 原始参考答案（如果有） */}
+              {selectedQuestion.answer && !generatedAnswer && (
                 <div>
                   <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                     <Lightbulb className="w-4 h-4 text-yellow-500" />

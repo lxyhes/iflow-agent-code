@@ -749,3 +749,98 @@ async def delete_practice_session(session_id: str):
         status="deleted",
         message="练习会话已删除",
     )
+
+
+# ============ 答案生成 API ============
+
+class GenerateAnswerRequest(BaseModel):
+    """生成答案请求"""
+    question: str
+    category: str
+    keyPoints: List[str] = []
+    projectContext: Optional[Dict[str, Any]] = None
+
+
+class GenerateAnswerResponse(BaseModel):
+    """生成答案响应"""
+    answer: str
+
+
+@router.post("/generate-answer", response_model=GenerateAnswerResponse)
+async def generate_interview_answer(request: GenerateAnswerRequest):
+    """
+    生成面试问题的参考答案
+
+    使用LLM根据问题和项目上下文生成针对性的参考答案。
+    """
+    try:
+        from backend.core.services.llm_adapter import get_llm_service
+
+        llm = get_llm_service()
+
+        # 构建提示词
+        project_info = ""
+        if request.projectContext:
+            project_info = f"""
+项目信息：
+- 项目名称：{request.projectContext.get('name', '未知')}
+- 项目描述：{request.projectContext.get('description', '')}
+- 技术栈：{', '.join(request.projectContext.get('techStack', []))}
+"""
+
+        key_points = ""
+        if request.keyPoints:
+            key_points = f"考察点：{', '.join(request.keyPoints)}"
+
+        prompt = f"""请为以下面试问题生成一个详细、专业的参考答案。
+
+问题：{request.question}
+类别：{request.category}
+{key_points}
+{project_info}
+
+要求：
+1. 答案应该结构清晰，包含：
+   - 核心观点（简明扼要地回答）
+   - 详细解释（展开说明）
+   - 实际案例（结合项目经验，如果有项目信息的话）
+   - 总结要点
+
+2. 答案要体现专业性，适合技术面试场景
+3. 内容要具体，避免空洞的套话
+4. 如果有项目信息，请结合项目实际来回答
+5. 答案长度控制在300-500字
+
+请生成答案："""
+
+        response = await llm.complete(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+
+        answer = response.get('content', '').strip()
+
+        # 如果LLM返回错误信息，使用备用答案
+        if answer.startswith('Error:') or not answer:
+            answer = f"""对于这个问题，我建议从以下几个方面来回答：
+
+1. **核心观点**：
+   简要说明你对这个问题的核心理解。
+
+2. **详细解释**：
+   结合你的项目经验，详细阐述相关技术点或解决方案。
+
+3. **实际案例**：
+   如果有具体的项目经历，可以举例说明你是如何处理类似情况的。
+
+4. **总结**：
+   总结你的观点，强调你的技术能力和解决问题的思路。
+
+{key_points}
+
+建议在回答时保持自信，结合实际经验，展现你的技术深度和广度。"""
+
+        return GenerateAnswerResponse(answer=answer)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成答案失败: {str(e)}")
