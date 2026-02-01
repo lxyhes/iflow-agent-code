@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Brain, MessageSquare, Send, Bot, User, Sparkles, ChevronRight, Target, Zap, Crown } from 'lucide-react';
+import { Brain, MessageSquare, Send, Bot, User, Sparkles, ChevronRight, Target, Zap, Crown, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
 import InterviewMasterHelper from './InterviewMasterHelper';
+import interviewAIService from '../services/interviewAIService';
 
 const DeepDiveInterview = ({ initialQuestion, onClose }) => {
   const [messages, setMessages] = useState([
@@ -82,20 +83,62 @@ const DeepDiveInterview = ({ initialQuestion, onClose }) => {
     setInput('');
     setIsLoading(true);
 
-    // 模拟AI思考
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const nextDepth = Math.min(currentDepth + 1, 5);
+      
+      // 获取最后一条问题
+      const lastQuestion = messages[messages.length - 1]?.content || initialQuestion;
+      
+      // 调用 AI 生成追问
+      const result = await interviewAIService.generateDeepDive(
+        lastQuestion,
+        userMessage,
+        nextDepth
+      );
 
-    const nextDepth = Math.min(currentDepth + 1, 5);
-    const followUpQuestion = generateFollowUpQuestion(userMessage, nextDepth);
+      // 从 AI 响应中提取问题
+      const followUpQuestion = extractQuestionFromAI(result.questions) || 
+        generateFollowUpQuestion(userMessage, nextDepth);
 
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: followUpQuestion,
-      depth: nextDepth
-    }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: followUpQuestion,
+        depth: nextDepth
+      }]);
 
-    setCurrentDepth(nextDepth);
-    setIsLoading(false);
+      setCurrentDepth(nextDepth);
+    } catch (error) {
+      console.error('深度追问 AI 失败:', error);
+      // 使用本地模板作为后备
+      const nextDepth = Math.min(currentDepth + 1, 5);
+      const followUpQuestion = generateFollowUpQuestion(userMessage, nextDepth);
+      
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: followUpQuestion,
+        depth: nextDepth
+      }]);
+      setCurrentDepth(nextDepth);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 从 AI 响应中提取问题
+  const extractQuestionFromAI = (aiResponse) => {
+    if (!aiResponse) return null;
+    
+    // 尝试提取编号的问题（如 "1. xxx" 或 "问题1：xxx"）
+    const lines = aiResponse.split('\n').filter(line => line.trim());
+    for (const line of lines) {
+      const match = line.match(/^\d+[.．、]\s*(.+?)[?？]?$/);
+      if (match) {
+        return match[1].trim() + '?';
+      }
+    }
+    
+    // 如果没有找到编号问题，返回第一行
+    return lines[0]?.trim();
   };
 
   const handleKeyPress = (e) => {

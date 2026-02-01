@@ -6,9 +6,10 @@
  */
 
 import React, { useState } from 'react';
-import { Target, Lightbulb, CheckCircle2, AlertCircle, Sparkles, ChevronRight, RotateCcw, Crown } from 'lucide-react';
+import { Target, Lightbulb, CheckCircle2, AlertCircle, Sparkles, ChevronRight, RotateCcw, Crown, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
 import InterviewMasterHelper from './InterviewMasterHelper';
+import interviewAIService from '../services/interviewAIService';
 
 const STARTrainer = ({ question, onClose, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -98,31 +99,75 @@ const STARTrainer = ({ question, onClose, onComplete }) => {
   const analyzeAnswer = async () => {
     setIsAnalyzing(true);
     
-    // 模拟AI分析
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const fullAnswer = `${answers.situation}\n\n${answers.task}\n\n${answers.action}\n\n${answers.result}`;
-    
-    // 简单的评分逻辑
+    try {
+      const fullAnswer = `${answers.situation}\n\n${answers.task}\n\n${answers.action}\n\n${answers.result}`;
+      
+      // 调用真实 AI 分析
+      const result = await interviewAIService.analyzeSTARStory(fullAnswer, question);
+      
+      // 解析 AI 返回的分析结果
+      const analysis = parseAIAnalysis(result.analysis, fullAnswer);
+      
+      setAnalysis(analysis);
+      setShowAnalysis(true);
+    } catch (error) {
+      console.error('STAR 分析失败:', error);
+      // 使用本地评分作为后备
+      const fullAnswer = `${answers.situation}\n\n${answers.task}\n\n${answers.action}\n\n${answers.result}`;
+      const scores = {
+        situation: Math.min(100, answers.situation.length * 2),
+        task: Math.min(100, answers.task.length * 2),
+        action: Math.min(100, answers.action.length * 2),
+        result: Math.min(100, answers.result.length * 2)
+      };
+      const totalScore = Math.round((scores.situation + scores.task + scores.action + scores.result) / 4);
+      
+      setAnalysis({
+        scores,
+        totalScore,
+        fullAnswer,
+        feedback: generateFeedback(scores),
+        improvements: generateImprovements(scores, answers),
+        aiAnalysis: 'AI 服务暂时不可用，使用本地评分。'
+      });
+      setShowAnalysis(true);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+  
+  // 解析 AI 返回的分析结果
+  const parseAIAnalysis = (aiResponse, fullAnswer) => {
+    // 尝试从 AI 响应中提取评分
     const scores = {
-      situation: Math.min(100, answers.situation.length * 2),
-      task: Math.min(100, answers.task.length * 2),
-      action: Math.min(100, answers.action.length * 2),
-      result: Math.min(100, answers.result.length * 2)
+      situation: extractScore(aiResponse, 'Situation', '情境') || Math.min(100, answers.situation.length * 2),
+      task: extractScore(aiResponse, 'Task', '任务') || Math.min(100, answers.task.length * 2),
+      action: extractScore(aiResponse, 'Action', '行动') || Math.min(100, answers.action.length * 2),
+      result: extractScore(aiResponse, 'Result', '结果') || Math.min(100, answers.result.length * 2)
     };
     
     const totalScore = Math.round((scores.situation + scores.task + scores.action + scores.result) / 4);
     
-    setAnalysis({
+    return {
       scores,
       totalScore,
       fullAnswer,
-      feedback: generateFeedback(scores),
-      improvements: generateImprovements(scores, answers)
-    });
-    
-    setShowAnalysis(true);
-    setIsAnalyzing(false);
+      feedback: aiResponse,
+      improvements: [],
+      aiAnalysis: aiResponse
+    };
+  };
+  
+  // 从 AI 响应中提取分数
+  const extractScore = (text, ...keywords) => {
+    for (const keyword of keywords) {
+      const regex = new RegExp(`${keyword}[:：]\\s*(\\d+)`, 'i');
+      const match = text.match(regex);
+      if (match) {
+        return parseInt(match[1]) * 10; // 假设 AI 返回的是 1-10 分
+      }
+    }
+    return null;
   };
 
   const generateFeedback = (scores) => {

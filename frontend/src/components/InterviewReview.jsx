@@ -5,8 +5,9 @@
  */
 
 import React, { useState } from 'react';
-import { BrainCircuit, Target, TrendingUp, AlertCircle, CheckCircle2, Sparkles, ChevronRight, RotateCcw, Download } from 'lucide-react';
+import { BrainCircuit, Target, TrendingUp, AlertCircle, CheckCircle2, Sparkles, ChevronRight, RotateCcw, Download, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
+import interviewAIService from '../services/interviewAIService';
 
 const InterviewReview = ({ interviewData, onClose }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -39,64 +40,110 @@ const InterviewReview = ({ interviewData, onClose }) => {
 
   const generateReview = async () => {
     setIsGenerating(true);
-    
-    // 模拟AI分析
-    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const review = {
-      overallScore: 82,
-      dimensionScores: {
-        technical: { score: 85, label: '技术深度' },
-        communication: { score: 80, label: '表达能力' },
-        logic: { score: 83, label: '逻辑思维' },
-        experience: { score: 78, label: '项目经验' },
-        attitude: { score: 88, label: '面试态度' }
-      },
-      strengths: [
-        '技术基础扎实，对分布式系统有深入理解',
-        '项目经验丰富，能够结合实际案例回答问题',
-        '表达清晰，逻辑性强',
-        '态度积极主动，展现出强烈的学习意愿'
-      ],
-      weaknesses: [
-        '部分技术细节描述不够深入',
-        '缺乏对系统设计的全局思考',
-        '在压力问题下回答略显紧张',
-        '对某些新技术了解不够深入'
-      ],
-      improvements: [
-        {
-          area: '技术深度',
-          suggestion: '建议深入学习分布式一致性算法（Paxos/Raft），能够详细说明原理和实现细节',
-          resources: ['《深入理解分布式系统》', 'MIT 6.824课程', 'Raft论文']
+    try {
+      // 准备面试数据
+      const questions = mockInterviewData.answers.map(a => ({ question: a.question }));
+      const answers = mockInterviewData.answers.map(a => a.answer);
+
+      // 调用 AI 生成复盘
+      const result = await interviewAIService.generateInterviewReview(
+        questions,
+        answers,
+        '互联网公司',
+        '开发工程师'
+      );
+
+      // 解析 AI 响应
+      const review = parseAIReview(result.review);
+      setReviewResult(review);
+    } catch (error) {
+      console.error('面试复盘 AI 失败:', error);
+      // 使用默认数据作为后备
+      setReviewResult({
+        overallScore: 82,
+        dimensionScores: {
+          technical: { score: 85, label: '技术深度' },
+          communication: { score: 80, label: '表达能力' },
+          logic: { score: 83, label: '逻辑思维' },
+          experience: { score: 78, label: '项目经验' },
+          attitude: { score: 88, label: '面试态度' }
         },
-        {
-          area: '系统设计',
-          suggestion: '多练习系统设计题，培养从需求分析到架构设计的完整思维',
-          resources: ['System Design Primer', ' designing-data-intensive-applications']
+        strengths: ['AI 服务暂时不可用，使用默认评价'],
+        weaknesses: ['请稍后重试获取 AI 分析'],
+        improvements: [],
+        nextSteps: ['稍后重试 AI 分析'],
+        marketValue: { current: '未知', target: '未知', gap: 'AI 服务不可用' }
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 解析 AI 复盘响应
+  const parseAIReview = (aiResponse) => {
+    if (!aiResponse) {
+      return {
+        overallScore: 80,
+        dimensionScores: {
+          technical: { score: 80, label: '技术深度' },
+          communication: { score: 80, label: '表达能力' },
+          logic: { score: 80, label: '逻辑思维' },
+          experience: { score: 80, label: '项目经验' },
+          attitude: { score: 80, label: '面试态度' }
         },
-        {
-          area: '面试技巧',
-          suggestion: '使用STAR法则组织答案，确保结构清晰完整',
-          resources: ['STAR法则训练器']
-        }
-      ],
-      nextSteps: [
-        '针对薄弱知识点制定学习计划',
-        '每天练习1-2道系统设计题',
-        '使用STAR法则训练器改进表达能力',
-        '模拟压力面试场景，提升心理素质'
-      ],
-      marketValue: {
-        current: 'P6水平',
-        target: 'P7水平',
-        gap: '需要提升系统设计和架构能力',
-        suggestion: '建议再准备2-3个月，重点突破系统设计和分布式系统'
-      }
+        strengths: ['解析 AI 响应失败'],
+        weaknesses: [],
+        improvements: [],
+        nextSteps: [],
+        marketValue: { current: '未知', target: '未知', gap: '' }
+      };
+    }
+
+    // 尝试从 AI 响应中提取评分
+    const extractScore = (text, keyword) => {
+      const regex = new RegExp(`${keyword}[:：]\\s*(\\d+)`, 'i');
+      const match = text.match(regex);
+      return match ? parseInt(match[1]) : 80;
     };
 
-    setReviewResult(review);
-    setIsGenerating(false);
+    return {
+      overallScore: extractScore(aiResponse, '总分|整体'),
+      dimensionScores: {
+        technical: { score: extractScore(aiResponse, '技术'), label: '技术深度' },
+        communication: { score: extractScore(aiResponse, '表达|沟通'), label: '表达能力' },
+        logic: { score: extractScore(aiResponse, '逻辑'), label: '逻辑思维' },
+        experience: { score: extractScore(aiResponse, '经验'), label: '项目经验' },
+        attitude: { score: extractScore(aiResponse, '态度'), label: '面试态度' }
+      },
+      strengths: extractSection(aiResponse, '优点|优势|亮点'),
+      weaknesses: extractSection(aiResponse, '不足|缺点|改进'),
+      improvements: [{ area: '综合建议', suggestion: aiResponse, resources: [] }],
+      nextSteps: ['根据 AI 建议进行针对性提升'],
+      marketValue: { current: '当前水平', target: '目标水平', gap: aiResponse.substring(0, 100) }
+    };
+  };
+
+  // 提取章节内容
+  const extractSection = (text, keywords) => {
+    const lines = text.split('\n');
+    const result = [];
+    let inSection = false;
+
+    for (const line of lines) {
+      if (keywords.split('|').some(k => line.includes(k))) {
+        inSection = true;
+        continue;
+      }
+      if (inSection) {
+        if (line.trim() && !line.match(/^\d+\./)) {
+          result.push(line.trim());
+        }
+        if (result.length >= 4) break;
+      }
+    }
+
+    return result.length > 0 ? result : ['AI 分析内容'];
   };
 
   const exportReview = () => {

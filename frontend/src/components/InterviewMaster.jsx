@@ -9,9 +9,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Crown, MessageSquare, Send, Bot, User, Sparkles, Target,
   Zap, Star, TrendingUp, Award, CheckCircle2, Lightbulb,
-  BookOpen, Briefcase, Code, Brain, Heart
+  BookOpen, Briefcase, Code, Brain, Heart, Loader2
 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
+import interviewAIService from '../services/interviewAIService';
 
 const InterviewMaster = ({ onClose }) => {
   const [messages, setMessages] = useState([
@@ -124,121 +125,43 @@ const InterviewMaster = ({ onClose }) => {
     return 'technical';
   };
 
-  // 生成高手级回答
+  // 生成高手级回答 - 使用真实 AI
   const generateMasterAnswer = async (question, type, company, position) => {
     setIsLoading(true);
 
-    // 模拟AI思考
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // 调用真实 AI 服务
+      const result = await interviewAIService.generateMasterAnswer(
+        company,
+        position,
+        question,
+        type
+      );
 
-    const strategy = masterStrategies[type];
-    let answer = '';
+      const answer = result.answer;
 
-    // 根据公司调整风格
-    const companyStyle = {
-      '阿里': '重视技术深度和架构设计能力',
-      '字节': '重视算法和快速迭代能力',
-      '腾讯': '重视基础扎实和团队协作',
-      '美团': '重视业务理解和系统稳定性',
-      '百度': '重视技术深度和创新能力',
-      '京东': '重视高并发和电商经验',
-      '拼多多': '重视极致性能和成本控制',
-      '小米': '重视全栈能力和产品思维'
-    };
+      setAnswerStrategy({
+        type,
+        answer
+      });
 
-    const style = companyStyle[company] || '综合技术能力和项目经验';
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: answer,
+        type: 'strategy'
+      }]);
 
-    if (type === 'technical') {
-      answer = `【面试高手回答策略】针对${company}的面试风格（${style}）：
-
-**回答框架：**
-${strategy.framework.map((f, i) => `${i + 1}. ${f}`).join('\n')}
-
-**针对这个问题的高分回答思路：**
-1. **先定义概念** - 展示你对基础概念的理解
-2. **深入原理** - 讲解底层实现机制，体现技术深度
-3. **结合实际** - 用你项目中的真实案例说明
-4. **对比分析** - 与其他方案对比，说明选型原因
-5. **性能优化** - 主动提及性能考虑和优化手段
-
-**加分技巧：**
-${strategy.tips.map((t, i) => `• ${t}`).join('\n')}
-
-**话术示例：**
-"关于这个问题，我的理解是...（定义）。在实际项目中，我遇到过一个类似的场景...（案例）。当时我们考虑到...（思考过程），最终选择了...（决策）。这个方案的优点是...，但也存在...的局限。如果让我重新设计，我会...（反思）。"`;
-    } else if (type === 'behavioral') {
-      answer = `【STAR法则增强版】这是${company}最喜欢问的行为面试题：
-
-**回答框架：**
-${strategy.framework.map((f, i) => `${i + 1}. ${f}`).join('\n')}
-
-**高分回答模板：**
-"在[时间]，我负责[项目背景]。当时面临的最大挑战是[困难描述]，因为[原因分析]。
-
-我的任务是[具体目标]。为了达成这个目标，我采取了以下行动：
-1. [行动1 - 体现技术能力]
-2. [行动2 - 体现解决问题能力]
-3. [行动3 - 体现团队协作]
-
-最终结果是[数据量化成果]，比如性能提升了X%，节省了X时间，获得了X认可。
-
-通过这次经历，我学到了[收获]。如果重来一次，我会在[改进点]做得更好。"`
-    } else if (type === 'systemDesign') {
-      answer = `【系统设计高分策略】${company}非常重视系统设计能力：
-
-**回答框架（按这个顺序）：**
-${strategy.framework.map((f, i) => `${i + 1}. ${f}`).join('\n')}
-
-**关键要点：**
-• **先问需求** - 不要急着设计，先问清楚功能需求、QPS、数据量
-• **逐步细化** - 从整体架构到具体模块，层层深入
-• **主动提及** - 高可用、高并发、监控、容灾、扩展性
-• **数据支撑** - 给出具体的数字估算
-
-**话术示例：**
-"在设计这个系统之前，我想先确认几个关键需求：1）预期的QPS是多少？2）数据量级别？3）可用性要求？
-
-基于这些需求，我的设计思路是...（整体架构）。核心模块包括...（模块划分）。
-
-对于高并发场景，我会采用...（解决方案）。为了保证高可用，我会...（容灾方案）。
-
-这个方案可以支撑...（容量），未来可以通过...（扩展方案）来支持业务增长。"`;
-    } else if (type === 'salary') {
-      answer = `【薪资谈判高手策略】与${company}HR谈判的技巧：
-
-**谈判框架：**
-${strategy.framework.map((f, i) => `${i + 1}. ${f}`).join('\n')}
-
-**谈判话术：**
-1. **开场** - "在谈薪资之前，我想先了解一下这个职位的薪资结构，包括基本工资、年终奖、股票期权等"
-
-2. **展示价值** - "基于我的经验和技能，我相信我能为公司带来以下价值...（列举2-3点）"
-
-3. **给出范围** - "根据我的市场调研，这个职位的合理范围是X-Y。考虑到我的经验和能力，我希望能在X+20%左右"
-
-4. **强调整体** - "除了薪资，我也很看重成长机会、技术挑战和团队氛围。我相信${company}在这些方面都很有优势"
-
-5. **灵活应对** - "当然，具体数字我们可以再商量。我更看重长期的职业发展和学习机会"
-
-**注意事项：**
-${strategy.tips.map((t, i) => `• ${t}`).join('\n')}`;
+      setInterviewStage('answering');
+    } catch (error) {
+      console.error('生成回答失败:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '抱歉，AI 服务暂时不可用。请稍后重试，或者使用本地模板生成回答。',
+        type: 'error'
+      }]);
+    } finally {
+      setIsLoading(false);
     }
-
-    setAnswerStrategy({
-      type,
-      framework: strategy.framework,
-      tips: strategy.tips,
-      answer
-    });
-
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: answer,
-      type: 'strategy'
-    }]);
-
-    setIsLoading(false);
-    setInterviewStage('answering');
   };
 
   const handleSend = async () => {

@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Flame, MessageSquare, Send, Bot, User, AlertTriangle, Shield, Heart, Zap, Crown } from 'lucide-react';
+import { Flame, MessageSquare, Send, Bot, User, AlertTriangle, Shield, Heart, Zap, Crown, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
 import InterviewMasterHelper from './InterviewMasterHelper';
+import interviewAIService from '../services/interviewAIService';
 
 const PressureInterview = ({ onClose }) => {
   const [messages, setMessages] = useState([
@@ -112,22 +113,52 @@ const PressureInterview = ({ onClose }) => {
     setInput('');
     setIsLoading(true);
 
-    // 模拟面试官反应时间（压力面试通常反应很快）
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      // 增加压力等级
+      const nextStressLevel = Math.min(stressLevel + 0.5, 5);
+      setStressLevel(nextStressLevel);
 
-    // 增加压力等级
-    const nextStressLevel = Math.min(stressLevel + 0.5, 5);
-    setStressLevel(nextStressLevel);
+      // 调用 AI 生成压力回应
+      const pressureType = nextStressLevel >= 4 ? 'stress' : nextStressLevel >= 2 ? 'challenge' : 'logic';
+      const result = await interviewAIService.generatePressureResponse(userMessage, pressureType);
 
-    const response = generatePressureResponse(userMessage);
+      // 解析 AI 响应
+      const aiResponse = parsePressureResponse(result.response);
 
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: response.content,
-      type: response.type
-    }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: aiResponse.content,
+        type: aiResponse.type
+      }]);
+    } catch (error) {
+      console.error('压力面试 AI 失败:', error);
+      // 使用本地模板作为后备
+      const nextStressLevel = Math.min(stressLevel + 0.5, 5);
+      setStressLevel(nextStressLevel);
+      const response = generatePressureResponse(userMessage);
 
-    setIsLoading(false);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.content,
+        type: response.type
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 解析 AI 压力回应
+  const parsePressureResponse = (aiResponse) => {
+    if (!aiResponse) return { content: '请继续。', type: 'normal' };
+
+    // 检测是否是压力类型回应
+    const pressureKeywords = ['质疑', '挑战', '打断', '否定', '怀疑', '不对', '错误', '问题'];
+    const isPressure = pressureKeywords.some(keyword => aiResponse.includes(keyword));
+
+    return {
+      content: aiResponse.trim(),
+      type: isPressure ? 'pressure' : 'normal'
+    };
   };
 
   const handleKeyPress = (e) => {

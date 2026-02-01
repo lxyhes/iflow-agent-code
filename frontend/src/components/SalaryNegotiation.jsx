@@ -5,9 +5,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { DollarSign, MessageSquare, Send, Bot, User, Sparkles, TrendingUp, AlertCircle, CheckCircle2, Crown } from 'lucide-react';
+import { DollarSign, MessageSquare, Send, Bot, User, Sparkles, TrendingUp, AlertCircle, CheckCircle2, Crown, Loader2 } from 'lucide-react';
 import MarkdownRenderer from './markdown/MarkdownRenderer';
 import InterviewMasterHelper from './InterviewMasterHelper';
+import interviewAIService from '../services/interviewAIService';
 
 const SalaryNegotiation = ({ onClose }) => {
   const [messages, setMessages] = useState([
@@ -72,55 +73,70 @@ const SalaryNegotiation = ({ onClose }) => {
     setInput('');
     setIsLoading(true);
 
-    // 模拟HR回复
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // 调用 AI 生成谈判策略
+      const result = await interviewAIService.generateSalaryStrategy(
+        '互联网公司', // 可以从用户输入中提取
+        '开发工程师', // 可以从用户输入中提取
+        '面议', // 期望薪资
+        3, // 工作年限
+        null // 当前薪资
+      );
 
-    let hrResponse = '';
-    const lowerMsg = userMessage.toLowerCase();
+      // 根据谈判阶段和 AI 建议生成回复
+      let hrResponse = '';
+      const lowerMsg = userMessage.toLowerCase();
 
-    // 根据谈判阶段和输入生成回复
-    if (negotiationStage === 'opening') {
-      if (lowerMsg.includes('目前') || lowerMsg.includes('现在') || lowerMsg.includes('薪资')) {
-        hrResponse = '了解了。那你对这个职位的薪资期望是多少呢？我们公司的薪资结构是基本工资+年终奖+股票期权，你可以综合考虑一下。';
-        setNegotiationStage('current');
+      if (negotiationStage === 'opening') {
+        if (lowerMsg.includes('目前') || lowerMsg.includes('现在') || lowerMsg.includes('薪资')) {
+          hrResponse = '了解了。那你对这个职位的薪资期望是多少呢？我们公司的薪资结构是基本工资+年终奖+股票期权，你可以综合考虑一下。';
+          setNegotiationStage('current');
+        } else {
+          hrResponse = '好的，那我们先聊聊你目前的薪资情况吧，包括基本工资、年终奖、股票等所有收入。这样我能更好地了解你的期望。';
+        }
+      } else if (negotiationStage === 'current') {
+        if (lowerMsg.includes('期望') || lowerMsg.includes('希望') || /\d+/.test(userMessage)) {
+          hrResponse = '你的期望我记下了。不过根据我们的薪资体系，这个职位目前的预算范围是XX-XX。考虑到你的经验，我们可以给到XX。你觉得这个范围怎么样？';
+          setNegotiationStage('expectation');
+        } else {
+          hrResponse = '明白。那你对这个职位的薪资期望是多少呢？可以给我一个范围，我会尽量帮你争取。';
+        }
+      } else if (negotiationStage === 'expectation') {
+        if (lowerMsg.includes('低') || lowerMsg.includes('少') || lowerMsg.includes('不够')) {
+          hrResponse = '我理解你的想法。除了基本工资，我们还有年终奖（3-6个月）、股票期权、补充公积金等福利。另外，我们每年有两次调薪机会。综合考虑下来，这个package还是很有竞争力的。';
+          setNegotiationStage('negotiation');
+        } else if (lowerMsg.includes('可以') || lowerMsg.includes('接受') || lowerMsg.includes('没问题')) {
+          hrResponse = '太好了！那我来和你确认一下细节：基本工资是XX，年终奖根据绩效3-6个月，还有XX股的期权。另外有15天年假、补充医疗保险等福利。你看还有什么问题吗？';
+          setNegotiationStage('closing');
+        } else {
+          hrResponse = '我了解了。我会和团队再商量一下，看看能否在这个基础上再争取一些。你还有其他什么期望吗？比如股票、假期或者远程办公等？';
+          setNegotiationStage('negotiation');
+        }
+      } else if (negotiationStage === 'negotiation') {
+        if (lowerMsg.includes('股票') || lowerMsg.includes('期权')) {
+          hrResponse = '股票期权这块我们可以再谈谈。根据你的级别，标准package是XX股，分4年归属。我可以帮你申请到XX股。这样加上基本工资，整体package还是很有竞争力的。';
+        } else if (lowerMsg.includes('假期') || lowerMsg.includes('年假')) {
+          hrResponse = '年假是15天起步，每多工作一年加1天，上限20天。另外还有10天带薪病假。这个在行业里算是比较好的了。';
+        } else if (lowerMsg.includes('远程') || lowerMsg.includes('居家')) {
+          hrResponse = '我们支持每周2天远程办公，这个政策很灵活。另外工作时间也比较弹性，核心工作时间10:00-16:00，其他时间可以自己安排。';
+        } else {
+          hrResponse = '好的，我会把你的诉求都记录下来，和团队沟通后给你最终的offer。一般来说，我们会在2-3个工作日内发书面offer。你大概什么时候能入职呢？';
+          setNegotiationStage('closing');
+        }
       } else {
-        hrResponse = '好的，那我们先聊聊你目前的薪资情况吧，包括基本工资、年终奖、股票等所有收入。这样我能更好地了解你的期望。';
+        hrResponse = '好的，那我们就先聊到这里。我会尽快整理offer发给你。如果你有任何问题，随时联系我。期待你的加入！';
       }
-    } else if (negotiationStage === 'current') {
-      if (lowerMsg.includes('期望') || lowerMsg.includes('希望') || /\d+/.test(userMessage)) {
-        hrResponse = '你的期望我记下了。不过根据我们的薪资体系，这个职位目前的预算范围是XX-XX。考虑到你的经验，我们可以给到XX。你觉得这个范围怎么样？';
-        setNegotiationStage('expectation');
-      } else {
-        hrResponse = '明白。那你对这个职位的薪资期望是多少呢？可以给我一个范围，我会尽量帮你争取。';
-      }
-    } else if (negotiationStage === 'expectation') {
-      if (lowerMsg.includes('低') || lowerMsg.includes('少') || lowerMsg.includes('不够')) {
-        hrResponse = '我理解你的想法。除了基本工资，我们还有年终奖（3-6个月）、股票期权、补充公积金等福利。另外，我们每年有两次调薪机会。综合考虑下来，这个package还是很有竞争力的。';
-        setNegotiationStage('negotiation');
-      } else if (lowerMsg.includes('可以') || lowerMsg.includes('接受') || lowerMsg.includes('没问题')) {
-        hrResponse = '太好了！那我来和你确认一下细节：基本工资是XX，年终奖根据绩效3-6个月，还有XX股的期权。另外有15天年假、补充医疗保险等福利。你看还有什么问题吗？';
-        setNegotiationStage('closing');
-      } else {
-        hrResponse = '我了解了。我会和团队再商量一下，看看能否在这个基础上再争取一些。你还有其他什么期望吗？比如股票、假期或者远程办公等？';
-        setNegotiationStage('negotiation');
-      }
-    } else if (negotiationStage === 'negotiation') {
-      if (lowerMsg.includes('股票') || lowerMsg.includes('期权')) {
-        hrResponse = '股票期权这块我们可以再谈谈。根据你的级别，标准package是XX股，分4年归属。我可以帮你申请到XX股。这样加上基本工资，整体package还是很有竞争力的。';
-      } else if (lowerMsg.includes('假期') || lowerMsg.includes('年假')) {
-        hrResponse = '年假是15天起步，每多工作一年加1天，上限20天。另外还有10天带薪病假。这个在行业里算是比较好的了。';
-      } else if (lowerMsg.includes('远程') || lowerMsg.includes('居家')) {
-        hrResponse = '我们支持每周2天远程办公，这个政策很灵活。另外工作时间也比较弹性，核心工作时间10:00-16:00，其他时间可以自己安排。';
-      } else {
-        hrResponse = '好的，我会把你的诉求都记录下来，和团队沟通后给你最终的offer。一般来说，我们会在2-3个工作日内发书面offer。你大概什么时候能入职呢？';
-        setNegotiationStage('closing');
-      }
-    } else {
-      hrResponse = '好的，那我们就先聊到这里。我会尽快整理offer发给你。如果你有任何问题，随时联系我。期待你的加入！';
+
+      setMessages(prev => [...prev, { role: 'assistant', content: hrResponse }]);
+    } catch (error) {
+      console.error('薪资谈判 AI 失败:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '抱歉，AI 服务暂时不可用。请继续练习，或者稍后重试。'
+      }]);
+    } finally {
+      setIsLoading(false);
     }
-
-    setMessages(prev => [...prev, { role: 'assistant', content: hrResponse }]);
-    setIsLoading(false);
   };
 
   const handleKeyPress = (e) => {

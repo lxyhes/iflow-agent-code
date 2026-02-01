@@ -125,6 +125,14 @@ try:
 except Exception as e:
     logger.error(f"Failed to include AI article router: {e}")
 
+# Include the interview AI router
+try:
+    from backend.app.routers import interview_ai
+    app.include_router(interview_ai.router, prefix="/api")
+    logger.info("Successfully included interview AI router")
+except Exception as e:
+    logger.error(f"Failed to include interview AI router: {e}")
+
 # --- CACHE MANAGER ---
 class CacheManager:
     """缓存管理器，支持自动清理和大小限制"""
