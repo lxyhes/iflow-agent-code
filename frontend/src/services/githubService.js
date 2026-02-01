@@ -202,9 +202,9 @@ class GitHubService {
   }
 
   // Get trending repositories
-  async getTrending(language = 'all', since = 'daily') {
+  async getTrending(language = 'all', since = 'daily', sort = 'stars') {
     const response = await authenticatedFetch(
-      this.buildUrl('/trending', { language, since })
+      this.buildUrl('/trending', { language, since, sort })
     );
     if (!response.ok) {
       const error = await response.json();
@@ -219,6 +219,30 @@ class GitHubService {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to fetch popular languages');
+    }
+    return response.json();
+  }
+
+  // Get repository README
+  async getReadme(owner, repo) {
+    const response = await authenticatedFetch(
+      this.buildUrl('/readme', { owner, repo })
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch README');
+    }
+    return response.json();
+  }
+
+  // Get repository details for article generation
+  async getRepoDetails(owner, repo) {
+    const response = await authenticatedFetch(
+      this.buildUrl('/details', { owner, repo })
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch repository details');
     }
     return response.json();
   }

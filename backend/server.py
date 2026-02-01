@@ -9,6 +9,18 @@ import platform
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 加载 .env 文件
+try:
+    from dotenv import load_dotenv
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"Loaded .env from: {env_path}")
+    else:
+        print(f".env file not found at: {env_path}")
+except ImportError:
+    print("python-dotenv not installed, skipping .env loading")
+
 # 设置缓存目录到E盘（必须在导入其他模块之前）
 import tempfile
 os.environ['TEMP'] = 'E:/cache/agent_project/temp'
@@ -104,6 +116,14 @@ try:
     logger.info("Successfully included interview router")
 except Exception as e:
     logger.error(f"Failed to include interview router: {e}")
+
+# Include the AI article generation router
+try:
+    from backend.app.routers import ai_article
+    app.include_router(ai_article.router, prefix="/api")
+    logger.info("Successfully included AI article router")
+except Exception as e:
+    logger.error(f"Failed to include AI article router: {e}")
 
 # --- CACHE MANAGER ---
 class CacheManager:
@@ -6531,6 +6551,7 @@ async def catch_all(path_name: str, request: Request):
 
             # 使用 httpx 转发请求
             async with httpx.AsyncClient() as client:
+                logger.info(f"转发请求到 Node.js: {request.method} {target_url}")
                 response = await client.request(
                     method=request.method,
                     url=target_url,
@@ -6541,14 +6562,56 @@ async def catch_all(path_name: str, request: Request):
                     timeout=30.0
                 )
 
+                logger.info(f"Node.js 响应: {response.status_code}")
+                
+                # 如果 Node.js 返回错误，记录详细信息但返回空数据（为了更好的UX）
+                if response.status_code >= 400:
+                    error_text = response.text
+                    logger.error(f"Node.js 错误响应: {response.status_code} - {error_text[:500]}")
+                    # 对于统计类 API，返回空数据而不是错误
+                    if path_name in ["github/commit-activity", "github/code-frequency"]:
+                        if "commit-activity" in path_name:
+                            return JSONResponse(content={"activity": []}, status_code=200)
+                        elif "code-frequency" in path_name:
+                            return JSONResponse(content={"frequency": []}, status_code=200)
+                
                 # 返回 Node.js 服务器的响应
+                try:
+                    content = response.json()
+                except:
+                    content = {"data": response.text}
+                    
                 return JSONResponse(
-                    content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
-                    status_code=response.status_code
+                    content=content,
+                    status_code=response.status_code if response.status_code < 400 else 200
                 )
+        except httpx.ConnectError as e:
+            logger.error(f"无法连接到 Node.js 服务器 (localhost:3001): {e}")
+            # 对于统计类 API，返回空数据
+            if path_name in ["github/commit-activity", "github/code-frequency"]:
+                if "commit-activity" in path_name:
+                    return JSONResponse(content={"activity": []}, status_code=200)
+                elif "code-frequency" in path_name:
+                    return JSONResponse(content={"frequency": []}, status_code=200)
+            raise HTTPException(status_code=503, detail="Node.js server is not running on port 3001")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Node.js 服务器返回错误: {e.response.status_code} - {e.response.text}")
+            # 对于统计类 API，返回空数据
+            if path_name in ["github/commit-activity", "github/code-frequency"]:
+                if "commit-activity" in path_name:
+                    return JSONResponse(content={"activity": []}, status_code=200)
+                elif "code-frequency" in path_name:
+                    return JSONResponse(content={"frequency": []}, status_code=200)
+            raise HTTPException(status_code=e.response.status_code, detail=f"Node.js error: {e.response.text}")
         except Exception as e:
-            logger.error(f"转发 GitHub API 请求失败: {e}")
-            raise HTTPException(status_code=502, detail=f"Failed to forward request to Node.js server: {str(e)}")
+            logger.error(f"转发 GitHub API 请求失败: {type(e).__name__}: {e}")
+            # 对于统计类 API，返回空数据
+            if path_name in ["github/commit-activity", "github/code-frequency"]:
+                if "commit-activity" in path_name:
+                    return JSONResponse(content={"activity": []}, status_code=200)
+                elif "code-frequency" in path_name:
+                    return JSONResponse(content={"frequency": []}, status_code=200)
+            raise HTTPException(status_code=502, detail=f"Failed to forward request: {str(e)}")
 
     logger.warning(f"未处理的 API 请求: {request.method} /api/{path_name}")
 

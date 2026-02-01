@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   TrendingUp,
   Star,
@@ -10,13 +10,25 @@ import {
   Calendar,
   Code,
   ChevronRight,
+  FileText,
 } from 'lucide-react';
 import githubService from '../../services/githubService';
+
+const GitHubArticleGenerator = lazy(() => import('./GitHubArticleGenerator'));
 
 const TIME_RANGES = [
   { value: 'daily', label: '今日', icon: Flame },
   { value: 'weekly', label: '本周', icon: Calendar },
   { value: 'monthly', label: '本月', icon: Calendar },
+  { value: 'yearly', label: '今年', icon: Calendar },
+  { value: 'all', label: '全部时间', icon: Star },
+];
+
+const SORT_OPTIONS = [
+  { value: 'stars', label: '最多 Star', icon: Star },
+  { value: 'forks', label: '最多 Fork', icon: GitFork },
+  { value: 'updated', label: '最近更新', icon: Calendar },
+  { value: 'created', label: '最新创建', icon: Flame },
 ];
 
 function GitHubTrending({ onSelectRepo, isMobile }) {
@@ -24,8 +36,10 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
   const [languages, setLanguages] = useState([{ value: 'all', label: '所有语言' }]);
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [selectedTimeRange, setSelectedTimeRange] = useState('daily');
+  const [selectedSort, setSelectedSort] = useState('stars');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedRepoForArticle, setSelectedRepoForArticle] = useState(null);
 
   useEffect(() => {
     loadLanguages();
@@ -34,7 +48,7 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
 
   useEffect(() => {
     loadTrending();
-  }, [selectedLanguage, selectedTimeRange]);
+  }, [selectedLanguage, selectedTimeRange, selectedSort]);
 
   const loadLanguages = async () => {
     try {
@@ -49,7 +63,7 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await githubService.getTrending(selectedLanguage, selectedTimeRange);
+      const data = await githubService.getTrending(selectedLanguage, selectedTimeRange, selectedSort);
       setRepositories(data.repositories || []);
     } catch (err) {
       setError(err.message || '获取热门项目失败');
@@ -136,9 +150,9 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-3">
           {/* Time Range */}
-          <div className="flex bg-muted rounded-lg p-1">
+          <div className="flex flex-wrap bg-muted rounded-lg p-1">
             {TIME_RANGES.map((range) => {
               const Icon = range.icon;
               return (
@@ -158,18 +172,42 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
             })}
           </div>
 
-          {/* Language Filter */}
-          <select
-            value={selectedLanguage}
-            onChange={(e) => setSelectedLanguage(e.target.value)}
-            className="px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {languages.map((lang) => (
-              <option key={lang.value} value={lang.value}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
+          {/* Second Row: Sort and Language */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Sort Options */}
+            <div className="flex bg-muted rounded-lg p-1">
+              {SORT_OPTIONS.map((sort) => {
+                const Icon = sort.icon;
+                return (
+                  <button
+                    key={sort.value}
+                    onClick={() => setSelectedSort(sort.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      selectedSort === sort.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {sort.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Language Filter */}
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {languages.map((lang) => (
+                <option key={lang.value} value={lang.value}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Loading State */}
@@ -238,19 +276,28 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
                             {repo.description || '暂无描述'}
                           </p>
                         </div>
-                        <button
-                          onClick={() =>
-                            onSelectRepo({
-                              fullName: repo.fullName,
-                              name: repo.name,
-                              owner: repo.owner,
-                            })
-                          }
-                          className="flex-shrink-0 p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                          title="查看详情"
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </button>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() =>
+                              onSelectRepo({
+                                fullName: repo.fullName,
+                                name: repo.name,
+                                owner: repo.owner,
+                              })
+                            }
+                            className="flex-shrink-0 p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                            title="查看详情"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedRepoForArticle(repo)}
+                            className="flex-shrink-0 p-2 text-muted-foreground hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                            title="生成公众号文章"
+                          >
+                            <FileText className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Stats */}
@@ -313,6 +360,16 @@ function GitHubTrending({ onSelectRepo, isMobile }) {
           </div>
         )}
       </div>
+
+      {/* Article Generator Modal */}
+      {selectedRepoForArticle && (
+        <Suspense fallback={null}>
+          <GitHubArticleGenerator
+            repo={selectedRepoForArticle}
+            onClose={() => setSelectedRepoForArticle(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

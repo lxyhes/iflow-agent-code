@@ -160,10 +160,8 @@ router.get('/commit-activity', async (req, res) => {
     res.json({ activity: formattedActivity });
   } catch (error) {
     console.error('GitHub commit activity error:', error);
-    res.status(error.status || 500).json({
-      error: error.message || 'Failed to fetch commit activity',
-      details: error.response?.data?.message,
-    });
+    // Return empty data instead of error for better UX
+    res.json({ activity: [] });
   }
 });
 
@@ -192,10 +190,8 @@ router.get('/code-frequency', async (req, res) => {
     res.json({ frequency: formattedFrequency });
   } catch (error) {
     console.error('GitHub code frequency error:', error);
-    res.status(error.status || 500).json({
-      error: error.message || 'Failed to fetch code frequency',
-      details: error.response?.data?.message,
-    });
+    // Return empty data instead of error for better UX
+    res.json({ frequency: [] });
   }
 });
 
@@ -592,9 +588,146 @@ router.get('/user', async (req, res) => {
   }
 });
 
+// Get repository README
+router.get('/readme', async (req, res) => {
+  const { owner, repo, token } = req.query;
+
+  if (!owner || !repo) {
+    return res.status(400).json({ error: 'Owner and repo are required' });
+  }
+
+  try {
+    const octokit = getOctokit(token);
+    const { data: readme } = await octokit.repos.getReadme({
+      owner,
+      repo,
+    });
+
+    // Decode base64 content
+    const content = Buffer.from(readme.content, 'base64').toString('utf-8');
+
+    res.json({
+      content,
+      name: readme.name,
+      path: readme.path,
+      htmlUrl: readme.html_url,
+    });
+  } catch (error) {
+    console.error('GitHub README error:', error);
+    res.status(error.status || 500).json({
+      error: error.message || 'Failed to fetch README',
+      details: error.response?.data?.message,
+    });
+  }
+});
+
+// Get repository details for article generation
+router.get('/details', async (req, res) => {
+  const { owner, repo, token } = req.query;
+
+  if (!owner || !repo) {
+    return res.status(400).json({ error: 'Owner and repo are required' });
+  }
+
+  try {
+    const octokit = getOctokit(token);
+
+    // Get repository info
+    const { data: repository } = await octokit.repos.get({
+      owner,
+      repo,
+    });
+
+    // Get README
+    let readmeContent = '';
+    let readmePreview = '';
+    try {
+      const { data: readme } = await octokit.repos.getReadme({
+        owner,
+        repo,
+      });
+      readmeContent = Buffer.from(readme.content, 'base64').toString('utf-8');
+      // Get first 500 chars as preview
+      readmePreview = readmeContent.substring(0, 500).replace(/[#*`_\[\]]/g, '');
+    } catch (e) {
+      console.log('No README found');
+    }
+
+    // Get top contributors
+    let topContributors = [];
+    try {
+      const { data: contributors } = await octokit.repos.listContributors({
+        owner,
+        repo,
+        per_page: 5,
+      });
+      topContributors = contributors.map(c => ({
+        username: c.login,
+        avatarUrl: c.avatar_url,
+        contributions: c.contributions,
+      }));
+    } catch (e) {
+      console.log('Could not fetch contributors');
+    }
+
+    // Get recent releases
+    let latestRelease = null;
+    try {
+      const { data: releases } = await octokit.repos.listReleases({
+        owner,
+        repo,
+        per_page: 1,
+      });
+      if (releases.length > 0) {
+        latestRelease = {
+          tagName: releases[0].tag_name,
+          name: releases[0].name,
+          publishedAt: releases[0].published_at,
+        };
+      }
+    } catch (e) {
+      console.log('No releases found');
+    }
+
+    res.json({
+      name: repository.name,
+      fullName: repository.full_name,
+      description: repository.description,
+      stars: repository.stargazers_count,
+      forks: repository.forks_count,
+      watchers: repository.watchers_count,
+      openIssues: repository.open_issues_count,
+      language: repository.language,
+      languagesUrl: repository.languages_url,
+      createdAt: repository.created_at,
+      updatedAt: repository.updated_at,
+      pushedAt: repository.pushed_at,
+      homepage: repository.homepage,
+      htmlUrl: repository.html_url,
+      topics: repository.topics || [],
+      license: repository.license?.name || null,
+      readmeContent,
+      readmePreview,
+      topContributors,
+      latestRelease,
+      isFork: repository.fork,
+      isTemplate: repository.is_template,
+      hasWiki: repository.has_wiki,
+      hasPages: repository.has_pages,
+      hasDiscussions: repository.has_discussions,
+    });
+  } catch (error) {
+    console.error('GitHub details error:', error);
+    res.status(error.status || 500).json({
+      error: error.message || 'Failed to fetch repository details',
+      details: error.response?.data?.message,
+    });
+  }
+});
+
 // Get trending repositories
 router.get('/trending', async (req, res) => {
-  const { language, since = 'daily', token } = req.query;
+  const { language, since = 'daily', sort = 'stars', token } = req.query;
 
   try {
     const octokit = getOctokit(token);
@@ -603,32 +736,69 @@ router.get('/trending', async (req, res) => {
     // GitHub search doesn't have a direct "trending" API, so we use search with sort
     const date = new Date();
     let dateFilter = '';
+    let querySort = sort;
+    let order = 'desc';
 
     switch (since) {
       case 'daily':
         date.setDate(date.getDate() - 1);
+        dateFilter = `created:>${date.toISOString().split('T')[0]}`;
         break;
       case 'weekly':
         date.setDate(date.getDate() - 7);
+        dateFilter = `created:>${date.toISOString().split('T')[0]}`;
         break;
       case 'monthly':
         date.setDate(date.getDate() - 30);
+        dateFilter = `created:>${date.toISOString().split('T')[0]}`;
+        break;
+      case 'yearly':
+        date.setFullYear(date.getFullYear() - 1);
+        dateFilter = `created:>${date.toISOString().split('T')[0]}`;
+        break;
+      case 'all':
+        // 全部时间：不按创建日期过滤，按总星数排序
+        dateFilter = 'stars:>1000';
         break;
       default:
         date.setDate(date.getDate() - 1);
+        dateFilter = `created:>${date.toISOString().split('T')[0]}`;
     }
 
-    const dateString = date.toISOString().split('T')[0];
-    let query = `created:>${dateString}`;
+    let query = dateFilter;
 
     if (language && language !== 'all') {
       query += ` language:${language}`;
     }
 
+    // Handle different sort options
+    // GitHub API supports: stars, forks, updated, created
+    // For 'forks', we add a minimum star filter to get quality repos
+    if (sort === 'forks') {
+      querySort = 'forks';
+      if (!query.includes('stars:')) {
+        query += ' stars:>100';
+      }
+    } else if (sort === 'updated') {
+      querySort = 'updated';
+    } else if (sort === 'created') {
+      querySort = 'created';
+      // For created sort, we might want to adjust date filter
+      if (since === 'all') {
+        // Remove date filter for created sort with all time
+        query = query.replace(/created:>\d{4}-\d{2}-\d{2}/g, '');
+        if (language && language !== 'all') {
+          query = `language:${language}`;
+        } else {
+          query = 'stars:>1000';
+        }
+      }
+    }
+
     const { data: searchResults } = await octokit.search.repos({
       q: query,
-      sort: 'stars',
-      order: 'desc',
+      sort: querySort,
+      order: order,
       per_page: 30,
     });
 
@@ -655,6 +825,7 @@ router.get('/trending', async (req, res) => {
       repositories: formattedRepos,
       since,
       language: language || 'all',
+      sort,
     });
   } catch (error) {
     console.error('GitHub trending error:', error);

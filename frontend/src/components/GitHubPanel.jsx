@@ -274,22 +274,23 @@ function GitHubPanel({ isMobile }) {
               isMobile={isMobile}
             />
           </div>
-        ) : !repository ? (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
-            <Github className="w-16 h-16 mb-4 opacity-30" />
-            <p className="text-lg font-medium mb-2">输入 GitHub 仓库地址开始</p>
-            <p className="text-sm text-center max-w-md">
-              支持格式: owner/repo 或 https://github.com/owner/repo
-            </p>
-            <button
-              onClick={() => setShowSearch(true)}
-              className="mt-4 flex items-center gap-2 px-4 py-2 text-sm border border-input rounded-md hover:bg-accent transition-colors"
-            >
-              <Search className="w-4 h-4" />
-              搜索仓库
-            </button>
-          </div>
-        ) : (
+        ) : activeTab === 'overview' || activeTab === 'commits' || activeTab === 'contributors' || activeTab === 'charts' ? (
+          !repository ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
+              <Github className="w-16 h-16 mb-4 opacity-30" />
+              <p className="text-lg font-medium mb-2">输入 GitHub 仓库地址开始</p>
+              <p className="text-sm text-center max-w-md">
+                支持格式: owner/repo 或 https://github.com/owner/repo
+              </p>
+              <button
+                onClick={() => setShowSearch(true)}
+                className="mt-4 flex items-center gap-2 px-4 py-2 text-sm border border-input rounded-md hover:bg-accent transition-colors"
+              >
+                <Search className="w-4 h-4" />
+                搜索仓库
+              </button>
+            </div>
+          ) : (
           <div className="h-full overflow-y-auto">
             {activeTab === 'overview' && (
               <GitHubRepoInfo repository={repository} isMobile={isMobile} />
@@ -317,7 +318,8 @@ function GitHubPanel({ isMobile }) {
               />
             )}
           </div>
-        )}
+          )
+        ) : null}
       </div>
 
       {/* Search Modal */}
