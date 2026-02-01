@@ -103,7 +103,7 @@ def build_article_prompt(repo: RepoData, style: str = "viral") -> str:
     elif repo.stars > 1000:
         popularity = "⭐ 值得关注"
     
-    prompt = f"""你是一位顶级公众号爆款文章写手，擅长写出10万+阅读量的技术文章。你的文章特点是：标题抓人、开头勾人、内容扎心、结尾引人行动。
+    prompt = f"""你是一位顶级公众号爆款文章写手，擅长写出10万+阅读量的技术文章。
 
 【项目信息】
 - 项目名称：{repo.name}
@@ -118,94 +118,54 @@ def build_article_prompt(repo: RepoData, style: str = "viral") -> str:
 【README核心内容】
 {repo.readmePreview[:1500] if repo.readmePreview else '暂无'}
 
-【写作要求 - 必须严格遵守】
+【任务】
+请基于以上项目信息，生成一篇公众号爆款文章。
 
-1. **标题**（必须带emoji，制造强烈好奇心）
-   - 使用数字、悬念、对比、痛点、利益点
-   - 示例："🚀 3天斩获10K Star！这个项目让{repo.language}开发者疯狂了"
-   - 示例："💔 用了{repo.name}后，我把之前的工具全卸载了"
-   - 示例："⚠️ 警告：看完这个项目，你可能会想重构所有代码"
+【写作风格】
+1. 标题：带emoji，制造强烈好奇心，使用数字、悬念、对比、痛点、利益点（15-25字）
+2. 开头钩子：3秒内抓住读者，200字以内，使用反转型/痛点型/权威型钩子，包含情绪词（卧槽、绝了、真香、崩溃、拯救、逆天）
+3. 情绪价值：描述使用前痛苦+转折+使用后爽感（150字左右）
+4. 核心亮点：3-4个，每个带emoji和具体数据，不要泛泛而谈
+5. 实战案例：2个，Before（痛点+情绪）+ After（改善+数据）+ Improvement（量化效果）
+6. 快速上手：真实可用的安装命令和使用示例
+7. 用户评价：2-3个，不同角色，包含具体收益
+8. 标签：6-8个技术相关标签
 
-2. **开头钩子**（3秒内必须抓住读者，200字以内）
-   - 方式A - 反转型："说实话，第一次看到...我是不屑的...但当我真正用起来..."
-   - 方式B - 痛点型："你有没有遇到过...我曾经为此加班到深夜，直到..."
-   - 方式C - 权威型："昨天，我那个在大厂做架构师的朋友突然问我..."
-   - 必须包含情绪词：卧槽、绝了、真香、崩溃、拯救、逆天
+【严格要求 - 必须遵守】
+1. 必须返回有效的JSON格式
+2. 不要添加任何markdown代码块标记（如 ```json）
+3. 不要添加任何解释性文字
+4. 只返回JSON对象本身
+5. 确保JSON格式正确，可以被解析
+6. 所有字符串值使用双引号
+7. 不要包含换行符在字符串中（使用\\n代替）
 
-3. **情绪价值段落**（建立共鸣，150字左右）
-   - 描述使用前的痛苦（具体、真实、让人感同身受）
-   - 转折到使用后的爽感（效率提升、问题解决、心情愉悦）
-   - 加入金句："这才是工具应该有的样子"、"让我重新燃起了对编程的热爱"
+【返回格式】
+必须返回以下格式的JSON对象：
 
-4. **核心亮点**（3-4个，每个都要有emoji和具体数据）
-   - 不要泛泛而谈，要具体到技术细节
-   - 示例：不是"性能好"，而是"比传统方案快10倍，内存占用减少80%"
-   - 结合{repo.language}语言特性说明优势
-
-5. **实战案例**（2个，前后对比必须强烈）
-   - 场景要具体：不是"开发项目"，而是"处理10万条数据清洗"
-   - Before：具体痛点 + 情绪描述（崩溃、抓狂、想辞职）
-   - After：具体改善 + 数据支撑（节省3小时、代码减少200行）
-   - Improvement：量化效果（效率提升300%、bug减少90%）
-
-6. **快速上手**（真实可用的代码）
-   - 安装命令必须准确
-   - 使用示例要简洁但有实际意义
-   - 代码注释说明关键步骤
-
-7. **用户评价**（2-3个，要有真实感）
-   - 不同角色：大厂工程师、独立开发者、技术负责人
-   - 包含具体收益："团队效率提升50%"、"省了我3天工作量"
-   - 语言口语化，像真实对话
-
-8. **标签**（6-8个，覆盖搜索关键词）
-   - 包含：技术栈、场景、特性、热度标签
-
-【返回格式 - 必须是合法JSON】
 {{
-  "title": "带emoji的爆款标题，15-25字",
-  "hook": "开头钩子，\\n\\n分段，制造强烈情绪反差",
-  "emotion": "情绪价值段落，\\n\\n描述痛点+转折+爽感",
+  "title": "带emoji的爆款标题",
+  "hook": "开头钩子文本",
+  "emotion": "情绪价值段落",
   "highlights": [
-    {{"title": "⚡ 核心优势标题", "desc": "具体技术细节和数据支撑的优势描述，不要泛泛而谈", "emoji": "⚡"}},
-    {{"title": "🚀 性能突破", "desc": "具体的性能数据对比，如比XX快X倍", "emoji": "🚀"}},
-    {{"title": "💡 开发体验", "desc": "开发者使用时的具体体验改善", "emoji": "💡"}}
+    {{"title": "亮点标题带emoji", "desc": "具体描述", "emoji": "emoji"}},
+    {{"title": "亮点标题带emoji", "desc": "具体描述", "emoji": "emoji"}},
+    {{"title": "亮点标题带emoji", "desc": "具体描述", "emoji": "emoji"}}
   ],
   "cases": [
-    {{
-      "title": "场景1：具体使用场景",
-      "before": "😫 使用前的具体痛点描述，带情绪词，让人感同身受",
-      "after": "😊 使用后的具体改善，带数据支撑",
-      "improvement": "🎉 量化效果：效率提升X%、时间节省X小时、代码减少X行",
-      "emoji": "😫"
-    }},
-    {{
-      "title": "场景2：另一个具体场景",
-      "before": "😤 另一个痛点的具体描述",
-      "after": "✨ 改善后的状态",
-      "improvement": "🚀 具体收益数据",
-      "emoji": "😤"
-    }}
+    {{"title": "场景标题", "before": "使用前痛点", "after": "使用后改善", "improvement": "量化效果", "emoji": "emoji"}},
+    {{"title": "场景标题", "before": "使用前痛点", "after": "使用后改善", "improvement": "量化效果", "emoji": "emoji"}}
   ],
   "quickStart": {{
-    "install": "准确的安装命令",
-    "usage": "简洁但有意义的代码示例"
+    "install": "安装命令",
+    "usage": "使用示例代码"
   }},
   "testimonials": [
-    {{"role": "大厂高级工程师 @某互联网大厂", "content": "用了{repo.name}后，我们团队效率提升了50%，已经全面推广", "verified": true}},
-    {{"role": "独立开发者", "content": "这个项目拯救了我的 side project，省了我整整一周时间", "verified": false}},
-    {{"role": "{repo.language}开发者", "content": "代码质量很高，API设计优雅，值得学习", "verified": true}}
+    {{"role": "评价者身份", "content": "评价内容", "verified": true}},
+    {{"role": "评价者身份", "content": "评价内容", "verified": false}}
   ],
-  "tags": ["{repo.language}", "GitHub热门", "开源项目", "效率工具", "程序员必备", "技术分享"]
-}}
-
-【重要提醒】
-1. 直接返回JSON字符串，不要加markdown代码块
-2. 所有内容必须基于项目真实信息，不要编造
-3. 语言要有感染力，像朋友强烈推荐好东西
-4. 多用短句，适合手机阅读
-5. 每个部分都要有情绪价值，让读者产生共鸣
-6. 数据要具体，不要泛泛而谈"""
+  "tags": ["标签1", "标签2", "标签3", "标签4", "标签5", "标签6"]
+}}"""
 
     return prompt
 
@@ -255,6 +215,8 @@ async def call_ai_api(prompt: str) -> Dict[str, Any]:
             try:
                 # 清理可能的 markdown 代码块
                 content = content.strip()
+                
+                # 移除可能的 markdown 代码块标记
                 if content.startswith("```json"):
                     content = content[7:]
                 elif content.startswith("```"):
@@ -263,20 +225,61 @@ async def call_ai_api(prompt: str) -> Dict[str, Any]:
                     content = content[:-3]
                 
                 content = content.strip()
+                
+                # 尝试解析 JSON
                 article_data = json.loads(content)
+                
+                # 验证必要字段
+                if not isinstance(article_data, dict):
+                    raise ValueError("AI 返回的不是 JSON 对象")
+                
+                # 确保必要字段存在
+                required_fields = ['title', 'hook', 'emotion']
+                for field in required_fields:
+                    if field not in article_data:
+                        article_data[field] = ""
+                
+                # 确保数组字段存在
+                if 'highlights' not in article_data or not isinstance(article_data['highlights'], list):
+                    article_data['highlights'] = []
+                if 'cases' not in article_data or not isinstance(article_data['cases'], list):
+                    article_data['cases'] = []
+                if 'testimonials' not in article_data or not isinstance(article_data['testimonials'], list):
+                    article_data['testimonials'] = []
+                if 'tags' not in article_data or not isinstance(article_data['tags'], list):
+                    article_data['tags'] = []
+                if 'quickStart' not in article_data or not isinstance(article_data['quickStart'], dict):
+                    article_data['quickStart'] = {"install": "", "usage": ""}
+                
+                logger.info(f"✅ Successfully parsed AI response, title: {article_data.get('title', 'N/A')[:30]}...")
                 return article_data
-            except json.JSONDecodeError as e:
+                
+            except (json.JSONDecodeError, ValueError) as e:
                 logger.error(f"Failed to parse SDK response as JSON: {e}")
-                # 返回原始内容
+                logger.error(f"Raw content preview: {content[:500]}")
+                # 尝试提取 JSON 部分
+                try:
+                    # 查找 JSON 对象的开始和结束
+                    start_idx = content.find('{')
+                    end_idx = content.rfind('}')
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                        json_str = content[start_idx:end_idx+1]
+                        article_data = json.loads(json_str)
+                        logger.info("✅ Successfully extracted and parsed JSON from response")
+                        return article_data
+                except Exception as extract_error:
+                    logger.error(f"Failed to extract JSON: {extract_error}")
+                
+                # 返回原始内容作为后备
                 return {
-                    "title": "AI 生成内容",
-                    "hook": content[:500],
+                    "title": f"📝 {repo.name} - AI生成内容",
+                    "hook": content[:500] if len(content) > 100 else "AI 生成内容解析失败，请查看原始内容",
                     "emotion": "",
                     "highlights": [],
                     "cases": [],
                     "quickStart": {"install": "", "usage": ""},
                     "testimonials": [],
-                    "tags": [],
+                    "tags": [repo.language, "AI生成", "开源项目"],
                     "raw_content": content
                 }
         except Exception as e:
