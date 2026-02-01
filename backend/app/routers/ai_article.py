@@ -390,14 +390,19 @@ async def call_ai_api(prompt: str) -> Dict[str, Any]:
 @router.post("/generate-article")
 async def generate_article(request: GenerateArticleRequest):
     """生成公众号文章"""
+    logger.info(f"🎯 /generate-article API 被调用，项目: {request.repo.name}")
+    logger.info(f"📊 SDK 可用: {IFLOW_SDK_AVAILABLE}, API Key 配置: {bool(IFLOW_API_KEY)}")
     try:
         prompt = build_article_prompt(request.repo, request.style)
+        logger.info(f"📝 Prompt 构建完成，长度: {len(prompt)}")
         article = await call_ai_api(prompt)
+        logger.info(f"✅ AI 生成完成，返回文章: {article.get('title', '无标题')}")
         return article
-    except HTTPException:
+    except HTTPException as he:
+        logger.error(f"❌ HTTP 错误: {he.status_code} - {he.detail}")
         raise
     except Exception as e:
-        logger.error(f"Generate article failed: {e}")
+        logger.error(f"❌ Generate article failed: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -81,16 +81,26 @@ function GitHubArticleGenerator({ repo, onClose }) {
 
   // AI 重新生成文章
   const handleAIGenerate = async () => {
+    console.log('🚀 AI 重写按钮被点击');
     setIsAIGenerating(true);
     setAiError(null);
     setGenerationMode('ai');
     try {
-      const aiResult = await aiArticleService.generateArticle(repo, repoDetails, 'viral');
+      console.log('📡 调用 AI 服务...', { repo: repo.name, hasDetails: !!repoDetails });
+      const aiResult = await aiArticleService.generateArticle(repo, repoDetails, 'viral', true);
+      console.log('✅ AI 返回结果:', aiResult);
+      
+      // 检查 AI 返回的数据是否有效
+      if (!aiResult || typeof aiResult !== 'object') {
+        throw new Error('AI 返回数据格式错误');
+      }
+      
       // 转换 AI 结果为组件需要的格式
+      // 注意：AI 可能返回 motion 或 emotion，都兼容
       const formattedArticle = {
         title: aiResult.title || articleGenerator.generateTitle(repo, repoDetails),
         hook: aiResult.hook || articleGenerator.generateHook(repo, repoDetails),
-        emotion: aiResult.emotion || articleGenerator.generateEmotionSection(repo, repoDetails),
+        emotion: aiResult.emotion || aiResult.motion || articleGenerator.generateEmotionSection(repo, repoDetails),
         overview: {
           name: repo.name,
           fullName: repo.fullName || repo.full_name,
@@ -118,15 +128,19 @@ function GitHubArticleGenerator({ repo, onClose }) {
           ],
         },
       };
+      console.log('📝 格式化后的文章:', formattedArticle);
       setArticle(formattedArticle);
     } catch (error) {
-      console.error('AI 生成失败:', error);
+      console.error('❌ AI 生成失败:', error);
       // 检查是否是服务未配置的错误
+      let errorMsg = 'AI 生成失败，已使用模板生成';
       if (error.message?.includes('503') || error.message?.includes('Service Unavailable')) {
-        setAiError('AI 服务未配置，已使用模板生成文章。如需 AI 功能，请配置 IFLOW_API_KEY 环境变量。');
-      } else {
-        setAiError('AI 生成失败，已使用模板生成');
+        errorMsg = 'AI 服务未配置，已使用模板生成文章。如需 AI 功能，请配置 IFLOW_API_KEY 环境变量。';
+      } else if (error.message) {
+        errorMsg = `AI 生成失败: ${error.message}`;
       }
+      setAiError(errorMsg);
+      
       // 使用模板作为后备
       const fallbackArticle = articleGenerator.generateArticle(repo, repoDetails);
       setArticle(fallbackArticle);
@@ -134,6 +148,7 @@ function GitHubArticleGenerator({ repo, onClose }) {
       setGenerationMode('template');
     } finally {
       setIsAIGenerating(false);
+      console.log('🏁 AI 生成流程结束');
     }
   };
 

@@ -11,11 +11,12 @@ class AIArticleService {
   }
 
   // 使用 AI 生成公众号文章
-  async generateArticle(repo, details = null, style = 'viral') {
+  async generateArticle(repo, details = null, style = 'viral', forceRefresh = false) {
     const cacheKey = `${repo.fullName || repo.full_name}-${style}`;
     
-    // 检查缓存
-    if (this.cache.has(cacheKey)) {
+    // 检查缓存（除非强制刷新）
+    if (!forceRefresh && this.cache.has(cacheKey)) {
+      console.log('📦 使用缓存的 AI 生成结果');
       return this.cache.get(cacheKey);
     }
 
