@@ -109,6 +109,13 @@ class InterviewSession:
     async def start(self) -> bool:
         """开始面试"""
         if self.metadata.status == SessionStatus.READY:
+            # 先启动协调器
+            if self.coordinator:
+                # 使用候选人画像启动协调器
+                if self.candidate_profile:
+                    success = await self.coordinator.start_interview(self.candidate_profile)
+                    if not success:
+                        return False
             self.metadata.status = SessionStatus.IN_PROGRESS
             return True
         # 幂等性：如果已经是进行中状态，也返回成功
