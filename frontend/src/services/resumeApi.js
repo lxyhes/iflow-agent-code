@@ -177,8 +177,33 @@ export const resumeApi = {
     return response.json();
   },
 
-  rewriteResume: async (resumeId) => {
+  rewriteResume: async (resumeId, healthAnalysis = null) => {
     const response = await authenticatedFetch(`${API_BASE}/${resumeId}/rewrite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ health_analysis: healthAnalysis }),
+    });
+    return response.json();
+  },
+
+  healthCheck: async (resumeId) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/health-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.json();
+  },
+
+  layoutCheck: async (resumeId) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/layout-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.json();
+  },
+
+  diagnoseResume: async (resumeId) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/diagnose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });

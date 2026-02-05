@@ -765,19 +765,19 @@ class ResumeService:
         except:
             pass
         
-        # 匹配 ```json ... ``` 格式
-        json_match = re.search(r'```json\s*\n(.*?)\n```', response, re.DOTALL)
+        # 匹配 ```json ... ``` 格式（支持任意位置结束）
+        json_match = re.search(r'```json\s*\n(.*?)```', response, re.DOTALL)
         if json_match:
             try:
-                return json.loads(json_match.group(1))
+                return json.loads(json_match.group(1).strip())
             except:
                 pass
         
         # 匹配 ``` ... ``` 格式（无语言标识）
-        json_match = re.search(r'```\s*\n(\{.*?)\n```', response, re.DOTALL)
+        json_match = re.search(r'```\s*\n(\{.*?)```', response, re.DOTALL)
         if json_match:
             try:
-                return json.loads(json_match.group(1))
+                return json.loads(json_match.group(1).strip())
             except:
                 pass
         
@@ -807,40 +807,103 @@ class ResumeService:
         fixed_response = re.sub(r',(\s*[}\]])', r'\1', response)
         # 2. 修复单引号
         fixed_response = fixed_response.replace("'", '"')
+        # 3. 移除 markdown 代码块标记
+        fixed_response = re.sub(r'```json\s*', '', fixed_response)
+        fixed_response = re.sub(r'```\s*', '', fixed_response)
+        fixed_response = fixed_response.strip()
         
         try:
             return json.loads(fixed_response)
         except:
             pass
         
+        # 尝试从清理后的内容中提取 JSON
+        start = fixed_response.find('{')
+        if start != -1:
+            count = 0
+            end = start
+            for i in range(start, len(fixed_response)):
+                if fixed_response[i] == '{':
+                    count += 1
+                elif fixed_response[i] == '}':
+                    count -= 1
+                    if count == 0:
+                        end = i
+                        break
+            
+            if end > start:
+                try:
+                    return json.loads(fixed_response[start:end+1])
+                except:
+                    pass
+        
         # 记录无法解析的响应以便调试
-        logger.warning(f"无法解析AI响应为JSON，响应内容前500字符: {response[:500]}")
+        logger.warning(f"无法解析AI响应为JSON，响应内容前1000字符: {response[:1000]}")
         
         return None
 
-    async def rewrite_resume(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+    async def rewrite_resume(self, resume: Dict[str, Any], health_analysis: Dict[str, Any] = None) -> Dict[str, Any]:
         """根据AI诊断自动重写简历
 
         首先进行AI分析，然后根据分析结果自动优化简历内容。
 
         Args:
             resume: 简历数据字典
+            health_analysis: 可选的健康分析结果，如果提供则直接使用
 
         Returns:
             包含重写后内容的字典
         """
-        # 首先进行AI分析
-        analysis = await self.ai_analyze_resume(resume)
+        # 如果提供了健康分析，直接使用；否则进行AI分析
+        if health_analysis:
+            analysis = health_analysis
+            # 健康分析使用不同的字段名，需要转换
+            weaknesses = []
+            suggestions = []
+            
+            # 从健康分析的 dimensions 中提取问题
+            for dim in health_analysis.get("dimensions", []):
+                if dim.get("issues"):
+                    for issue in dim["issues"]:
+                        weaknesses.append(f"[{dim['name']}]{issue}")
+                if dim.get("suggestions"):
+                    for suggestion in dim["suggestions"]:
+                        suggestions.append({
+                            "priority": "高" if dim.get("score", 100) < 70 else "中",
+                            "category": dim["name"],
+                            "issue": "",
+                            "suggestion": suggestion
+                        })
+            
+            # 从 critical_issues 中提取
+            for issue in health_analysis.get("critical_issues", []):
+                weaknesses.append(f"[{issue.get('severity', '高')}优先级]{issue.get('issue', '')}")
+                suggestions.append({
+                    "priority": issue.get("severity", "高"),
+                    "category": "关键问题",
+                    "issue": issue.get("issue", ""),
+                    "suggestion": issue.get("solution", "")
+                })
+            
+            ats_analysis = {"issues": [], "keywords_missing": []}
+            content_analysis = {
+                "completeness": "",
+                "clarity": "",
+                "professionalism": "",
+                "impact": ""
+            }
+            strengths = health_analysis.get("quick_wins", [])
+        else:
+            # 进行AI分析
+            analysis = await self.ai_analyze_resume(resume)
+            weaknesses = analysis.get("weaknesses", [])
+            suggestions = analysis.get("optimization_suggestions", [])
+            strengths = analysis.get("strengths", [])
+            ats_analysis = analysis.get("ats_analysis", {})
+            content_analysis = analysis.get("content_analysis", {})
 
         # 构建简历文本
         resume_text = self._build_resume_text(resume)
-
-        # 提取分析中的关键建议
-        weaknesses = analysis.get("weaknesses", [])
-        suggestions = analysis.get("optimization_suggestions", [])
-        strengths = analysis.get("strengths", [])
-        ats_analysis = analysis.get("ats_analysis", {})
-        content_analysis = analysis.get("content_analysis", {})
 
         # 构建重写提示词
         prompt = f"""你是一名资深的HR总监和简历优化专家，拥有20年的人才招聘经验。
@@ -952,6 +1015,376 @@ class ResumeService:
             return {
                 "error": f"重写失败: {str(e)}",
                 "original_analysis": analysis
+            }
+
+    async def health_check(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """AI简历健康度检查
+        
+        对简历进行全面的健康度评估。
+        
+        Args:
+            resume: 简历数据字典
+            
+        Returns:
+            健康度检查结果
+        """
+        resume_text = self._build_resume_text(resume)
+        
+        prompt = f"""你是一名资深的HR总监，请对以下简历进行全面的健康度评估。
+
+## 简历内容
+{resume_text}
+
+## 请提供健康度检查结果（只返回JSON格式）：
+
+{{
+  "overall_health": 85,
+  "health_level": "优秀",
+  "summary": "整体健康度评价摘要",
+  "dimensions": [
+    {{
+      "name": "内容完整性",
+      "score": 90,
+      "status": "良好",
+      "issues": ["问题1", "问题2"],
+      "suggestions": ["建议1", "建议2"]
+    }},
+    {{
+      "name": "专业度",
+      "score": 85,
+      "status": "良好",
+      "issues": [],
+      "suggestions": ["建议1"]
+    }},
+    {{
+      "name": "竞争力",
+      "score": 80,
+      "status": "一般",
+      "issues": ["问题1"],
+      "suggestions": ["建议1", "建议2"]
+    }},
+    {{
+      "name": "表达清晰度",
+      "score": 88,
+      "status": "良好",
+      "issues": [],
+      "suggestions": []
+    }},
+    {{
+      "name": "关键词优化",
+      "score": 75,
+      "status": "需改进",
+      "issues": ["问题1", "问题2"],
+      "suggestions": ["建议1"]
+    }}
+  ],
+  "critical_issues": [
+    {{
+      "severity": "高",
+      "issue": "关键问题描述",
+      "impact": "对求职的影响",
+      "solution": "解决方案"
+    }}
+  ],
+  "quick_wins": [
+    "可以快速改进的项目1",
+    "可以快速改进的项目2"
+  ],
+  "industry_benchmark": {{
+    "percentile": 75,
+    "comparison": "与同行业对比分析"
+  }}
+}}
+
+要求：
+1. overall_health 必须是 0-100 的整数
+2. health_level 只能是：优秀、良好、一般、需改进
+3. status 只能是：优秀、良好、一般、需改进
+4. severity 只能是：高、中、低
+5. 所有字符串使用双引号
+6. 不要包含任何markdown标记
+"""
+
+        try:
+            response = await self.llm.generate(prompt)
+            logger.info(f"AI健康度检查原始响应: {response[:500]}...")
+            
+            result = self._parse_json_response(response)
+            if result:
+                return result
+            else:
+                return {
+                    "error": "无法解析AI响应",
+                    "overall_health": 60,
+                    "health_level": "需改进",
+                    "summary": "AI响应格式异常"
+                }
+        except Exception as e:
+            logger.error(f"AI健康度检查失败: {e}")
+            return {
+                "error": f"健康度检查失败: {str(e)}",
+                "overall_health": 60,
+                "health_level": "需改进",
+                "summary": "检查过程中出现错误"
+            }
+
+    async def layout_check(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """AI排版检查
+        
+        对简历进行排版和格式检查。
+        
+        Args:
+            resume: 简历数据字典
+            
+        Returns:
+            排版检查结果
+        """
+        resume_text = self._build_resume_text(resume)
+        
+        prompt = f"""你是一名专业的简历排版设计师，请对以下简历进行排版和格式检查。
+
+## 简历内容
+{resume_text}
+
+## 请提供排版检查结果（只返回JSON格式）：
+
+{{
+  "overall_score": 85,
+  "layout_level": "专业",
+  "summary": "排版整体评价",
+  "categories": [
+    {{
+      "name": "视觉层次",
+      "score": 88,
+      "status": "良好",
+      "comments": "评价说明",
+      "issues": ["问题1"],
+      "suggestions": ["建议1"]
+    }},
+    {{
+      "name": "格式一致性",
+      "score": 90,
+      "status": "优秀",
+      "comments": "评价说明",
+      "issues": [],
+      "suggestions": []
+    }},
+    {{
+      "name": "可读性",
+      "score": 82,
+      "status": "良好",
+      "comments": "评价说明",
+      "issues": ["问题1"],
+      "suggestions": ["建议1", "建议2"]
+    }},
+    {{
+      "name": "空间利用",
+      "score": 78,
+      "status": "一般",
+      "comments": "评价说明",
+      "issues": ["问题1", "问题2"],
+      "suggestions": ["建议1"]
+    }},
+    {{
+      "name": "专业外观",
+      "score": 85,
+      "status": "良好",
+      "comments": "评价说明",
+      "issues": [],
+      "suggestions": ["建议1"]
+    }}
+  ],
+  "format_issues": [
+    {{
+      "type": "格式问题类型",
+      "location": "问题位置",
+      "description": "问题描述",
+      "severity": "高",
+      "fix_suggestion": "修复建议"
+    }}
+  ],
+  "design_suggestions": [
+    {{
+      "area": "改进区域",
+      "current": "当前状态",
+      "recommended": "建议改进",
+      "benefit": "改进好处"
+    }}
+  ],
+  "ats_compatibility": {{
+    "score": 90,
+    "issues": ["ATS问题1"],
+    "recommendations": ["ATS建议1"]
+  }}
+}}
+
+要求：
+1. overall_score 必须是 0-100 的整数
+2. layout_level 只能是：专业、良好、一般、需改进
+3. status 只能是：优秀、良好、一般、需改进
+4. severity 只能是：高、中、低
+5. 所有字符串使用双引号
+6. 不要包含任何markdown标记
+"""
+
+        try:
+            response = await self.llm.generate(prompt)
+            logger.info(f"AI排版检查原始响应: {response[:500]}...")
+            
+            result = self._parse_json_response(response)
+            if result:
+                return result
+            else:
+                return {
+                    "error": "无法解析AI响应",
+                    "overall_score": 60,
+                    "layout_level": "需改进",
+                    "summary": "AI响应格式异常"
+                }
+        except Exception as e:
+            logger.error(f"AI排版检查失败: {e}")
+            return {
+                "error": f"排版检查失败: {str(e)}",
+                "overall_score": 60,
+                "layout_level": "需改进",
+                "summary": "检查过程中出现错误"
+            }
+
+    async def diagnose_resume(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """AI简历诊断
+
+        对简历进行全面诊断分析。
+
+        Args:
+            resume: 简历数据字典
+
+        Returns:
+            诊断结果
+        """
+        resume_text = self._build_resume_text(resume)
+
+        prompt = f"""你是一名资深的HR总监和简历诊断专家，请对以下简历进行全面诊断分析。
+
+## 简历内容
+{resume_text}
+
+## 请提供详细的诊断报告（只返回JSON格式）：
+
+{{
+  "overall_score": 75,
+  "diagnosis_level": "良好",
+  "summary": "诊断总结",
+  "checks": [
+    {{
+      "name": "内容完整性",
+      "score": 80,
+      "status": "良好",
+      "issues": ["问题1", "问题2"],
+      "suggestions": ["建议1", "建议2"]
+    }},
+    {{
+      "name": "量化成果",
+      "score": 65,
+      "status": "一般",
+      "issues": ["缺少量化数据"],
+      "suggestions": ["添加具体数字"]
+    }},
+    {{
+      "name": "关键词匹配",
+      "score": 70,
+      "status": "一般",
+      "issues": ["关键词不足"],
+      "suggestions": ["添加行业关键词"]
+    }},
+    {{
+      "name": "格式规范",
+      "score": 85,
+      "status": "良好",
+      "issues": [],
+      "suggestions": ["微调建议"]
+    }},
+    {{
+      "name": "语言表达",
+      "score": 75,
+      "status": "良好",
+      "issues": ["表达不够精炼"],
+      "suggestions": ["使用更专业的表达"]
+    }},
+    {{
+      "name": "篇幅控制",
+      "score": 90,
+      "status": "优秀",
+      "issues": [],
+      "suggestions": []
+    }}
+  ],
+  "critical_issues": [
+    {{
+      "severity": "高",
+      "category": "内容",
+      "issue": "关键问题描述",
+      "impact": "对求职的影响",
+      "solution": "解决方案"
+    }}
+  ],
+  "quick_fixes": [
+    "可以快速修复的问题1",
+    "可以快速修复的问题2"
+  ],
+  "improvement_plan": [
+    {{
+      "phase": "立即修改",
+      "actions": ["行动1", "行动2"]
+    }},
+    {{
+      "phase": "短期优化",
+      "actions": ["行动1", "行动2"]
+    }},
+    {{
+      "phase": "长期提升",
+      "actions": ["行动1", "行动2"]
+    }}
+  ]
+}}
+
+诊断维度说明：
+1. 内容完整性：个人信息、工作经历、教育背景等是否完整
+2. 量化成果：是否使用数字、百分比等量化工作成果
+3. 关键词匹配：是否包含目标职位的关键技能词
+4. 格式规范：时间格式、标点符号、排版等是否规范
+5. 语言表达：用词是否专业、精炼、有影响力
+6. 篇幅控制：简历长度是否合适（建议1-2页）
+
+要求：
+1. overall_score 必须是 0-100 的整数
+2. diagnosis_level 只能是：优秀、良好、一般、需改进
+3. status 只能是：优秀、良好、一般、需改进
+4. severity 只能是：高、中、低
+5. 所有字符串使用双引号
+6. 不要包含任何markdown标记
+"""
+
+        try:
+            response = await self.llm.generate(prompt)
+            logger.info(f"AI简历诊断原始响应: {response[:500]}...")
+
+            result = self._parse_json_response(response)
+            if result:
+                return result
+            else:
+                return {
+                    "error": "无法解析AI响应",
+                    "overall_score": 60,
+                    "diagnosis_level": "需改进",
+                    "summary": "AI响应格式异常"
+                }
+        except Exception as e:
+            logger.error(f"AI简历诊断失败: {e}")
+            return {
+                "error": f"诊断失败: {str(e)}",
+                "overall_score": 60,
+                "diagnosis_level": "需改进",
+                "summary": "诊断过程中出现错误"
             }
 
     async def match_job(self, resume_id: str, job_description: str) -> Dict[str, Any]:

@@ -513,6 +513,33 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
         <ResumeDiagnosticReport
           resume={localResume}
           onClose={() => setShowDiagnostic(false)}
+          onOptimize={(result) => {
+            // 应用优化结果到简历
+            setLocalResume(prev => {
+              const updated = { ...prev };
+              if (result.personal_info?.summary) {
+                updated.personal_info = {
+                  ...prev.personal_info,
+                  summary: result.personal_info.summary
+                };
+              }
+              if (result.work_experience?.length > 0) {
+                updated.work_experience = prev.work_experience?.map((exp) => {
+                  const rewritten = result.work_experience.find(r => r.id === exp.id);
+                  if (rewritten) {
+                    return {
+                      ...exp,
+                      description: rewritten.description || exp.description,
+                      achievements: rewritten.achievements || exp.achievements
+                    };
+                  }
+                  return exp;
+                });
+              }
+              return updated;
+            });
+            alert('简历已根据诊断优化！');
+          }}
         />
       )}
 
@@ -521,6 +548,33 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
         <ResumeHealthDashboard
           resume={localResume}
           onClose={() => setShowHealthDashboard(false)}
+          onOptimize={(result) => {
+            // 应用优化结果到简历
+            setLocalResume(prev => {
+              const updated = { ...prev };
+              if (result.personal_info?.summary) {
+                updated.personal_info = {
+                  ...prev.personal_info,
+                  summary: result.personal_info.summary
+                };
+              }
+              if (result.work_experience?.length > 0) {
+                updated.work_experience = prev.work_experience?.map((exp) => {
+                  const rewritten = result.work_experience.find(r => r.id === exp.id);
+                  if (rewritten) {
+                    return {
+                      ...exp,
+                      description: rewritten.description || exp.description,
+                      achievements: rewritten.achievements || exp.achievements
+                    };
+                  }
+                  return exp;
+                });
+              }
+              return updated;
+            });
+            alert('简历已根据健康分析优化！');
+          }}
         />
       )}
     </div>

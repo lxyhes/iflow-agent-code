@@ -124,6 +124,10 @@ class CoverLetterRequest(BaseModel):
     job_description: Optional[str] = Field(None, description="职位描述")
 
 
+class RewriteRequest(BaseModel):
+    health_analysis: Optional[dict] = Field(None, description="健康分析结果（可选）")
+
+
 # ============ Resume CRUD Endpoints ============
 
 
@@ -528,6 +532,7 @@ async def match_job(
 @router.post("/{resume_id}/rewrite")
 async def rewrite_resume(
     resume_id: str,
+    request: RewriteRequest = None,
     user_id: str = Depends(get_optional_user_id),
 ):
     """根据AI诊断报告自动重写简历
@@ -537,6 +542,8 @@ async def rewrite_resume(
     - 优化工作经历描述
     - 改进技能展示
     - 提升整体表达
+    
+    可选传入 health_analysis 参数，使用已有的健康分析结果
     """
     service = get_resume_service()
 
@@ -544,7 +551,9 @@ async def rewrite_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
 
-    result = await service.rewrite_resume(resume)
+    # 如果传入了健康分析数据，使用它
+    health_analysis = request.health_analysis if request else None
+    result = await service.rewrite_resume(resume, health_analysis)
     return {"success": True, "data": result}
 
 
@@ -565,6 +574,77 @@ async def generate_cover_letter(
         resume_id, request.company, request.position, request.job_description
     )
     return {"success": True, "data": {"cover_letter": cover_letter}}
+
+
+@router.post("/{resume_id}/health-check")
+async def health_check(
+    resume_id: str,
+    user_id: str = Depends(get_optional_user_id),
+):
+    """AI简历健康度检查
+    
+    使用AI对简历进行全面的健康度评估，包括：
+    - 内容完整性
+    - 专业度评估
+    - 竞争力分析
+    - 改进建议
+    """
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    result = await service.health_check(resume)
+    return {"success": True, "data": result}
+
+
+@router.post("/{resume_id}/layout-check")
+async def layout_check(
+    resume_id: str,
+    user_id: str = Depends(get_optional_user_id),
+):
+    """AI排版检查
+    
+    使用AI对简历进行排版和格式检查，包括：
+    - 视觉层次
+    - 格式一致性
+    - 可读性评估
+    - 专业外观
+    """
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    result = await service.layout_check(resume)
+    return {"success": True, "data": result}
+
+
+@router.post("/{resume_id}/diagnose")
+async def diagnose_resume(
+    resume_id: str,
+    user_id: str = Depends(get_optional_user_id),
+):
+    """AI简历诊断
+    
+    使用AI对简历进行全面诊断，包括：
+    - 内容完整性
+    - 量化成果
+    - 关键词匹配
+    - 格式规范
+    - 语言表达
+    - 篇幅控制
+    """
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    result = await service.diagnose_resume(resume)
+    return {"success": True, "data": result}
 
 
 # ============ Templates Endpoints ============
