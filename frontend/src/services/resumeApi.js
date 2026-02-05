@@ -81,6 +81,15 @@ export const resumeApi = {
     return response.json();
   },
 
+  updateWorkExperienceOrder: async (resumeId, order) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/work-experience-order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order),
+    });
+    return response.json();
+  },
+
   // 教育经历
   addEducation: async (resumeId, data) => {
     const response = await authenticatedFetch(`${API_BASE}/${resumeId}/education`, {
@@ -160,6 +169,22 @@ export const resumeApi = {
   },
 
   // AI 功能
+  aiAnalyzeResume: async (resumeId) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/ai-analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.json();
+  },
+
+  rewriteResume: async (resumeId) => {
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/rewrite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.json();
+  },
+
   optimizeResume: async (resumeId, jobDescription = null) => {
     const response = await authenticatedFetch(`${API_BASE}/${resumeId}/optimize`, {
       method: 'POST',

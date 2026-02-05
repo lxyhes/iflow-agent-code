@@ -20,6 +20,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from backend.core.services.resume_service import get_resume_service
+from backend.core.services.resume_template_service import get_resume_template_service
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 logger = logging.getLogger(__name__)
@@ -55,12 +56,6 @@ class ResumeCreate(BaseModel):
     template: str = Field("modern", description="模板类型")
 
 
-class ResumeUpdate(BaseModel):
-    name: Optional[str] = None
-    target_position: Optional[str] = None
-    template: Optional[str] = None
-
-
 class PersonalInfo(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
@@ -68,6 +63,13 @@ class PersonalInfo(BaseModel):
     location: Optional[str] = None
     summary: Optional[str] = None
     avatar: Optional[str] = None
+
+
+class ResumeUpdate(BaseModel):
+    name: Optional[str] = None
+    target_position: Optional[str] = None
+    template: Optional[str] = None
+    personal_info: Optional[PersonalInfo] = None
 
 
 class WorkExperience(BaseModel):
@@ -273,6 +275,25 @@ async def delete_work_experience(
     return {"success": True, "data": updated}
 
 
+@router.put("/{resume_id}/work-experience-order")
+async def update_work_experience_order(
+    resume_id: str,
+    order: List[int],
+    user_id: str = Depends(get_optional_user_id),
+):
+    """更新工作经历排序"""
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    service.update_work_experience_order(resume_id, order)
+
+    updated = service.get_resume(resume_id)
+    return {"success": True, "data": updated}
+
+
 # ============ Education Endpoints ============
 
 
@@ -447,6 +468,29 @@ async def delete_project(
 # ============ AI Features Endpoints ============
 
 
+@router.post("/{resume_id}/ai-analyze")
+async def ai_analyze_resume(
+    resume_id: str,
+    user_id: str = Depends(get_optional_user_id),
+):
+    """AI深度分析简历
+    
+    使用AI对简历进行全面分析，包括：
+    - 整体质量评估
+    - 内容优化建议
+    - 行业对比分析
+    - 求职竞争力评估
+    """
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    result = await service.ai_analyze_resume(resume)
+    return {"success": True, "data": result}
+
+
 @router.post("/{resume_id}/optimize")
 async def optimize_resume(
     resume_id: str,
@@ -481,6 +525,29 @@ async def match_job(
     return {"success": True, "data": result}
 
 
+@router.post("/{resume_id}/rewrite")
+async def rewrite_resume(
+    resume_id: str,
+    user_id: str = Depends(get_optional_user_id),
+):
+    """根据AI诊断报告自动重写简历
+
+    使用AI分析结果，自动优化简历内容，包括：
+    - 重写个人简介
+    - 优化工作经历描述
+    - 改进技能展示
+    - 提升整体表达
+    """
+    service = get_resume_service()
+
+    resume = service.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    result = await service.rewrite_resume(resume)
+    return {"success": True, "data": result}
+
+
 @router.post("/{resume_id}/generate-cover-letter")
 async def generate_cover_letter(
     resume_id: str,
@@ -504,51 +571,53 @@ async def generate_cover_letter(
 
 
 @router.get("/templates/list")
-async def get_templates():
-    """获取可用的简历模板列表"""
-    templates = [
-        {
-            "id": "modern",
-            "name": "现代简约",
-            "description": "简洁现代的设计，适合大多数职位",
-            "preview": "/templates/modern.png",
-            "category": "通用",
-        },
-        {
-            "id": "professional",
-            "name": "专业商务",
-            "description": "传统商务风格，适合金融、咨询等行业",
-            "preview": "/templates/professional.png",
-            "category": "商务",
-        },
-        {
-            "id": "creative",
-            "name": "创意设计",
-            "description": "富有创意的设计，适合设计、艺术类职位",
-            "preview": "/templates/creative.png",
-            "category": "创意",
-        },
-        {
-            "id": "technical",
-            "name": "技术风格",
-            "description": "清晰的技术风格，适合IT、工程类职位",
-            "preview": "/templates/technical.png",
-            "category": "技术",
-        },
-        {
-            "id": "minimal",
-            "name": "极简风格",
-            "description": "极简主义设计，突出重点内容",
-            "preview": "/templates/minimal.png",
-            "category": "通用",
-        },
-        {
-            "id": "elegant",
-            "name": "优雅精致",
-            "description": "优雅精致的风格，适合高端职位",
-            "preview": "/templates/elegant.png",
-            "category": "商务",
-        },
-    ]
+async def get_templates(category: str = None):
+    """获取可用的简历模板列表
+    
+    Args:
+        category: 按分类筛选模板（可选）
+    """
+    service = get_resume_template_service()
+    templates = service.get_templates(category=category)
+    
+    # 简化返回数据，不包含详细配置
+    simplified_templates = []
+    for t in templates:
+        simplified_templates.append({
+            "id": t["id"],
+            "name": t["name"],
+            "description": t["description"],
+            "category": t["category"],
+            "preview": t["preview_image"],
+            "is_builtin": t["is_builtin"],
+        })
+    
+    return {"success": True, "data": simplified_templates}
 
+
+@router.get("/templates/categories")
+async def get_template_categories():
+    """获取模板分类列表"""
+    service = get_resume_template_service()
+    categories = service.get_categories()
+    return {"success": True, "data": categories}
+
+
+@router.get("/templates/{template_id}")
+async def get_template_detail(template_id: str):
+    """获取模板详细信息"""
+    service = get_resume_template_service()
+    template = service.get_template(template_id)
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    
+    return {"success": True, "data": template}
+
+
+@router.get("/templates/popular/list")
+async def get_popular_templates(limit: int = 5):
+    """获取热门模板列表"""
+    service = get_resume_template_service()
+    templates = service.get_popular_templates(limit=limit)
     return {"success": True, "data": templates}

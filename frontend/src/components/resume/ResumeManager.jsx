@@ -8,13 +8,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Plus, Edit3, Trash2, Sparkles, 
   Briefcase, Target, ChevronRight, Loader2, X,
-  Award, BookOpen, Code2, FolderOpen, User
+  Award, BookOpen, Code2, FolderOpen, User,
+  ArrowLeft, BarChart3
 } from 'lucide-react';
 import { resumeApi } from '../../services/resumeApi';
 import ResumeEditor from './ResumeEditor';
 import ResumePreview from './ResumePreview';
 import ResumeOptimizer from './ResumeOptimizer';
 import ResumeMatcher from './ResumeMatcher';
+import ResumeScorePanel from './ResumeScorePanel';
 
 const ResumeManager = () => {
   const [resumes, setResumes] = useState([]);
@@ -132,6 +134,19 @@ const ResumeManager = () => {
     }
   };
 
+  const handleViewScore = async (resumeId) => {
+    try {
+      const response = await resumeApi.getResume(resumeId);
+      if (response.success) {
+        setSelectedResume(response.data);
+        setView('score');
+      }
+    } catch (err) {
+      setError('加载简历详情失败');
+      console.error(err);
+    }
+  };
+
   const getCompletionPercentage = (resume) => {
     let score = 0;
     let total = 5;
@@ -179,10 +194,59 @@ const ResumeManager = () => {
 
   if (view === 'match' && selectedResume) {
     return (
-      <ResumeMatcher 
+      <ResumeMatcher
         resume={selectedResume}
         onBack={() => setView('list')}
       />
+    );
+  }
+
+  if (view === 'score' && selectedResume) {
+    return (
+      <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setView('list')}
+              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                简历诊断报告
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {selectedResume.name}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6">
+          <div className="max-w-4xl mx-auto">
+            <ResumeScorePanel
+              resume={selectedResume}
+              onResumeUpdate={async (updatedResume) => {
+                // 保存更新后的简历
+                try {
+                  const response = await resumeApi.updateResume(selectedResume.id, updatedResume);
+                  if (response.success) {
+                    setSelectedResume(response.data);
+                    loadResumes();
+                    alert('简历已优化并保存！');
+                  }
+                } catch (err) {
+                  console.error('保存简历失败:', err);
+                  alert('保存失败，请重试');
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -355,6 +419,13 @@ const ResumeManager = () => {
                           职位匹配
                         </button>
                       </div>
+                      <button
+                        onClick={() => handleViewScore(resume.id)}
+                        className="w-full py-2 px-4 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        查看评分
+                      </button>
                     </div>
                   </div>
 

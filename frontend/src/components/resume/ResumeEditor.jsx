@@ -23,7 +23,8 @@ import {
   FolderOpen, Save, Plus, Trash2, GripVertical,
   ChevronDown, ChevronUp, Loader2, Check, X,
   Clock, History, Eye, FileText, Sparkles,
-  Stethoscope, Zap, Activity, Wand2, Layout
+  Stethoscope, Zap, Activity, Wand2, Layout,
+  Camera
 } from 'lucide-react';
 import { resumeApi } from '../../services/resumeApi';
 import ResumeCompletionScore from './ResumeCompletionScore';
@@ -44,6 +45,7 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('personal');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [localResume, setLocalResume] = useState(resume);
   const [lastSaved, setLastSaved] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -123,12 +125,19 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       // 保存当前版本到历史
       saveVersion();
       
-      // 刷新简历数据
-      const response = await resumeApi.getResume(resume.id);
+      // 真正保存简历数据到服务器
+      const response = await resumeApi.updateResume(resume.id, {
+        name: localResume.name,
+        target_position: localResume.target_position,
+        template: localResume.template,
+        personal_info: localResume.personal_info,
+      });
+      
       if (response.success) {
         setLocalResume(response.data);
         onUpdate(response.data);
@@ -141,7 +150,12 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
         localStorage.removeItem(`${draftKey}_time`);
         
         setTimeout(() => setSaveSuccess(false), 2000);
+      } else {
+        setSaveError(response.error || '保存失败');
       }
+    } catch (err) {
+      console.error('保存失败:', err);
+      setSaveError('保存失败，请检查网络连接');
     } finally {
       setSaving(false);
     }
@@ -390,6 +404,14 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
             {isDirtyRef.current && <span className="text-yellow-600">（有未保存更改）</span>}
           </div>
         )}
+
+        {/* 保存错误提示 */}
+        {saveError && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-red-600">
+            <AlertCircle className="w-3 h-3" />
+            <span>{saveError}</span>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -513,14 +535,54 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
     phone: resume.personal_info?.phone || '',
     location: resume.personal_info?.location || '',
     summary: resume.personal_info?.summary || '',
+    avatar: resume.personal_info?.avatar || '',
   });
+  const [errors, setErrors] = useState({});
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const validateField = (field, value) => {
+    let error = '';
+    switch (field) {
+      case 'full_name':
+        if (!value || value.trim().length < 2) error = '姓名至少需要2个字符';
+        break;
+      case 'email':
+        if (!value) {
+          error = '邮箱不能为空';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          error = '邮箱格式不正确';
+        }
+        break;
+      case 'phone':
+        if (!value) {
+          error = '电话不能为空';
+        } else if (!/^1[3-9]\d{9}$/.test(value.replace(/[-\s]/g, ''))) {
+          error = '手机号格式不正确';
+        }
+        break;
+      default:
+        break;
+    }
+    setErrors(prev => ({ ...prev, [field]: error }));
+    return !error;
+  };
 
   const handleChange = (field, value) => {
     const newData = { ...formData, [field]: value };
     setFormData(newData);
+    // 实时验证
+    validateField(field, value);
   };
 
   const handleBlur = async () => {
+    // 验证所有字段
+    const isValid = ['full_name', 'email', 'phone'].every(field =>
+      validateField(field, formData[field])
+    );
+
+    if (!isValid) return;
+
     try {
       await resumeApi.updatePersonalInfo(resume.id, formData);
     } catch (err) {
@@ -528,10 +590,125 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
     }
   };
 
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件');
+      return;
+    }
+
+    // 验证文件大小（最大 2MB）
+    if (file.size > 2 * 1024 * 1024) {
+      alert('图片大小不能超过 2MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 转换为 base64
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+
+      // 压缩图片
+      const compressedBase64 = await compressImage(base64, 400, 400, 0.8);
+
+      setFormData(prev => ({ ...prev, avatar: compressedBase64 }));
+      await resumeApi.updatePersonalInfo(resume.id, { ...formData, avatar: compressedBase64 });
+      onUpdate({ ...resume, personal_info: { ...resume.personal_info, avatar: compressedBase64 } });
+    } catch (err) {
+      console.error('上传失败:', err);
+      alert('头像上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const compressImage = (base64, maxWidth, maxHeight, quality) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+    });
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">个人信息</h2>
-      
+
+      {/* 头像上传 */}
+      <div className="flex items-center gap-6 mb-8">
+        <div
+          onClick={handleAvatarClick}
+          className="relative w-24 h-24 rounded-full overflow-hidden cursor-pointer group bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
+        >
+          {formData.avatar ? (
+            <img
+              src={formData.avatar}
+              alt="头像"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <User className="w-12 h-12 text-gray-400" />
+          )}
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Camera className="w-6 h-6 text-white" />
+          </div>
+          {uploading && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-white animate-spin" />
+            </div>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">头像</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            支持 JPG、PNG 格式，最大 2MB
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            建议尺寸 400x400 像素
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -543,8 +720,13 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
             onChange={(e) => handleChange('full_name', e.target.value)}
             onBlur={handleBlur}
             placeholder="您的姓名"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              errors.full_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+            }`}
           />
+          {errors.full_name && (
+            <p className="mt-1 text-xs text-red-500">{errors.full_name}</p>
+          )}
         </div>
 
         <div>
@@ -557,8 +739,13 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
             onChange={(e) => handleChange('email', e.target.value)}
             onBlur={handleBlur}
             placeholder="your.email@example.com"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              errors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+            }`}
           />
+          {errors.email && (
+            <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+          )}
         </div>
 
         <div>
@@ -571,8 +758,13 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
             onChange={(e) => handleChange('phone', e.target.value)}
             onBlur={handleBlur}
             placeholder="138-0000-0000"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+              errors.phone ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+            }`}
           />
+          {errors.phone && (
+            <p className="mt-1 text-xs text-red-500">{errors.phone}</p>
+          )}
         </div>
 
         <div>
@@ -689,8 +881,19 @@ const ExperienceTab = ({ resume, onUpdate }) => {
 
   const handleDrop = async (e) => {
     e.preventDefault();
-    // 这里可以添加保存顺序到服务器的逻辑
     setDraggedItem(null);
+    
+    // 保存排序到服务器
+    try {
+      const order = experiences.map(exp => exp.id);
+      const response = await resumeApi.updateWorkExperienceOrder(resume.id, order);
+      if (response.success) {
+        setExperiences(response.data.work_experience);
+        onUpdate(response.data);
+      }
+    } catch (err) {
+      console.error('保存排序失败:', err);
+    }
   };
 
   return (
@@ -772,7 +975,16 @@ const ExperienceTab = ({ resume, onUpdate }) => {
 
 // 工作经历卡片组件
 const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel, onDelete }) => {
-  const [formData, setFormData] = useState(experience);
+  const [formData, setFormData] = useState({
+    company: experience.company || '',
+    position: experience.position || '',
+    start_date: experience.start_date || '',
+    end_date: experience.end_date || '',
+    is_current: experience.is_current || false,
+    description: experience.description || '',
+    achievements: experience.achievements || [],
+    ...experience
+  });
 
   if (isEditing) {
     return (
@@ -986,7 +1198,14 @@ const EducationTab = ({ resume, onUpdate }) => {
 // 教育经历卡片
 const EducationCard = ({ education, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(education);
+  const [formData, setFormData] = useState({
+    school: education.school || '',
+    major: education.major || '',
+    degree: education.degree || '',
+    start_date: education.start_date || '',
+    end_date: education.end_date || '',
+    ...education
+  });
 
   if (isEditing) {
     return (
@@ -1398,13 +1617,18 @@ const ProjectsTab = ({ resume, onUpdate }) => {
 const ProjectCard = ({ project, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    ...project,
-    technologies: Array.isArray(project.technologies) 
-      ? project.technologies 
+    name: project.name || '',
+    description: project.description || '',
+    role: project.role || '',
+    start_date: project.start_date || '',
+    end_date: project.end_date || '',
+    technologies: Array.isArray(project.technologies)
+      ? project.technologies
       : (project.technologies ? JSON.parse(project.technologies) : []),
     achievements: Array.isArray(project.achievements)
       ? project.achievements
-      : (project.achievements ? JSON.parse(project.achievements) : [])
+      : (project.achievements ? JSON.parse(project.achievements) : []),
+    ...project
   });
   const [newTech, setNewTech] = useState('');
 

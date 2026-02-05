@@ -79,6 +79,13 @@ class ResumeService:
             )
         """)
 
+        # 检查并添加 sort_order 列（迁移）
+        try:
+            self.db.execute("SELECT sort_order FROM resume_work_experience LIMIT 1")
+        except:
+            self.db.execute("ALTER TABLE resume_work_experience ADD COLUMN sort_order INTEGER DEFAULT 0")
+            print("[ResumeService] Added sort_order column to resume_work_experience")
+
         # 教育经历表
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS resume_education (
@@ -174,9 +181,9 @@ class ResumeService:
         ).fetchone()
         resume["personal_info"] = dict(personal) if personal else {}
 
-        # 获取工作经历
+        # 获取工作经历 - 按 sort_order 和 start_date 排序
         work_rows = self.db.execute(
-            "SELECT * FROM resume_work_experience WHERE resume_id = ? ORDER BY start_date DESC",
+            "SELECT * FROM resume_work_experience WHERE resume_id = ? ORDER BY sort_order ASC, start_date DESC",
             (resume_id,),
         )
         resume["work_experience"] = [dict(row) for row in work_rows]
@@ -209,8 +216,17 @@ class ResumeService:
         allowed_fields = ["name", "target_position", "template"]
         update_fields = {k: v for k, v in updates.items() if k in allowed_fields}
 
+        # 如果有个人信息更新，单独处理
+        if "personal_info" in updates:
+            self.update_personal_info(resume_id, updates["personal_info"])
+
         if not update_fields:
-            return False
+            # 即使没有基本字段更新，也要更新 updated_at
+            self.db.execute(
+                "UPDATE resumes SET updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), resume_id)
+            )
+            return True
 
         update_fields["updated_at"] = datetime.now().isoformat()
 
@@ -344,6 +360,16 @@ class ResumeService:
         if row:
             self._update_resume_timestamp(row["resume_id"])
 
+        return True
+
+    def update_work_experience_order(self, resume_id: str, order: List[int]) -> bool:
+        """更新工作经历排序"""
+        for index, exp_id in enumerate(order):
+            self.db.execute(
+                "UPDATE resume_work_experience SET sort_order = ? WHERE id = ? AND resume_id = ?",
+                (index, exp_id, resume_id)
+            )
+        self._update_resume_timestamp(resume_id)
         return True
 
     def add_education(self, resume_id: str, education: Dict[str, Any]) -> int:
@@ -537,6 +563,126 @@ class ResumeService:
             (datetime.now().isoformat(), resume_id),
         )
 
+    async def ai_analyze_resume(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """AI深度分析简历
+        
+        使用AI对简历进行全面分析，包括质量评估、优化建议、行业对比等。
+        
+        Args:
+            resume: 简历数据字典
+            
+        Returns:
+            包含AI分析结果的字典
+        """
+        # 构建简历文本
+        resume_text = self._build_resume_text(resume)
+        
+        # 构建提示词
+        prompt = f"""你是一名资深的HR总监和职业发展顾问，拥有20年的人才招聘和简历评估经验。
+
+请对以下简历进行深度专业分析，从HR和招聘经理的角度给出全面评估。
+
+## 简历内容
+{resume_text}
+
+## 重要：你必须只返回有效的JSON格式数据，不要包含任何其他文字说明。
+
+请严格按照以下JSON结构返回分析结果：
+
+{{
+  "overall_assessment": {{
+    "score": 85,
+    "level": "优秀",
+    "summary": "整体评价摘要"
+  }},
+  "strengths": [
+    "亮点1",
+    "亮点2",
+    "亮点3"
+  ],
+  "weaknesses": [
+    "不足1",
+    "不足2",
+    "不足3"
+  ],
+  "content_analysis": {{
+    "completeness": "内容完整性评价",
+    "clarity": "表达清晰度评价",
+    "professionalism": "专业度评价",
+    "impact": "成果影响力评价"
+  }},
+  "optimization_suggestions": [
+    {{
+      "priority": "高",
+      "category": "内容",
+      "issue": "具体问题",
+      "suggestion": "改进建议",
+      "example": "修改示例"
+    }}
+  ],
+  "ats_analysis": {{
+    "score": 80,
+    "issues": ["问题1"],
+    "keywords_missing": ["关键词1"],
+    "keywords_present": ["关键词2"]
+  }},
+  "industry_comparison": {{
+    "level": "高于平均",
+    "comparison": "对比分析",
+    "competitive_advantages": ["优势1"],
+    "gaps": ["差距1"]
+  }},
+  "job_target_analysis": {{
+    "suitable_positions": ["职位1"],
+    "career_direction": "发展建议",
+    "salary_expectation": "薪资建议"
+  }},
+  "action_plan": [
+    "行动计划1",
+    "行动计划2",
+    "行动计划3"
+  ]
+}}
+
+要求：
+1. score 必须是 60-95 之间的整数
+2. level 只能是：优秀、良好、一般、需改进
+3. 所有字符串值必须用双引号包裹
+4. 不要包含任何 markdown 格式或代码块标记
+5. 确保JSON格式完全有效，可以被解析
+6. 分析要具体、专业、有针对性
+7. 建议要可操作、有示例
+"""
+
+        try:
+            response = await self.llm.generate(prompt)
+            logger.info(f"AI分析简历原始响应: {response[:500]}...")
+            
+            # 尝试解析JSON
+            result = self._parse_json_response(response)
+            if result:
+                return result
+            else:
+                return {
+                    "error": "无法解析AI响应",
+                    "raw_response": response,
+                    "overall_assessment": {
+                        "score": 60,
+                        "level": "需改进",
+                        "summary": "AI分析响应格式异常，请稍后重试"
+                    }
+                }
+        except Exception as e:
+            logger.error(f"AI分析简历失败: {e}")
+            return {
+                "error": f"AI分析失败: {str(e)}",
+                "overall_assessment": {
+                    "score": 60,
+                    "level": "需改进",
+                    "summary": "分析过程中出现错误"
+                }
+            }
+
     async def optimize_resume(
         self, resume_id: str, job_description: str = None
     ) -> Dict[str, Any]:
@@ -582,16 +728,231 @@ class ResumeService:
 
         try:
             response = await self.llm.generate(prompt)
+            logger.info(f"AI优化简历原始响应: {response[:500]}...")
 
-            # 尝试解析JSON
-            try:
-                result = json.loads(response)
+            # 尝试解析JSON - 处理多种情况
+            result = self._parse_json_response(response)
+            if result:
                 return result
-            except:
-                return {"raw_response": response, "error": "无法解析AI响应为JSON格式"}
+            else:
+                return {
+                    "raw_response": response,
+                    "error": "无法解析AI响应为JSON格式",
+                    "overall_score": 60,
+                    "suggestions": ["AI响应格式异常，请稍后重试"]
+                }
         except Exception as e:
             logger.error(f"AI优化简历失败: {e}")
             return {"error": f"AI优化失败: {str(e)}"}
+
+    def _parse_json_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """解析AI返回的JSON响应，处理各种格式"""
+        if not response:
+            return None
+        
+        import re
+        
+        # 清理响应内容
+        response = response.strip()
+        
+        # 移除可能的 BOM 标记
+        if response.startswith('\ufeff'):
+            response = response[1:]
+        
+        # 尝试直接解析
+        try:
+            return json.loads(response)
+        except:
+            pass
+        
+        # 匹配 ```json ... ``` 格式
+        json_match = re.search(r'```json\s*\n(.*?)\n```', response, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except:
+                pass
+        
+        # 匹配 ``` ... ``` 格式（无语言标识）
+        json_match = re.search(r'```\s*\n(\{.*?)\n```', response, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except:
+                pass
+        
+        # 尝试查找最外层的大括号（处理嵌套情况）
+        start = response.find('{')
+        if start != -1:
+            # 使用计数器找到匹配的右大括号
+            count = 0
+            end = start
+            for i in range(start, len(response)):
+                if response[i] == '{':
+                    count += 1
+                elif response[i] == '}':
+                    count -= 1
+                    if count == 0:
+                        end = i
+                        break
+            
+            if end > start:
+                try:
+                    return json.loads(response[start:end+1])
+                except:
+                    pass
+        
+        # 尝试修复常见的 JSON 格式问题
+        # 1. 移除 trailing commas
+        fixed_response = re.sub(r',(\s*[}\]])', r'\1', response)
+        # 2. 修复单引号
+        fixed_response = fixed_response.replace("'", '"')
+        
+        try:
+            return json.loads(fixed_response)
+        except:
+            pass
+        
+        # 记录无法解析的响应以便调试
+        logger.warning(f"无法解析AI响应为JSON，响应内容前500字符: {response[:500]}")
+        
+        return None
+
+    async def rewrite_resume(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """根据AI诊断自动重写简历
+
+        首先进行AI分析，然后根据分析结果自动优化简历内容。
+
+        Args:
+            resume: 简历数据字典
+
+        Returns:
+            包含重写后内容的字典
+        """
+        # 首先进行AI分析
+        analysis = await self.ai_analyze_resume(resume)
+
+        # 构建简历文本
+        resume_text = self._build_resume_text(resume)
+
+        # 提取分析中的关键建议
+        weaknesses = analysis.get("weaknesses", [])
+        suggestions = analysis.get("optimization_suggestions", [])
+        strengths = analysis.get("strengths", [])
+        ats_analysis = analysis.get("ats_analysis", {})
+        content_analysis = analysis.get("content_analysis", {})
+
+        # 构建重写提示词
+        prompt = f"""你是一名资深的HR总监和简历优化专家，拥有20年的人才招聘经验。
+
+请根据以下AI诊断报告，对简历进行全面重写优化。
+
+## 原始简历内容
+{resume_text}
+
+## AI诊断发现的问题（必须全部解决）
+
+### 简历弱点
+{chr(10).join([f"{i+1}. {w}" for i, w in enumerate(weaknesses)]) if weaknesses else "无明显弱点"}
+
+### 优化建议（按优先级排序）
+{chr(10).join([f"{i+1}. [{s.get('priority', '中')}优先级][{s.get('category', '一般')}]{s.get('issue', '')}: {s.get('suggestion', '')}" for i, s in enumerate(suggestions)]) if suggestions else "无具体建议"}
+
+### ATS兼容性问题
+{chr(10).join([f"- {issue}" for issue in ats_analysis.get('issues', [])]) if ats_analysis.get('issues') else "无ATS问题"}
+
+### 建议添加的关键词
+{chr(10).join([f"- {kw}" for kw in ats_analysis.get('keywords_missing', [])]) if ats_analysis.get('keywords_missing') else "无"}
+
+### 内容质量分析
+- 完整性：{content_analysis.get('completeness', '未知')}
+- 清晰度：{content_analysis.get('clarity', '未知')}
+- 专业度：{content_analysis.get('professionalism', '未知')}
+- 影响力：{content_analysis.get('impact', '未知')}
+
+## 重写要求（必须严格遵守）
+
+1. **解决所有诊断出的问题**：必须针对每一个弱点和建议进行改进
+2. **保持事实准确**：所有时间、公司、职位、项目等事实信息必须完全保持原样
+3. **使用STAR法则**：所有工作描述必须使用情境-任务-行动-结果的结构
+4. **量化成果**：每个工作经历至少包含2-3个量化数据（如提升30%、管理10人团队等）
+5. **动词开头**：所有描述必须以强有力的动词开头（主导、设计、实现、优化等）
+6. **添加缺失关键词**：必须将ATS分析建议的关键词自然融入内容
+7. **提升专业度**：使用行业术语和专业表达
+8. **突出优势**：保留并强化诊断出的亮点
+9. **确保ATS识别**：避免表格、图形、特殊字符
+10. **长度控制**：个人简介150-200字，每段工作描述100-150字
+
+## 请提供重写后的简历内容（只返回JSON，不要其他文字）：
+
+{{
+  "personal_info": {{
+    "summary": "重写后的个人简介，必须解决所有诊断问题，突出核心优势"
+  }},
+  "work_experience": [
+    {{
+      "id": 1,
+      "company": "公司名称（保持原样）",
+      "position": "职位名称（保持原样）",
+      "description": "重写后的工作描述，使用STAR法则，必须包含量化成果",
+      "achievements": ["量化成就1", "量化成就2", "量化成就3"]
+    }}
+  ],
+  "skills": [
+    {{
+      "name": "技能名称",
+      "category": "技能分类",
+      "level": 5
+    }}
+  ],
+  "rewrite_summary": "重写说明：详细说明解决了哪些诊断问题",
+  "improvements": [
+    "改进点1：针对具体问题X的改进",
+    "改进点2：针对具体问题Y的改进",
+    "改进点3：针对具体问题Z的改进"
+  ],
+  "issues_resolved": [
+    "已解决问题1",
+    "已解决问题2",
+    "已解决问题3"
+  ],
+  "before_after_comparison": {{
+    "summary_before": "原个人简介",
+    "summary_after": "新个人简介",
+    "experience_example_before": "原工作描述示例",
+    "experience_example_after": "新工作描述示例"
+  }}
+}}
+
+重要提示：
+- 必须返回完全有效的JSON格式
+- 所有字符串使用双引号
+- 不要包含任何markdown标记
+- 确保解决所有诊断出的问题
+"""
+
+        try:
+            response = await self.llm.generate(prompt)
+            logger.info(f"AI重写简历原始响应: {response[:500]}...")
+
+            # 尝试解析JSON
+            result = self._parse_json_response(response)
+            if result:
+                # 添加原始分析结果
+                result["original_analysis"] = analysis
+                return result
+            else:
+                return {
+                    "error": "无法解析AI响应",
+                    "raw_response": response,
+                    "original_analysis": analysis
+                }
+        except Exception as e:
+            logger.error(f"AI重写简历失败: {e}")
+            return {
+                "error": f"重写失败: {str(e)}",
+                "original_analysis": analysis
+            }
 
     async def match_job(self, resume_id: str, job_description: str) -> Dict[str, Any]:
         """简历与职位匹配分析"""
@@ -636,12 +997,18 @@ class ResumeService:
 
         try:
             response = await self.llm.generate(prompt)
+            logger.info(f"职位匹配分析原始响应: {response[:500]}...")
 
-            try:
-                result = json.loads(response)
+            result = self._parse_json_response(response)
+            if result:
                 return result
-            except:
-                return {"raw_response": response, "error": "无法解析AI响应为JSON格式"}
+            else:
+                return {
+                    "raw_response": response,
+                    "error": "无法解析AI响应为JSON格式",
+                    "match_score": 50,
+                    "overall_assessment": "AI响应格式异常，请稍后重试"
+                }
         except Exception as e:
             logger.error(f"职位匹配分析失败: {e}")
             return {"error": f"匹配分析失败: {str(e)}"}
