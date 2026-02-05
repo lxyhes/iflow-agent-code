@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Database, Workflow, FileSearch, BrainCircuit, MessagesSquare, Github } from 'lucide-react';
+import { MoreHorizontal, Database, Workflow, FileSearch, BrainCircuit, MessagesSquare, Github, FileText } from 'lucide-react';
 import Tooltip from './Tooltip';
 
 // Tab 配置
@@ -55,6 +55,13 @@ const CORE_TABS = [
 ];
 
 const SECONDARY_TABS = [
+  {
+    id: 'resume',
+    label: '简历',
+    icon: <FileText className="w-4 h-4" />,
+    tooltip: 'Resume Builder',
+    description: '简历管理与优化'
+  },
   {
     id: 'github',
     label: 'GitHub',

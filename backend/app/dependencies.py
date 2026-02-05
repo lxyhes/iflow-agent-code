@@ -32,6 +32,7 @@ if len(JWT_SECRET) < 32:
         "建议使用至少 32 字符的强密码。"
     )
 
+
 async def get_current_user(authorization: str = Header(None)):
     """
     Verifies the JWT token from the Authorization header.
@@ -56,7 +57,7 @@ async def get_current_user(authorization: str = Header(None)):
 
     try:
         scheme, token = authorization.split()
-        if scheme.lower() != 'bearer':
+        if scheme.lower() != "bearer":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Authentication Scheme",
@@ -73,9 +74,31 @@ async def get_current_user(authorization: str = Header(None)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 async def verify_token(user: dict = Depends(get_current_user)):
     """
     Dependency to ensure a valid token is present.
     Usage: router.get("/protected", dependencies=[Depends(verify_token)])
     """
     return user
+
+
+async def get_current_user_id(authorization: str = Header(None)) -> str:
+    """
+    获取当前用户ID的依赖函数
+    如果没有提供token，在开发模式下返回默认用户
+    """
+    # 检查是否在开发模式
+    if os.getenv("DEV_MODE", "false").lower() == "true":
+        if not authorization:
+            return "dev-user"
+        try:
+            user = await get_current_user(authorization)
+            return str(user.get("userId", "dev-user"))
+        except:
+            # 即使token解析失败，在开发模式下也返回默认用户
+            return "dev-user"
+
+    # 非开发模式下需要有效token
+    user = await get_current_user(authorization)
+    return str(user.get("userId", "anonymous"))

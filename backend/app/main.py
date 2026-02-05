@@ -5,8 +5,11 @@ import logging
 # 加载 .env 文件
 try:
     from dotenv import load_dotenv
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    env_path = os.path.join(project_root, '.env')
+
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    env_path = os.path.join(project_root, ".env")
     if os.path.exists(env_path):
         load_dotenv(env_path)
         print(f"Loaded .env from {env_path}")
@@ -15,7 +18,9 @@ try:
 except ImportError:
     print("python-dotenv not installed, skipping .env loading")
 
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 backend_dir = os.path.join(project_root, "backend")
 for p in (project_root, backend_dir):
     if p not in sys.path:
@@ -29,6 +34,7 @@ from backend.app.routers import ocr
 from backend.app.routers import interview
 from backend.app.routers import job_analysis
 from backend.app.routers import job_analysis_text
+from backend.app.routers import resume
 
 # Import legacy app to keep existing endpoints working
 # This also initializes the global variables in server.py
@@ -36,8 +42,8 @@ from backend.server import app as legacy_app
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%H:%M:%S'
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
 )
 
 app = FastAPI(title="IFlow Agent API")
@@ -53,6 +59,7 @@ dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
 if dev_mode:
     allow_origins_list = ["*"]
     import logging
+
     logger = logging.getLogger("CORS")
     logger.warning(
         "开发模式：允许所有 CORS 来源。"
@@ -74,13 +81,15 @@ app.include_router(ocr.router)
 app.include_router(interview.router)
 app.include_router(job_analysis.router)
 app.include_router(job_analysis_text.router)
+app.include_router(resume.router)
 
 # Include legacy routes
 # This brings in all the endpoints defined in server.py
-# Since files.router is included first, requests to /api/projects/{p}/files etc. 
+# Since files.router is included first, requests to /api/projects/{p}/files etc.
 # will be handled by the new router (with Auth), overriding the old ones.
 app.include_router(legacy_app.router)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -55,18 +55,18 @@ class LLMService:
         try:
             # 构建提示词
             prompt = self._build_prompt(messages)
-            
+
             # 使用 IFlowClient
             full_content = ""
             async with IFlowClient() as client:
                 await client.send_message(prompt)
-                
+
                 async for msg in client.receive_messages():
                     if AssistantMessage and isinstance(msg, AssistantMessage):
                         if msg.chunk and msg.chunk.text:
                             full_content += msg.chunk.text
                     # 检查是否完成
-                    if hasattr(msg, '__class__') and 'Finish' in msg.__class__.__name__:
+                    if hasattr(msg, "__class__") and "Finish" in msg.__class__.__name__:
                         break
 
             return {"content": full_content}
@@ -88,6 +88,24 @@ class LLMService:
             elif role == "assistant":
                 prompt_parts.append(f"Assistant: {content}")
         return "\n\n".join(prompt_parts)
+
+    async def generate(
+        self, prompt: str, temperature: float = 0.7, max_tokens: Optional[int] = None
+    ) -> str:
+        """
+        简单的文本生成方法
+
+        Args:
+            prompt: 提示词文本
+            temperature: 温度参数
+            max_tokens: 最大token数
+
+        Returns:
+            生成的文本内容
+        """
+        messages = [{"role": "user", "content": prompt}]
+        result = await self.complete(messages, temperature, max_tokens)
+        return result.get("content", "")
 
 
 # 全局实例

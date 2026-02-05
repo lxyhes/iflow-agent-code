@@ -37,6 +37,7 @@ const PRDEditor = lazy(() => import('./PRDEditor'));
 const DatabaseQuery = lazy(() => import('./DatabaseQuery'));
 const WorkflowEditor = lazy(() => import('./WorkflowEditor'));
 const InterviewPreparation = lazy(() => import('./InterviewPreparation'));
+const ResumeManager = lazy(() => import('./resume/ResumeManager'));
 
 function MainContent({
                        selectedProject,
@@ -557,6 +558,15 @@ function MainContent({
                               <ErrorBoundary showDetails={true}>
                                 <Suspense fallback={null}>
                                   <InterviewPreparation selectedProject={selectedProject} />
+                                </Suspense>
+                              </ErrorBoundary>
+                            </div>
+                      )}
+            {activeTab === 'resume' && (
+                            <div className="h-full w-full overflow-visible">
+                              <ErrorBoundary showDetails={true}>
+                                <Suspense fallback={null}>
+                                  <ResumeManager />
                                 </Suspense>
                               </ErrorBoundary>
                             </div>
