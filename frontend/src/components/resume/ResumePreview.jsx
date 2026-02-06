@@ -153,10 +153,10 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       {/* 头部 - 更大的留白和更清晰的层次 */}
       <header className="mb-10 flex items-start gap-6">
         {/* 头像 */}
-        {resume.personal_info?.avatar && (
+        {resume.personalInfo?.avatar && (
           <div className="flex-shrink-0">
             <img
-              src={resume.personal_info.avatar}
+              src={resume.personalInfo.avatar}
               alt="头像"
               className="w-24 h-24 rounded-full object-cover border-4 border-slate-100"
             />
@@ -164,7 +164,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
         )}
         <div className="flex-1">
           <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">
-            {resume.personal_info?.full_name || '姓名'}
+            {resume.personalInfo?.fullName || '姓名'}
           </h1>
           <p className="text-xl text-slate-500 font-light mb-6">
             {resume.target_position || '求职意向'}
@@ -172,22 +172,22 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
 
           {/* 联系信息 - 使用图标和更好的间距 */}
           <div className="flex flex-wrap gap-6 text-sm text-slate-600">
-            {resume.personal_info?.phone && (
+            {resume.personalInfo?.phone && (
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-slate-400" />
-                <span>{resume.personal_info.phone}</span>
+                <span>{resume.personalInfo.phone}</span>
               </div>
             )}
-            {resume.personal_info?.email && (
+            {resume.personalInfo?.email && (
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-slate-400" />
-                <span>{resume.personal_info.email}</span>
+                <span>{resume.personalInfo.email}</span>
               </div>
             )}
-            {resume.personal_info?.location && (
+            {resume.personalInfo?.location && (
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-slate-400" />
-                <span>{resume.personal_info.location}</span>
+                <span>{resume.personalInfo.location}</span>
               </div>
             )}
           </div>
@@ -195,7 +195,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       </header>
 
       {/* 个人简介 */}
-      {resume.personal_info?.summary && (
+      {resume.personalInfo?.summary && (
         <section className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
@@ -204,13 +204,13 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
             <h2 className="text-lg font-semibold text-slate-900">个人简介</h2>
           </div>
           <p className="text-slate-600 leading-relaxed pl-11">
-            {resume.personal_info.summary}
+            {resume.personalInfo.summary}
           </p>
         </section>
       )}
 
       {/* 工作经历 */}
-      {resume.work_experience?.length > 0 && (
+      {resume.workExperiences?.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
@@ -219,7 +219,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
             <h2 className="text-lg font-semibold text-slate-900">工作经历</h2>
           </div>
           <div className="space-y-6 pl-11">
-            {resume.work_experience.map((exp) => (
+            {resume.workExperiences.map((exp) => (
               <div key={exp.id} className="relative">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -359,28 +359,28 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       {/* 头部 - 深蓝色主题 */}
       <header className="bg-gradient-to-r from-blue-900 to-blue-800 text-white p-12">
         <h1 className="text-4xl font-bold mb-3">
-          {resume.personal_info?.full_name || '姓名'}
+          {resume.personalInfo?.fullName || '姓名'}
         </h1>
         <p className="text-xl text-blue-200 mb-6">
           {resume.target_position || '求职意向'}
         </p>
         <div className="flex flex-wrap gap-6 text-sm text-blue-100">
-          {resume.personal_info?.phone && (
+          {resume.personalInfo?.phone && (
             <div className="flex items-center gap-2">
               <Phone className="w-4 h-4" />
-              <span>{resume.personal_info.phone}</span>
+              <span>{resume.personalInfo.phone}</span>
             </div>
           )}
-          {resume.personal_info?.email && (
+          {resume.personalInfo?.email && (
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4" />
-              <span>{resume.personal_info.email}</span>
+              <span>{resume.personalInfo.email}</span>
             </div>
           )}
-          {resume.personal_info?.location && (
+          {resume.personalInfo?.location && (
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4" />
-              <span>{resume.personal_info.location}</span>
+              <span>{resume.personalInfo.location}</span>
             </div>
           )}
         </div>
@@ -388,25 +388,25 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
 
       <div className="p-12">
         {/* 个人简介 */}
-        {resume.personal_info?.summary && (
+        {resume.personalInfo?.summary && (
           <section className="mb-10">
             <h2 className="text-lg font-bold text-blue-900 uppercase tracking-wider border-b-2 border-blue-200 pb-2 mb-4">
               个人简介
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              {resume.personal_info.summary}
+              {resume.personalInfo.summary}
             </p>
           </section>
         )}
 
         {/* 工作经历 */}
-        {resume.work_experience?.length > 0 && (
+        {resume.workExperiences?.length > 0 && (
           <section className="mb-10">
             <h2 className="text-lg font-bold text-blue-900 uppercase tracking-wider border-b-2 border-blue-200 pb-2 mb-6">
               工作经历
             </h2>
             <div className="space-y-6">
-              {resume.work_experience.map((exp) => (
+              {resume.workExperiences.map((exp) => (
                 <div key={exp.id}>
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -525,32 +525,32 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       {/* 头部 - 渐变卡片 */}
       <header className="bg-gradient-to-r from-violet-600 via-purple-600 to-pink-500 rounded-2xl p-8 text-white shadow-xl mb-10">
         <h1 className="text-5xl font-bold mb-3">
-          {resume.personal_info?.full_name || '姓名'}
+          {resume.personalInfo?.fullName || '姓名'}
         </h1>
         <p className="text-xl text-purple-100 mb-6">
           {resume.target_position || '求职意向'}
         </p>
         <div className="flex flex-wrap gap-4 text-sm">
-          {resume.personal_info?.phone && (
+          {resume.personalInfo?.phone && (
             <span className="bg-white/20 backdrop-blur px-4 py-2 rounded-full">
-              {resume.personal_info.phone}
+              {resume.personalInfo.phone}
             </span>
           )}
-          {resume.personal_info?.email && (
+          {resume.personalInfo?.email && (
             <span className="bg-white/20 backdrop-blur px-4 py-2 rounded-full">
-              {resume.personal_info.email}
+              {resume.personalInfo.email}
             </span>
           )}
-          {resume.personal_info?.location && (
+          {resume.personalInfo?.location && (
             <span className="bg-white/20 backdrop-blur px-4 py-2 rounded-full">
-              {resume.personal_info.location}
+              {resume.personalInfo.location}
             </span>
           )}
         </div>
       </header>
 
       {/* 个人简介 */}
-      {resume.personal_info?.summary && (
+      {resume.personalInfo?.summary && (
         <section className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-lg">
@@ -560,14 +560,14 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
           </div>
           <div className="bg-white/80 backdrop-blur rounded-xl p-6 shadow-sm">
             <p className="text-slate-600 leading-relaxed">
-              {resume.personal_info.summary}
+              {resume.personalInfo.summary}
             </p>
           </div>
         </section>
       )}
 
       {/* 工作经历 */}
-      {resume.work_experience?.length > 0 && (
+      {resume.workExperiences?.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-lg">
@@ -576,7 +576,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
             <h2 className="text-xl font-bold text-slate-800">工作经历</h2>
           </div>
           <div className="space-y-4">
-            {resume.work_experience.map((exp) => (
+            {resume.workExperiences.map((exp) => (
               <div key={exp.id} className="bg-white/80 backdrop-blur rounded-xl p-6 shadow-sm">
                 <div className="flex justify-between items-start mb-3">
                   <div>
@@ -705,12 +705,12 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
           </div>
           <pre className="text-sm">
 {`{
-  "name": "${resume.personal_info?.full_name || '姓名'}",
+  "name": "${resume.personalInfo?.fullName || '姓名'}",
   "position": "${resume.target_position || '求职意向'}",
   "contact": {
-    "phone": "${resume.personal_info?.phone || ''}",
-    "email": "${resume.personal_info?.email || ''}",
-    "location": "${resume.personal_info?.location || ''}"
+    "phone": "${resume.personalInfo?.phone || ''}",
+    "email": "${resume.personalInfo?.email || ''}",
+    "location": "${resume.personalInfo?.location || ''}"
   }
 }`}
           </pre>
@@ -748,7 +748,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       )}
 
       {/* 个人简介 */}
-      {resume.personal_info?.summary && (
+      {resume.personalInfo?.summary && (
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4 text-emerald-600">
             <span className="text-slate-400">$</span>
@@ -756,7 +756,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
           </div>
           <div className="bg-white rounded-lg p-6 shadow-sm border border-slate-200">
             <p className="text-slate-600 leading-relaxed">
-              {resume.personal_info.summary}
+              {resume.personalInfo.summary}
             </p>
           </div>
         </section>
@@ -800,14 +800,14 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       )}
 
       {/* 工作经历 */}
-      {resume.work_experience?.length > 0 && (
+      {resume.workExperiences?.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4 text-emerald-600">
             <span className="text-slate-400">$</span>
             <span>cat work_history.log</span>
           </div>
           <div className="space-y-4">
-            {resume.work_experience.map((exp) => (
+            {resume.workExperiences.map((exp) => (
               <div key={exp.id} className="bg-white rounded-lg p-6 shadow-sm border border-slate-200">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -860,41 +860,41 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       {/* 头部 - 大量留白 */}
       <header className="mb-16">
         <h1 className="text-5xl font-light text-slate-900 tracking-tight mb-4">
-          {resume.personal_info?.full_name || '姓名'}
+          {resume.personalInfo?.fullName || '姓名'}
         </h1>
         <p className="text-xl text-slate-400 font-light">
           {resume.target_position || '求职意向'}
         </p>
         <div className="mt-8 space-y-1 text-sm text-slate-400">
-          {resume.personal_info?.phone && (
-            <p>{resume.personal_info.phone}</p>
+          {resume.personalInfo?.phone && (
+            <p>{resume.personalInfo.phone}</p>
           )}
-          {resume.personal_info?.email && (
-            <p>{resume.personal_info.email}</p>
+          {resume.personalInfo?.email && (
+            <p>{resume.personalInfo.email}</p>
           )}
-          {resume.personal_info?.location && (
-            <p>{resume.personal_info.location}</p>
+          {resume.personalInfo?.location && (
+            <p>{resume.personalInfo.location}</p>
           )}
         </div>
       </header>
 
       {/* 个人简介 */}
-      {resume.personal_info?.summary && (
+      {resume.personalInfo?.summary && (
         <section className="mb-16">
           <p className="text-slate-600 leading-loose text-lg max-w-2xl">
-            {resume.personal_info.summary}
+            {resume.personalInfo.summary}
           </p>
         </section>
       )}
 
       {/* 工作经历 */}
-      {resume.work_experience?.length > 0 && (
+      {resume.workExperiences?.length > 0 && (
         <section className="mb-16">
           <h2 className="text-xs font-bold text-slate-300 uppercase tracking-[0.3em] mb-8">
             工作经历
           </h2>
           <div className="space-y-8">
-            {resume.work_experience.map((exp) => (
+            {resume.workExperiences.map((exp) => (
               <div key={exp.id}>
                 <div className="flex justify-between items-baseline mb-2">
                   <h3 className="text-lg font-medium text-slate-900">{exp.company}</h3>
@@ -990,42 +990,42 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       {/* 头部 - 优雅居中 */}
       <header className="text-center mb-12 pb-8 border-b-2 border-amber-200">
         <h1 className="text-5xl font-serif text-slate-900 mb-4">
-          {resume.personal_info?.full_name || '姓名'}
+          {resume.personalInfo?.fullName || '姓名'}
         </h1>
         <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent mx-auto mb-4"></div>
         <p className="text-xl text-amber-800 italic mb-6">
           {resume.target_position || '求职意向'}
         </p>
         <div className="flex justify-center flex-wrap gap-6 text-sm text-slate-600">
-          {resume.personal_info?.phone && (
-            <span>{resume.personal_info.phone}</span>
+          {resume.personalInfo?.phone && (
+            <span>{resume.personalInfo.phone}</span>
           )}
-          {resume.personal_info?.email && (
-            <span>{resume.personal_info.email}</span>
+          {resume.personalInfo?.email && (
+            <span>{resume.personalInfo.email}</span>
           )}
-          {resume.personal_info?.location && (
-            <span>{resume.personal_info.location}</span>
+          {resume.personalInfo?.location && (
+            <span>{resume.personalInfo.location}</span>
           )}
         </div>
       </header>
 
       {/* 个人简介 */}
-      {resume.personal_info?.summary && (
+      {resume.personalInfo?.summary && (
         <section className="mb-12 text-center max-w-3xl mx-auto">
           <p className="text-slate-600 leading-relaxed italic text-lg">
-            "{resume.personal_info.summary}"
+            "{resume.personalInfo.summary}"
           </p>
         </section>
       )}
 
       {/* 工作经历 */}
-      {resume.work_experience?.length > 0 && (
+      {resume.workExperiences?.length > 0 && (
         <section className="mb-12">
           <h2 className="text-center text-xl font-serif text-amber-800 mb-8">
             <span className="border-b-2 border-amber-300 pb-1">工作经历</span>
           </h2>
           <div className="space-y-6 max-w-4xl mx-auto">
-            {resume.work_experience.map((exp) => (
+            {resume.workExperiences.map((exp) => (
               <div key={exp.id} className="bg-white rounded-lg p-6 shadow-sm border border-amber-100">
                 <div className="flex justify-between items-start mb-3">
                   <div>

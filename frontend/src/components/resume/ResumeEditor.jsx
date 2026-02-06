@@ -55,7 +55,7 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [versions, setVersions] = useState([]);
   const [showVersions, setShowVersions] = useState(false);
-  const [targetPosition, setTargetPosition] = useState(resume.target_position || '');
+  const [targetPosition, setTargetPosition] = useState(resume.targetPosition || '');
   
   // 第二阶段功能状态
   const [showDiagnostic, setShowDiagnostic] = useState(false);
@@ -142,9 +142,9 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
       // 真正保存简历数据到服务器
       const response = await resumeApi.updateResume(resume.id, {
         name: localResume.name,
-        target_position: localResume.target_position,
+        targetPosition: localResume.targetPosition,
         template: localResume.template,
-        personal_info: localResume.personal_info,
+        personalInfo: localResume.personalInfo,
       });
       
       if (response.success) {
@@ -214,8 +214,8 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   const handleImport = (importedData) => {
     setLocalResume(prev => ({
       ...prev,
-      personal_info: importedData.personal_info || prev.personal_info,
-      work_experience: importedData.work_experience || prev.work_experience,
+      personalInfo: importedData.personalInfo || prev.personalInfo,
+      workExperiences: importedData.workExperiences || prev.workExperiences,
       education: importedData.education || prev.education,
       skills: importedData.skills || prev.skills,
       projects: importedData.projects || prev.projects,
@@ -227,8 +227,8 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   const handleUpdateTargetPosition = async (position) => {
     setTargetPosition(position);
     try {
-      await resumeApi.updateResume(resume.id, { target_position: position });
-      setLocalResume(prev => ({ ...prev, target_position: position }));
+      await resumeApi.updateResume(resume.id, { targetPosition: position });
+      setLocalResume(prev => ({ ...prev, targetPosition: position }));
     } catch (err) {
       console.error('更新目标职位失败:', err);
     }
@@ -367,9 +367,9 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
                   // 应用优化
                   let updatedResume = { ...localResume };
                   optimizations.forEach(opt => {
-                    if (opt.type === 'summary' && opt.field === 'personal_info.summary') {
-                      updatedResume.personal_info = {
-                        ...updatedResume.personal_info,
+                    if (opt.type === 'summary' && opt.field === 'personalInfo.summary') {
+                      updatedResume.personalInfo = {
+                        ...updatedResume.personalInfo,
                         summary: opt.optimized
                       };
                     }
@@ -386,8 +386,8 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
                   let updatedResume = { ...localResume };
                   fixes.forEach(fix => {
                     if (fix.type === 'punctuation' && fix.location === '个人简介') {
-                      updatedResume.personal_info = {
-                        ...updatedResume.personal_info,
+                      updatedResume.personalInfo = {
+                        ...updatedResume.personalInfo,
                         summary: fix.fixed
                       };
                     }
@@ -565,15 +565,15 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
             // 应用优化结果到简历
             setLocalResume(prev => {
               const updated = { ...prev };
-              if (result.personal_info?.summary) {
-                updated.personal_info = {
-                  ...prev.personal_info,
-                  summary: result.personal_info.summary
+              if (result.personalInfo?.summary) {
+                updated.personalInfo = {
+                  ...prev.personalInfo,
+                  summary: result.personalInfo.summary
                 };
               }
-              if (result.work_experience?.length > 0) {
-                updated.work_experience = prev.work_experience?.map((exp) => {
-                  const rewritten = result.work_experience.find(r => r.id === exp.id);
+              if (result.workExperiences?.length > 0) {
+                updated.workExperiences = prev.workExperiences?.map((exp) => {
+                  const rewritten = result.workExperiences.find(r => r.id === exp.id);
                   if (rewritten) {
                     return {
                       ...exp,
@@ -600,15 +600,15 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
             // 应用优化结果到简历
             setLocalResume(prev => {
               const updated = { ...prev };
-              if (result.personal_info?.summary) {
-                updated.personal_info = {
-                  ...prev.personal_info,
-                  summary: result.personal_info.summary
+              if (result.personalInfo?.summary) {
+                updated.personalInfo = {
+                  ...prev.personalInfo,
+                  summary: result.personalInfo.summary
                 };
               }
-              if (result.work_experience?.length > 0) {
-                updated.work_experience = prev.work_experience?.map((exp) => {
-                  const rewritten = result.work_experience.find(r => r.id === exp.id);
+              if (result.workExperiences?.length > 0) {
+                updated.workExperiences = prev.workExperiences?.map((exp) => {
+                  const rewritten = result.workExperiences.find(r => r.id === exp.id);
                   if (rewritten) {
                     return {
                       ...exp,
@@ -654,12 +654,12 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
 // 个人信息标签页
 const PersonalInfoTab = ({ resume, onUpdate }) => {
   const [formData, setFormData] = useState({
-    full_name: resume.personal_info?.full_name || '',
-    email: resume.personal_info?.email || '',
-    phone: resume.personal_info?.phone || '',
-    location: resume.personal_info?.location || '',
-    summary: resume.personal_info?.summary || '',
-    avatar: resume.personal_info?.avatar || '',
+    full_name: resume.personalInfo?.fullName || '',
+    email: resume.personalInfo?.email || '',
+    phone: resume.personalInfo?.phone || '',
+    location: resume.personalInfo?.location || '',
+    summary: resume.personalInfo?.summary || '',
+    avatar: resume.personalInfo?.avatar || '',
   });
   const [errors, setErrors] = useState({});
   const [uploading, setUploading] = useState(false);
@@ -933,7 +933,7 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
 
 // 工作经历标签页（带拖拽排序和AI描述生成）
 const ExperienceTab = ({ resume, onUpdate }) => {
-  const [experiences, setExperiences] = useState(resume.work_experience || []);
+  const [experiences, setExperiences] = useState(resume.workExperiences || []);
   const [editingId, setEditingId] = useState(null);
   const [draggedItem, setDraggedItem] = useState(null);
 
@@ -949,7 +949,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
         achievements: []
       });
       if (response.success) {
-        setExperiences(response.data.work_experience);
+        setExperiences(response.data.workExperiences);
         setEditingId(response.experience_id);
         onUpdate(response.data);
       }
@@ -962,7 +962,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.updateWorkExperience(resume.id, id, data);
       if (response.success) {
-        setExperiences(response.data.work_experience);
+        setExperiences(response.data.workExperiences);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -975,7 +975,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.deleteWorkExperience(resume.id, id);
       if (response.success) {
-        setExperiences(response.data.work_experience);
+        setExperiences(response.data.workExperiences);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1017,7 +1017,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
       const order = experiences.map(exp => exp.id);
       const response = await resumeApi.updateWorkExperienceOrder(resume.id, order);
       if (response.success) {
-        setExperiences(response.data.work_experience);
+        setExperiences(response.data.workExperiences);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1245,7 +1245,7 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
 
 // 教育经历标签页
 const EducationTab = ({ resume, onUpdate }) => {
-  const [education, setEducation] = useState(resume.education || []);
+  const [education, setEducation] = useState(resume.educations || []);
 
   const handleAdd = async () => {
     try {
@@ -1257,7 +1257,7 @@ const EducationTab = ({ resume, onUpdate }) => {
         end_date: ''
       });
       if (response.success) {
-        setEducation(response.data.education);
+        setEducation(response.data.educations);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1269,7 +1269,7 @@ const EducationTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.updateEducation(resume.id, id, data);
       if (response.success) {
-        setEducation(response.data.education);
+        setEducation(response.data.educations);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1282,7 +1282,7 @@ const EducationTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.deleteEducation(resume.id, id);
       if (response.success) {
-        setEducation(response.data.education);
+        setEducation(response.data.educations);
         onUpdate(response.data);
       }
     } catch (err) {

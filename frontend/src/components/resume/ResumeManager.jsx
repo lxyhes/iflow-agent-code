@@ -150,13 +150,13 @@ const ResumeManager = () => {
   const getCompletionPercentage = (resume) => {
     let score = 0;
     let total = 5;
-    
-    if (resume.personal_info?.full_name) score++;
-    if (resume.work_experience?.length > 0) score++;
-    if (resume.education?.length > 0) score++;
+
+    if (resume.personalInfo?.fullName) score++;
+    if (resume.workExperiences?.length > 0) score++;
+    if (resume.educations?.length > 0) score++;
     if (resume.skills?.length > 0) score++;
     if (resume.projects?.length > 0) score++;
-    
+
     return Math.round((score / total) * 100);
   };
 
@@ -322,9 +322,9 @@ const ResumeManager = () => {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                           {resume.name}
                         </h3>
-                        {resume.target_position && (
+                        {resume.targetPosition && (
                           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            目标：{resume.target_position}
+                            目标：{resume.targetPosition}
                           </p>
                         )}
                       </div>
@@ -373,19 +373,19 @@ const ResumeManager = () => {
                       <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <User className="w-4 h-4 mx-auto mb-1 text-gray-400" />
                         <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {resume.personal_info?.full_name ? '有' : '无'}
+                          {resume.personalInfo?.fullName ? '有' : '无'}
                         </span>
                       </div>
                       <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <Briefcase className="w-4 h-4 mx-auto mb-1 text-gray-400" />
                         <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {resume.work_experience?.length || 0} 段
+                          {resume.workExperiences?.length || 0} 段
                         </span>
                       </div>
                       <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <BookOpen className="w-4 h-4 mx-auto mb-1 text-gray-400" />
                         <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {resume.education?.length || 0} 段
+                          {resume.educations?.length || 0} 段
                         </span>
                       </div>
                       <div className="text-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -433,7 +433,7 @@ const ResumeManager = () => {
 
                   <div className="px-6 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700">
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      最后更新：{new Date(resume.updated_at).toLocaleString('zh-CN')}
+                      最后更新：{new Date(resume.updatedAt).toLocaleString('zh-CN')}
                     </p>
                   </div>
                 </div>
