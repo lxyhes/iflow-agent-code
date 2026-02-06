@@ -36,6 +36,9 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
+  mvc:
+    trailing-slash-match: true
+
   # DevTools Configuration - 禁用 restart 避免 CGLIB 问题
   devtools:
     restart:
@@ -83,8 +86,8 @@ iflow:
     url: ws://localhost:8090/acp
     # 是否自动启动 iFlow 进程
     auto-start: true
-    # 超时时间（秒）
-    timeout-seconds: 30
+    # 超时时间（秒）- 增加到 120 秒以支持复杂 AI 请求
+    timeout-seconds: 120
     # 权限模式: AUTO（SDK 1.0.4-fix 仅支持 AUTO 模式）
     permission-mode: AUTO
 
@@ -108,7 +111,9 @@ aliyun:
 logging:
   level:
     com.iflow.agent: DEBUG
-    org.springframework.web: INFO
+    org.springframework.web: DEBUG
+    org.springframework.context: DEBUG
+    org.springframework.beans: DEBUG
   pattern:
     console: "%d{HH:mm:ss} [%level] %logger{36}: %msg%n"
 

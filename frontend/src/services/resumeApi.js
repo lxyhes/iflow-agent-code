@@ -11,7 +11,7 @@ const API_BASE = '/api/resumes';
 export const resumeApi = {
   // 简历 CRUD
   getResumes: async () => {
-    const response = await authenticatedFetch(`${API_BASE}/`);
+    const response = await authenticatedFetch(`${API_BASE}`);
     return response.json();
   },
 
@@ -21,7 +21,7 @@ export const resumeApi = {
   },
 
   createResume: async (data) => {
-    const response = await authenticatedFetch(`${API_BASE}/`, {
+    const response = await authenticatedFetch(`${API_BASE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

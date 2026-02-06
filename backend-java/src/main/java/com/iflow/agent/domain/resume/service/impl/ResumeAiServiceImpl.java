@@ -108,30 +108,104 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         String prompt = buildDiagnosePrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("diagnosis_score", extractScore(aiResponse, "诊断评分"));
-        result.put("analysis", aiResponse);
+        int diagnosisScore = extractScore(aiResponse, "诊断评分");
 
-        // 诊断维度
-        Map<String, Object> dimensions = new HashMap<>();
-        dimensions.put("content_completeness", extractDimensionScore(aiResponse, "内容完整性"));
-        dimensions.put("quantified_achievements", extractDimensionScore(aiResponse, "量化成果"));
-        dimensions.put("keyword_matching", extractDimensionScore(aiResponse, "关键词匹配"));
-        dimensions.put("format_standard", extractDimensionScore(aiResponse, "格式规范"));
-        dimensions.put("language_expression", extractDimensionScore(aiResponse, "语言表达"));
-        dimensions.put("length_control", extractDimensionScore(aiResponse, "篇幅控制"));
-        result.put("dimensions", dimensions);
+        // 如果分数为 -1，说明 AI 响应不是 JSON 格式，可能是简历为空或其他错误
+        if (diagnosisScore == -1) {
+            log.warn("AI response is not in valid JSON format. Response: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", 0);
+            result.put("diagnosis_level", "无法诊断");
+            result.put("summary", "简历诊断失败");
+            result.put("analysis", aiResponse);
+            result.put("error", true);
+            result.put("error_message", "AI 返回的格式不正确，可能是简历内容为空或格式异常");
+
+            // 返回空的检查列表
+            result.put("checks", new ArrayList<>());
+            result.put("critical_issues", List.of(aiResponse));
+            result.put("warnings", List.of());
+            result.put("suggestions", List.of("请检查简历内容是否完整", "确保包含个人信息、工作经历、教育背景等"));
+            result.put("priority_actions", List.of());
+            result.put("timestamp", System.currentTimeMillis());
+
+            return result;
+        }
+
+        Map<String, Object> contentCompleteness = extractDimensionScore(aiResponse, "内容完整性");
+        Map<String, Object> quantifiedAchievements = extractDimensionScore(aiResponse, "量化成果");
+        Map<String, Object> keywordMatching = extractDimensionScore(aiResponse, "关键词匹配");
+        Map<String, Object> formatStandard = extractDimensionScore(aiResponse, "格式规范");
+        Map<String, Object> languageExpression = extractDimensionScore(aiResponse, "语言表达");
+        Map<String, Object> lengthControl = extractDimensionScore(aiResponse, "篇幅控制");
+
+        Map<String, Object> result = new HashMap<>();
+
+        // 前端期望的格式
+        result.put("overall_score", diagnosisScore);
+        result.put("diagnosis_level", getDiagnosisLevel(diagnosisScore));
+        result.put("summary", extractSummary(aiResponse));
+        result.put("analysis", aiResponse);
+        result.put("error", false);
+
+        // 转换为前端期望的 checks 格式
+        List<Map<String, Object>> checks = new ArrayList<>();
+        checks.add(createCheck("内容完整性", contentCompleteness));
+        checks.add(createCheck("量化成果", quantifiedAchievements));
+        checks.add(createCheck("关键词匹配", keywordMatching));
+        checks.add(createCheck("格式规范", formatStandard));
+        checks.add(createCheck("语言表达", languageExpression));
+        checks.add(createCheck("篇幅控制", lengthControl));
+        result.put("checks", checks);
 
         // 问题分类
         result.put("critical_issues", extractCriticalIssues(aiResponse));
         result.put("warnings", extractWarnings(aiResponse));
         result.put("suggestions", extractDiagnoseSuggestions(aiResponse));
-
-        // 优先级改进建议
         result.put("priority_actions", extractPriorityActions(aiResponse));
         result.put("timestamp", System.currentTimeMillis());
 
         return result;
+    }
+
+    private Map<String, Object> createCheck(String name, Map<String, Object> dimension) {
+        Map<String, Object> check = new HashMap<>();
+        check.put("name", name);
+        
+        Integer score = (Integer) dimension.getOrDefault("score", 75);
+        check.put("score", score);
+        
+        // 根据分数确定状态
+        if (score >= 80) {
+            check.put("status", "pass");
+        } else if (score >= 60) {
+            check.put("status", "warning");
+        } else {
+            check.put("status", "fail");
+        }
+        
+        check.put("issues", dimension.getOrDefault("issues", new ArrayList<>()));
+        return check;
+    }
+
+    private String getDiagnosisLevel(int score) {
+        if (score >= 80) return "优秀";
+        if (score >= 60) return "良好";
+        return "一般";
+    }
+
+    private String extractSummary(String aiResponse) {
+        // 提取摘要信息
+        if (aiResponse.contains("总结") || aiResponse.contains("总体评价")) {
+            int start = Math.max(0, aiResponse.indexOf("总体评价"));
+            int end = aiResponse.indexOf("\n\n", start);
+            if (end > start) {
+                return aiResponse.substring(start, end).trim();
+            }
+        }
+        // 如果没有找到总结，返回前200个字符
+        return aiResponse.substring(0, Math.min(200, aiResponse.length())) + "...";
     }
 
     @Override
@@ -376,6 +450,12 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private int extractScore(String response, String scoreType) {
         try {
+            // 首先检查响应是否看起来像 JSON 格式
+            if (!response.trim().startsWith("{") || !response.trim().endsWith("}")) {
+                log.warn("AI response is not in JSON format: {}", response.substring(0, Math.min(200, response.length())));
+                return -1; // 返回 -1 表示响应格式不正确
+            }
+
             // 尝试从JSON中提取分数
             if (response.contains("\"" + scoreType + "\":")) {
                 int start = response.indexOf("\"" + scoreType + "\":") + scoreType.length() + 3;
@@ -399,7 +479,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         } catch (Exception e) {
             log.warn("Failed to extract score for {}: {}", scoreType, e.getMessage());
         }
-        return 75; // 默认分数
+        return -1; // 返回 -1 表示无法提取分数
     }
 
     private Map<String, Object> parseSections(String response) {
