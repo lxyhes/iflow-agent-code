@@ -1,10 +1,13 @@
 package com.iflow.agent.controller;
 
 import com.iflow.agent.domain.interview.entity.InterviewSession;
+import com.iflow.agent.domain.interview.entity.PracticeQuestion;
+import com.iflow.agent.domain.interview.entity.PracticeSession;
 import com.iflow.agent.domain.interview.entity.Question;
 import com.iflow.agent.domain.interview.enums.CoordinationMode;
 import com.iflow.agent.dto.interview.*;
 import com.iflow.agent.service.interview.InterviewService;
+import com.iflow.agent.service.interview.PracticeSessionService;
 import com.iflow.agent.service.interview.agentscope.InterviewCoordinator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +27,7 @@ import java.util.Map;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final PracticeSessionService practiceSessionService;
     private final InterviewCoordinator coordinator;
 
     // ============ 会话管理 ============
@@ -141,6 +145,181 @@ public class InterviewController {
         return ResponseEntity.ok(report);
     }
 
+    /**
+     * 列表面试会话
+     */
+    @GetMapping("/sessions")
+    public ResponseEntity<Map<String, Object>> listSessions(
+            @RequestParam(required = false) String candidateId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "100") int limit) {
+        log.info("列表面试会话: candidateId={}, status={}, limit={}", candidateId, status, limit);
+        List<Map<String, Object>> sessions = interviewService.listSessions(candidateId, status, limit);
+        return ResponseEntity.ok(Map.of(
+                "sessions", sessions,
+                "total", sessions.size()
+        ));
+    }
+
+    // ============ 练习模式 API ============
+
+    /**
+     * 创建练习会话
+     */
+    @PostMapping("/practice")
+    public ResponseEntity<Map<String, Object>> createPracticeSession(
+            @RequestHeader(value = "X-User-Id", defaultValue = "default-user") String userId,
+            @RequestBody CreatePracticeRequest request) {
+        log.info("创建练习会话: user={}, mode={}, difficulty={}", userId, request.getMode(), request.getDifficulty());
+
+        PracticeSession session = practiceSessionService.createSession(
+                userId,
+                request.getMode(),
+                request.getDifficulty(),
+                request.getQuestionCount(),
+                request.getFocusAreas()
+        );
+
+        // 启动会话
+        practiceSessionService.startSession(session.getId());
+
+        PracticeQuestion currentQuestion = session.getCurrentQuestion();
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "session_id", session.getId(),
+                "status", "created",
+                "message", "练习会话创建成功",
+                "data", Map.of(
+                        "mode", session.getMode().getCode(),
+                        "difficulty", session.getDifficulty().getCode(),
+                        "total_questions", session.getQuestionCount(),
+                        "current_question", currentQuestion != null ? Map.of(
+                                "id", currentQuestion.getId(),
+                                "content", currentQuestion.getContent(),
+                                "category", currentQuestion.getCategory(),
+                                "hints", currentQuestion.getHints()
+                        ) : null
+                )
+        ));
+    }
+
+    /**
+     * 获取练习会话信息
+     */
+    @GetMapping("/practice/{sessionId}")
+    public ResponseEntity<Map<String, Object>> getPracticeSession(@PathVariable String sessionId) {
+        log.info("获取练习会话: {}", sessionId);
+
+        PracticeSession session = practiceSessionService.getSession(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Practice session not found"));
+
+        PracticeQuestion currentQuestion = session.getCurrentQuestion();
+        PracticeSession.PracticeStats stats = session.getStats();
+
+        return ResponseEntity.ok(Map.of(
+                "session_id", sessionId,
+                "mode", session.getMode().getCode(),
+                "difficulty", session.getDifficulty().getCode(),
+                "progress", session.getProgress(),
+                "stats", Map.of(
+                        "total_questions", stats.getTotalQuestions(),
+                        "answered_questions", stats.getAnsweredQuestions(),
+                        "correct_questions", stats.getCorrectQuestions(),
+                        "accuracy_rate", stats.getAccuracyRate(),
+                        "average_score", stats.getAverageScore()
+                ),
+                "current_question", currentQuestion != null ? Map.of(
+                        "id", currentQuestion.getId(),
+                        "content", currentQuestion.getContent(),
+                        "category", currentQuestion.getCategory(),
+                        "hints", currentQuestion.getHints()
+                ) : null
+        ));
+    }
+
+    /**
+     * 提交练习回答
+     */
+    @PostMapping("/practice/{sessionId}/answer")
+    public ResponseEntity<Map<String, Object>> submitPracticeAnswer(
+            @PathVariable String sessionId,
+            @RequestBody PracticeAnswerRequest request) {
+        log.info("提交练习回答: {}", sessionId);
+
+        Map<String, Object> result = practiceSessionService.submitAnswer(
+                sessionId,
+                request.getAnswer(),
+                request.getDuration()
+        );
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 获取提示
+     */
+    @PostMapping("/practice/{sessionId}/hint")
+    public ResponseEntity<Map<String, Object>> getPracticeHint(@PathVariable String sessionId) {
+        log.info("获取练习提示: {}", sessionId);
+
+        String hint = practiceSessionService.getHint(sessionId);
+
+        return ResponseEntity.ok(Map.of(
+                "hint", hint,
+                "has_more_hints", hint != null
+        ));
+    }
+
+    /**
+     * 完成练习会话
+     */
+    @PostMapping("/practice/{sessionId}/complete")
+    public ResponseEntity<Map<String, Object>> completePracticeSession(@PathVariable String sessionId) {
+        log.info("完成练习会话: {}", sessionId);
+
+        Map<String, Object> result = practiceSessionService.completeSession(sessionId);
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 删除练习会话
+     */
+    @DeleteMapping("/practice/{sessionId}")
+    public ResponseEntity<Map<String, Object>> deletePracticeSession(@PathVariable String sessionId) {
+        log.info("删除练习会话: {}", sessionId);
+
+        boolean success = practiceSessionService.deleteSession(sessionId);
+
+        return ResponseEntity.ok(Map.of(
+                "session_id", sessionId,
+                "status", success ? "deleted" : "error",
+                "message", success ? "练习会话已删除" : "删除失败"
+        ));
+    }
+
+    /**
+     * 生成面试问题参考答案
+     */
+    @PostMapping("/generate-answer")
+    public ResponseEntity<Map<String, Object>> generateInterviewAnswer(
+            @RequestBody GenerateAnswerRequest request) {
+        log.info("生成面试答案: {}", request.getQuestion());
+
+        String answer = practiceSessionService.generateAnswer(
+                request.getQuestion(),
+                request.getCategory(),
+                request.getKeyPoints(),
+                request.getProjectContext()
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "answer", answer
+        ));
+    }
+
     // ============ 旧版 API (保持兼容) ============
 
     /**
@@ -248,5 +427,27 @@ public class InterviewController {
     public static class SubmitAnswerRequest {
         private String questionId;
         private String answer;
+    }
+
+    @lombok.Data
+    public static class CreatePracticeRequest {
+        private String mode = "mixed"; // system_design, coding, behavioral, technical, mixed
+        private String difficulty = "intermediate"; // beginner, intermediate, advanced, expert
+        private int questionCount = 5;
+        private List<String> focusAreas = List.of();
+    }
+
+    @lombok.Data
+    public static class PracticeAnswerRequest {
+        private String answer;
+        private Integer duration; // 回答时长（秒）
+    }
+
+    @lombok.Data
+    public static class GenerateAnswerRequest {
+        private String question;
+        private String category;
+        private List<String> keyPoints = List.of();
+        private Map<String, Object> projectContext;
     }
 }

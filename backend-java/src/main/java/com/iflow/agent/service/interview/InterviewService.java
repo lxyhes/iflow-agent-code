@@ -4,6 +4,7 @@ import com.iflow.agent.domain.interview.entity.InterviewSession;
 import com.iflow.agent.domain.interview.enums.InterviewStatus;
 import com.iflow.agent.dto.interview.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -61,4 +62,9 @@ public interface InterviewService {
      * 导出面试报告
      */
     String exportInterviewReport(String sessionId, String format);
+
+    /**
+     * 列表面试会话
+     */
+    List<Map<String, Object>> listSessions(String candidateId, String status, int limit);
 }

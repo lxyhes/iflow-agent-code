@@ -214,6 +214,55 @@ public class RagService {
         indexCache.remove(projectPath);
     }
 
+    /**
+     * 清除 RAG 缓存
+     */
+    public void clearCache() {
+        log.info("Clearing RAG cache");
+        indexCache.clear();
+    }
+
+    /**
+     * 添加文档到 RAG 知识库
+     */
+    public Map<String, Object> addDocument(String projectPath, String fileName, String content, String fileType) {
+        log.info("Adding document to RAG: project={}, file={}", projectPath, fileName);
+
+        ProjectIndex index = indexCache.computeIfAbsent(projectPath, ProjectIndex::new);
+
+        // 简单的分块策略
+        List<DocumentChunk> chunks = new ArrayList<>();
+        int chunkSize = 1000;
+        int overlap = 200;
+
+        for (int i = 0; i < content.length(); i += chunkSize - overlap) {
+            int end = Math.min(i + chunkSize, content.length());
+            String chunkContent = content.substring(i, end);
+
+            chunks.add(new DocumentChunk(
+                    UUID.randomUUID().toString(),
+                    fileName + "_" + chunks.size(),
+                    chunkContent,
+                    chunks.size()
+            ));
+
+            if (end == content.length()) {
+                break;
+            }
+        }
+
+        index.addDocument(fileName, chunks);
+        index.setLastIndexed(new Date());
+
+        return Map.of(
+                "success", true,
+                "message", "文档已添加到RAG知识库",
+                "file_name", fileName,
+                "file_type", fileType,
+                "chunks_added", chunks.size()
+        );
+    }
+
     // ========== 私有方法 ==========
 
     private List<Path> collectFiles(Path root) throws IOException {

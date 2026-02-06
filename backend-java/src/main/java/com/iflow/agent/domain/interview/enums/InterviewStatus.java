@@ -5,6 +5,7 @@ package com.iflow.agent.domain.interview.enums;
  */
 public enum InterviewStatus {
     PENDING("pending", "待开始"),
+    CREATED("created", "已创建"),
     IN_PROGRESS("in_progress", "进行中"),
     PAUSED("paused", "已暂停"),
     COMPLETED("completed", "已完成"),

@@ -311,4 +311,45 @@ public class InterviewServiceImpl implements InterviewService {
 
         return sb.toString();
     }
+
+    @Override
+    public List<Map<String, Object>> listSessions(String candidateId, String status, int limit) {
+        log.info("Listing interview sessions: candidateId={}, status={}, limit={}", candidateId, status, limit);
+
+        List<InterviewSession> sessions;
+        if (candidateId != null && !candidateId.isEmpty()) {
+            sessions = sessionRepository.findByUserIdOrderByCreatedAtDesc(candidateId);
+        } else {
+            sessions = sessionRepository.findAll();
+        }
+
+        // 按状态过滤
+        if (status != null && !status.isEmpty()) {
+            try {
+                InterviewStatus statusEnum = InterviewStatus.valueOf(status.toUpperCase());
+                sessions = sessions.stream()
+                        .filter(s -> s.getStatus() == statusEnum)
+                        .toList();
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid status filter: {}", status);
+            }
+        }
+
+        // 限制数量
+        if (sessions.size() > limit) {
+            sessions = sessions.subList(0, limit);
+        }
+
+        return sessions.stream()
+                .map(session -> Map.<String, Object>of(
+                        "session_id", session.getId(),
+                        "candidate_name", session.getCandidateName(),
+                        "position", session.getPosition(),
+                        "status", session.getStatus().name(),
+                        "created_at", session.getCreatedAt(),
+                        "started_at", session.getStartedAt(),
+                        "ended_at", session.getEndedAt()
+                ))
+                .toList();
+    }
 }

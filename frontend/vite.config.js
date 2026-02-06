@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
-  // Target our Python FastAPI backend
-  const BACKEND_URL = 'http://localhost:8000';
-  const BACKEND_WS_URL = 'ws://localhost:8000';
+  // Target our Java backend
+  const BACKEND_URL = 'http://localhost:8080';
+  const BACKEND_WS_URL = 'ws://localhost:8080';
 
   return {
     plugins: [react()],
@@ -57,7 +57,7 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: false
         },
-        // 后端 Python FastAPI 路由（其他所有 /api 请求）
+        // Java 后端 API 路由（其他所有 /api 请求）
         '/api': {
           target: BACKEND_URL,
           changeOrigin: true,

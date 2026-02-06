@@ -1,5 +1,12 @@
 package com.iflow.agent.controller;
 
+import com.iflow.agent.domain.database.repository.DatabaseConfigRepository;
+import com.iflow.agent.domain.document.repository.DocumentVersionRepository;
+import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
+import com.iflow.agent.domain.interview.repository.PracticeSessionRepository;
+import com.iflow.agent.domain.resume.repository.ResumeRepository;
+import com.iflow.agent.domain.workflow.repository.WorkflowExecutionRepository;
+import com.iflow.agent.domain.workflow.repository.WorkflowRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -9,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.time.Instant;
 import java.util.List;
@@ -24,6 +32,13 @@ import java.util.Map;
 public class SystemController {
 
     private final Instant startTime = Instant.now();
+    private final ResumeRepository resumeRepository;
+    private final InterviewSessionRepository interviewSessionRepository;
+    private final PracticeSessionRepository practiceSessionRepository;
+    private final WorkflowRepository workflowRepository;
+    private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final DocumentVersionRepository documentVersionRepository;
+    private final DatabaseConfigRepository databaseConfigRepository;
 
     /**
      * 健康检查
@@ -125,18 +140,50 @@ public class SystemController {
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> stats() {
         Runtime runtime = Runtime.getRuntime();
+        RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+        MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+
+        // 数据库统计
+        long resumeCount = resumeRepository.count();
+        long interviewCount = interviewSessionRepository.count();
+        long practiceCount = practiceSessionRepository.count();
+        long workflowCount = workflowRepository.count();
+        long executionCount = workflowExecutionRepository.count();
+        long docVersionCount = documentVersionRepository.count();
+        long dbConfigCount = databaseConfigRepository.count();
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "stats", Map.of(
+                        "timestamp", Instant.now().toString(),
                         "uptime", getUptime(),
+                        "jvm", Map.of(
+                                "uptime_ms", runtimeMXBean.getUptime(),
+                                "start_time", runtimeMXBean.getStartTime(),
+                                "vm_name", runtimeMXBean.getVmName(),
+                                "vm_version", runtimeMXBean.getVmVersion()
+                        ),
                         "memory", Map.of(
                                 "total", runtime.totalMemory(),
                                 "free", runtime.freeMemory(),
                                 "used", runtime.totalMemory() - runtime.freeMemory(),
-                                "max", runtime.maxMemory()
+                                "max", runtime.maxMemory(),
+                                "heap_used", memoryMXBean.getHeapMemoryUsage().getUsed(),
+                                "heap_max", memoryMXBean.getHeapMemoryUsage().getMax(),
+                                "non_heap_used", memoryMXBean.getNonHeapMemoryUsage().getUsed()
                         ),
-                        "processors", runtime.availableProcessors()
+                        "processors", runtime.availableProcessors(),
+                        "database_stats", Map.of(
+                                "resumes", resumeCount,
+                                "interviews", interviewCount,
+                                "practice_sessions", practiceCount,
+                                "workflows", workflowCount,
+                                "workflow_executions", executionCount,
+                                "document_versions", docVersionCount,
+                                "database_configs", dbConfigCount
+                        ),
+                        "total_records", resumeCount + interviewCount + practiceCount +
+                                workflowCount + executionCount + docVersionCount + dbConfigCount
                 )
         ));
     }

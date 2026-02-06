@@ -31,6 +31,8 @@ public interface ResumeService {
 
     void deleteWorkExperience(Long expId);
 
+    void updateWorkExperienceOrder(String resumeId, List<Long> order);
+
     // ========== 教育经历 ==========
     Education addEducation(String resumeId, Education education);
 

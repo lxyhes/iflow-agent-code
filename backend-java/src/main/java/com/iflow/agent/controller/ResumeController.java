@@ -1,6 +1,7 @@
 package com.iflow.agent.controller;
 
 import com.iflow.agent.domain.resume.entity.*;
+import com.iflow.agent.domain.resume.service.ResumeAiService;
 import com.iflow.agent.domain.resume.service.ResumeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class ResumeController {
 
     private final ResumeService resumeService;
+    private final ResumeAiService resumeAiService;
 
     // ========== 简历基本操作 ==========
 
@@ -89,18 +91,34 @@ public class ResumeController {
         return ResponseEntity.ok(Map.of("success", true, "data", added));
     }
 
-    @PutMapping("/work-experience/{expId}")
+    @PutMapping("/{id}/work-experience/{expId}")
     public ResponseEntity<Map<String, Object>> updateWorkExperience(
+            @PathVariable String id,
             @PathVariable Long expId,
             @RequestBody WorkExperience experience) {
         WorkExperience updated = resumeService.updateWorkExperience(expId, experience);
         return ResponseEntity.ok(Map.of("success", true, "data", updated));
     }
 
-    @DeleteMapping("/work-experience/{expId}")
-    public ResponseEntity<Map<String, Object>> deleteWorkExperience(@PathVariable Long expId) {
+    @DeleteMapping("/{id}/work-experience/{expId}")
+    public ResponseEntity<Map<String, Object>> deleteWorkExperience(
+            @PathVariable String id,
+            @PathVariable Long expId) {
         resumeService.deleteWorkExperience(expId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Work experience deleted"));
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        return ResponseEntity.ok(Map.of("success", true, "data", resume));
+    }
+
+    @PutMapping("/{id}/work-experience-order")
+    public ResponseEntity<Map<String, Object>> updateWorkExperienceOrder(
+            @PathVariable String id,
+            @RequestBody List<Long> order) {
+        // 更新工作经历排序
+        resumeService.updateWorkExperienceOrder(id, order);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        return ResponseEntity.ok(Map.of("success", true, "data", resume));
     }
 
     // ========== 教育经历 ==========
@@ -113,18 +131,23 @@ public class ResumeController {
         return ResponseEntity.ok(Map.of("success", true, "data", added));
     }
 
-    @PutMapping("/education/{eduId}")
+    @PutMapping("/{id}/education/{eduId}")
     public ResponseEntity<Map<String, Object>> updateEducation(
+            @PathVariable String id,
             @PathVariable Long eduId,
             @RequestBody Education education) {
         Education updated = resumeService.updateEducation(eduId, education);
         return ResponseEntity.ok(Map.of("success", true, "data", updated));
     }
 
-    @DeleteMapping("/education/{eduId}")
-    public ResponseEntity<Map<String, Object>> deleteEducation(@PathVariable Long eduId) {
+    @DeleteMapping("/{id}/education/{eduId}")
+    public ResponseEntity<Map<String, Object>> deleteEducation(
+            @PathVariable String id,
+            @PathVariable Long eduId) {
         resumeService.deleteEducation(eduId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Education deleted"));
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        return ResponseEntity.ok(Map.of("success", true, "data", resume));
     }
 
     // ========== 技能 ==========
@@ -137,18 +160,23 @@ public class ResumeController {
         return ResponseEntity.ok(Map.of("success", true, "data", added));
     }
 
-    @PutMapping("/skills/{skillId}")
+    @PutMapping("/{id}/skills/{skillId}")
     public ResponseEntity<Map<String, Object>> updateSkill(
+            @PathVariable String id,
             @PathVariable Long skillId,
             @RequestBody Skill skill) {
         Skill updated = resumeService.updateSkill(skillId, skill);
         return ResponseEntity.ok(Map.of("success", true, "data", updated));
     }
 
-    @DeleteMapping("/skills/{skillId}")
-    public ResponseEntity<Map<String, Object>> deleteSkill(@PathVariable Long skillId) {
+    @DeleteMapping("/{id}/skills/{skillId}")
+    public ResponseEntity<Map<String, Object>> deleteSkill(
+            @PathVariable String id,
+            @PathVariable Long skillId) {
         resumeService.deleteSkill(skillId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Skill deleted"));
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        return ResponseEntity.ok(Map.of("success", true, "data", resume));
     }
 
     // ========== 项目经历 ==========
@@ -161,22 +189,42 @@ public class ResumeController {
         return ResponseEntity.ok(Map.of("success", true, "data", added));
     }
 
-    @PutMapping("/projects/{projectId}")
+    @PutMapping("/{id}/projects/{projectId}")
     public ResponseEntity<Map<String, Object>> updateProject(
+            @PathVariable String id,
             @PathVariable Long projectId,
             @RequestBody Project project) {
         Project updated = resumeService.updateProject(projectId, project);
         return ResponseEntity.ok(Map.of("success", true, "data", updated));
     }
 
-    @DeleteMapping("/projects/{projectId}")
-    public ResponseEntity<Map<String, Object>> deleteProject(@PathVariable Long projectId) {
+    @DeleteMapping("/{id}/projects/{projectId}")
+    public ResponseEntity<Map<String, Object>> deleteProject(
+            @PathVariable String id,
+            @PathVariable Long projectId) {
         resumeService.deleteProject(projectId);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Project deleted"));
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        return ResponseEntity.ok(Map.of("success", true, "data", resume));
     }
 
     // ========== AI 功能 ==========
 
+    /**
+     * AI深度分析简历
+     */
+    @PostMapping("/{id}/ai-analyze")
+    public ResponseEntity<Map<String, Object>> aiAnalyzeResume(@PathVariable String id) {
+        log.info("AI分析简历: {}", id);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        Map<String, Object> result = resumeAiService.aiAnalyzeResume(resume);
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * AI优化简历
+     */
     @PostMapping("/{id}/optimize")
     public ResponseEntity<Map<String, Object>> optimizeResume(
             @PathVariable String id,
@@ -185,6 +233,70 @@ public class ResumeController {
         return ResponseEntity.ok(Map.of("success", true, "data", result));
     }
 
+    /**
+     * 简历与职位匹配分析
+     */
+    @PostMapping("/{id}/match-job")
+    public ResponseEntity<Map<String, Object>> matchJob(
+            @PathVariable String id,
+            @RequestBody JobMatchRequest request) {
+        String result = resumeService.matchJob(id, request.getJobDescription());
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * 根据AI诊断自动重写简历
+     */
+    @PostMapping("/{id}/rewrite")
+    public ResponseEntity<Map<String, Object>> rewriteResume(
+            @PathVariable String id,
+            @RequestBody RewriteRequest request) {
+        log.info("重写简历: {}", id);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        Map<String, Object> result = resumeAiService.rewriteResume(resume, request.getHealthAnalysis());
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * AI简历健康度检查
+     */
+    @PostMapping("/{id}/health-check")
+    public ResponseEntity<Map<String, Object>> healthCheck(@PathVariable String id) {
+        log.info("简历健康度检查: {}", id);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        Map<String, Object> result = resumeAiService.healthCheck(resume);
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * AI排版检查
+     */
+    @PostMapping("/{id}/layout-check")
+    public ResponseEntity<Map<String, Object>> layoutCheck(@PathVariable String id) {
+        log.info("简历排版检查: {}", id);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        Map<String, Object> result = resumeAiService.layoutCheck(resume);
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * AI简历诊断
+     */
+    @PostMapping("/{id}/diagnose")
+    public ResponseEntity<Map<String, Object>> diagnoseResume(@PathVariable String id) {
+        log.info("简历诊断: {}", id);
+        Resume resume = resumeService.getResume(id)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        Map<String, Object> result = resumeAiService.diagnoseResume(resume);
+        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    /**
+     * 生成求职信
+     */
     @PostMapping("/{id}/cover-letter")
     public ResponseEntity<Map<String, Object>> generateCoverLetter(
             @PathVariable String id,
@@ -195,15 +307,91 @@ public class ResumeController {
                 request.getPosition(),
                 request.getJobDescription()
         );
-        return ResponseEntity.ok(Map.of("success", true, "data", result));
+        return ResponseEntity.ok(Map.of("success", true, "data", Map.of("cover_letter", result)));
     }
 
-    @PostMapping("/{id}/match-job")
-    public ResponseEntity<Map<String, Object>> matchJob(
-            @PathVariable String id,
-            @RequestBody JobMatchRequest request) {
-        String result = resumeService.matchJob(id, request.getJobDescription());
-        return ResponseEntity.ok(Map.of("success", true, "data", result));
+    // ========== 模板相关 ==========
+
+    /**
+     * 获取简历模板列表
+     */
+    @GetMapping("/templates/list")
+    public ResponseEntity<Map<String, Object>> getTemplates(
+            @RequestParam(required = false) String category) {
+        log.info("获取简历模板列表, category: {}", category);
+        // 返回内置模板列表
+        List<Map<String, Object>> templates = List.of(
+                Map.of("id", "modern", "name", "现代风格", "description", "简洁现代的简历模板", "category", "通用", "preview", "/templates/modern.png", "is_builtin", true),
+                Map.of("id", "classic", "name", "经典风格", "description", "传统经典的简历模板", "category", "通用", "preview", "/templates/classic.png", "is_builtin", true),
+                Map.of("id", "creative", "name", "创意风格", "description", "适合设计师的创意模板", "category", "设计", "preview", "/templates/creative.png", "is_builtin", true),
+                Map.of("id", "tech", "name", "技术风格", "description", "适合技术人员的简历模板", "category", "技术", "preview", "/templates/tech.png", "is_builtin", true),
+                Map.of("id", "minimal", "name", "极简风格", "description", "极简主义的简历模板", "category", "通用", "preview", "/templates/minimal.png", "is_builtin", true)
+        );
+        return ResponseEntity.ok(Map.of("success", true, "data", templates));
+    }
+
+    /**
+     * 获取模板分类列表
+     */
+    @GetMapping("/templates/categories")
+    public ResponseEntity<Map<String, Object>> getTemplateCategories() {
+        log.info("获取模板分类列表");
+        List<Map<String, Object>> categories = List.of(
+                Map.of("id", "general", "name", "通用", "count", 3),
+                Map.of("id", "tech", "name", "技术", "count", 1),
+                Map.of("id", "design", "name", "设计", "count", 1),
+                Map.of("id", "business", "name", "商务", "count", 0)
+        );
+        return ResponseEntity.ok(Map.of("success", true, "data", categories));
+    }
+
+    /**
+     * 获取模板详情
+     */
+    @GetMapping("/templates/{templateId}")
+    public ResponseEntity<Map<String, Object>> getTemplateDetail(@PathVariable String templateId) {
+        log.info("获取模板详情: {}", templateId);
+        Map<String, Object> template = Map.of(
+                "id", templateId,
+                "name", getTemplateName(templateId),
+                "description", "简历模板",
+                "category", "通用",
+                "preview", "/templates/" + templateId + ".png",
+                "is_builtin", true,
+                "config", Map.of(
+                        "font_family", "Arial",
+                        "font_size", "12pt",
+                        "color_scheme", "blue",
+                        "layout", "single_column"
+                )
+        );
+        return ResponseEntity.ok(Map.of("success", true, "data", template));
+    }
+
+    /**
+     * 获取热门模板列表
+     */
+    @GetMapping("/templates/popular/list")
+    public ResponseEntity<Map<String, Object>> getPopularTemplates(
+            @RequestParam(defaultValue = "5") int limit) {
+        log.info("获取热门模板列表, limit: {}", limit);
+        List<Map<String, Object>> templates = List.of(
+                Map.of("id", "modern", "name", "现代风格", "description", "简洁现代的简历模板", "category", "通用", "preview", "/templates/modern.png", "is_builtin", true, "usage_count", 1250),
+                Map.of("id", "tech", "name", "技术风格", "description", "适合技术人员的简历模板", "category", "技术", "preview", "/templates/tech.png", "is_builtin", true, "usage_count", 980),
+                Map.of("id", "classic", "name", "经典风格", "description", "传统经典的简历模板", "category", "通用", "preview", "/templates/classic.png", "is_builtin", true, "usage_count", 850)
+        );
+        return ResponseEntity.ok(Map.of("success", true, "data", templates));
+    }
+
+    private String getTemplateName(String templateId) {
+        return switch (templateId) {
+            case "modern" -> "现代风格";
+            case "classic" -> "经典风格";
+            case "creative" -> "创意风格";
+            case "tech" -> "技术风格";
+            case "minimal" -> "极简风格";
+            default -> "默认模板";
+        };
     }
 
     // ========== Request DTOs ==========
@@ -237,5 +425,10 @@ public class ResumeController {
     @lombok.Data
     public static class JobMatchRequest {
         private String jobDescription;
+    }
+
+    @lombok.Data
+    public static class RewriteRequest {
+        private Map<String, Object> healthAnalysis;
     }
 }

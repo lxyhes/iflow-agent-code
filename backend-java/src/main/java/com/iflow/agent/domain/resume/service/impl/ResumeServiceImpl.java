@@ -9,8 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -205,6 +204,52 @@ public class ResumeServiceImpl implements ResumeService {
     @Transactional
     public void deleteProject(Long projectId) {
         log.info("Deleting project: {}", projectId);
+    }
+
+    @Override
+    @Transactional
+    public void updateWorkExperienceOrder(String resumeId, List<Long> order) {
+        log.info("Updating work experience order for resume: {}, order: {}", resumeId, order);
+        Resume resume = resumeRepository.findById(resumeId)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + resumeId));
+
+        List<WorkExperience> experiences = resume.getWorkExperiences();
+        if (experiences == null || experiences.isEmpty()) {
+            return;
+        }
+
+        // 创建ID到索引的映射
+        Map<Long, Integer> idToIndex = new HashMap<>();
+        for (int i = 0; i < experiences.size(); i++) {
+            WorkExperience exp = experiences.get(i);
+            if (exp.getId() != null) {
+                idToIndex.put(exp.getId(), i);
+            }
+        }
+
+        // 根据order重新排序
+        List<WorkExperience> sortedExperiences = new ArrayList<>();
+        for (Long expId : order) {
+            Integer index = idToIndex.get(expId);
+            if (index != null) {
+                sortedExperiences.add(experiences.get(index));
+            }
+        }
+
+        // 添加未在order中指定的工作经历
+        for (WorkExperience exp : experiences) {
+            if (exp.getId() == null || !order.contains(exp.getId())) {
+                sortedExperiences.add(exp);
+            }
+        }
+
+        // 更新排序索引
+        for (int i = 0; i < sortedExperiences.size(); i++) {
+            sortedExperiences.get(i).setSortOrder(i);
+        }
+
+        resume.setWorkExperiences(sortedExperiences);
+        resumeRepository.save(resume);
     }
 
     @Override
