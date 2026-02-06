@@ -118,7 +118,7 @@ function FileTree({ selectedProject, onFileSelect, onImageSelect, hideHeader = f
       }
       
       const data = await response.json();
-      setFiles(data);
+      setFiles(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('❌ Error fetching files:', error);
       setFiles([]);

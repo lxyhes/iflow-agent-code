@@ -6,6 +6,7 @@ import com.iflow.agent.domain.project.entity.SessionMessage;
 import com.iflow.agent.domain.project.repository.ProjectRepository;
 import com.iflow.agent.domain.project.repository.ProjectSessionRepository;
 import com.iflow.agent.domain.project.repository.SessionMessageRepository;
+import com.iflow.agent.service.file.FileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,7 @@ public class ProjectManagementController {
     private final ProjectRepository projectRepository;
     private final ProjectSessionRepository sessionRepository;
     private final SessionMessageRepository messageRepository;
+    private final FileService fileService;
 
     // ========== 项目管理 ==========
 
@@ -320,7 +322,7 @@ public class ProjectManagementController {
      * 获取项目文件列表
      */
     @GetMapping("/{projectName}/files")
-    public ResponseEntity<Map<String, Object>> getProjectFiles(@PathVariable String projectName) {
+    public ResponseEntity<List<com.iflow.agent.dto.file.FileTreeNode>> getProjectFiles(@PathVariable String projectName) {
         log.info("获取项目文件: {}", projectName);
         
         WorkspaceProject project = projectRepository.findByName(projectName)
@@ -328,36 +330,13 @@ public class ProjectManagementController {
         
         File projectDir = new File(project.getPath());
         if (!projectDir.exists() || !projectDir.isDirectory()) {
-            return ResponseEntity.ok(Map.of(
-                    "files", List.of(),
-                    "directories", List.of()
-            ));
+            return ResponseEntity.ok(List.of());
         }
         
-        List<Map<String, Object>> files = new ArrayList<>();
-        List<Map<String, Object>> directories = new ArrayList<>();
+        // 使用 FileService 构建文件树
+        List<com.iflow.agent.dto.file.FileTreeNode> fileTree = fileService.getTree(project.getPath());
         
-        File[] items = projectDir.listFiles();
-        if (items != null) {
-            for (File item : items) {
-                Map<String, Object> info = new HashMap<>();
-                info.put("name", item.getName());
-                info.put("path", item.getAbsolutePath());
-                info.put("size", item.length());
-                info.put("lastModified", item.lastModified());
-                
-                if (item.isDirectory()) {
-                    directories.add(info);
-                } else {
-                    files.add(info);
-                }
-            }
-        }
-        
-        return ResponseEntity.ok(Map.of(
-                "files", files,
-                "directories", directories
-        ));
+        return ResponseEntity.ok(fileTree);
     }
 
     /**
