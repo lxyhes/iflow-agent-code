@@ -2,17 +2,15 @@ package com.iflow.agent.service.ai;
 
 import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.query.IFlowQuery;
-import cn.iflow.sdk.types.config.IFlowOptions;
-import cn.iflow.sdk.types.messages.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
 
 /**
  * iFlow 服务封装类
@@ -33,12 +31,13 @@ public class IFlowService {
     public String querySync(String message) {
         log.debug("iFlow sync query: {}", message);
         try {
-            List<Message> response = IFlowQuery.querySync(message);
+            List<cn.iflow.sdk.types.messages.Message> response = IFlowQuery.querySync(message);
             StringBuilder result = new StringBuilder();
 
-            for (Message msg : response) {
-                if (msg instanceof AssistantMessage) {
-                    AssistantMessage assistantMsg = (AssistantMessage) msg;
+            for (cn.iflow.sdk.types.messages.Message msg : response) {
+                if (msg instanceof cn.iflow.sdk.types.messages.AssistantMessage) {
+                    cn.iflow.sdk.types.messages.AssistantMessage assistantMsg = 
+                        (cn.iflow.sdk.types.messages.AssistantMessage) msg;
                     result.append(assistantMsg.getChunk().getText());
                 }
             }
@@ -58,65 +57,58 @@ public class IFlowService {
     public Flux<String> queryStream(String message, String model) {
         log.debug("iFlow stream query with model {}: {}", model, message);
 
-        // 构建包含模型参数的 metadata
-        Map<String, Object> metadata = Map.of("model", model != null ? model : "glm-4");
-
-        // 创建包含 metadata 的 IFlowOptions
-        IFlowOptions options = IFlowOptions.builder()
-                .url("ws://localhost:8090/acp")
-                .autoStartProcess(true)
-                .metadata(metadata)
-                .build();
-
-        return Mono.fromCallable(() -> {
-                    // 使用自定义 options 创建临时客户端
-                    IFlowClient client = IFlowClient.create(options);
-                    client.connect().block();
-                    client.sendMessage(message).block();
-                    return client;
-                })
-                .flatMapMany(c -> c.receiveMessages()
-                        .takeUntil(msg -> msg instanceof TaskFinishMessage)
-                        .filter(msg -> msg instanceof AssistantMessage)
-                        .map(msg -> {
-                            AssistantMessage assistantMsg = (AssistantMessage) msg;
-                            return assistantMsg.getChunk().getText();
-                        })
-                        .filter(text -> text != null && !text.isEmpty())
+        // 使用 subprocess 调用 iFlow CLI，传递 --model 参数
+        String actualModel = model != null ? model : "glm-4";
+        
+        // 构建命令
+        String iflowPath = System.getenv().getOrDefault("IFLOW_PATH", "iflow");
+        String escapedMessage = message.replace("\"", "\\\"").replace("\n", "\\n");
+        String command = String.format("%s -p \"%s\" --model \"%s\" -y", 
+            iflowPath, escapedMessage, actualModel);
+        
+        log.info("Running iFlow CLI with model {}: {}", actualModel, command);
+        
+        return Flux.create(sink -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder("sh", "-c", command);
+                pb.redirectErrorStream(true);
+                
+                Process process = pb.start();
+                BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream())
                 );
-    }
-
-    /**
-     * 使用客户端进行完整对话
-     * @param message 用户消息
-     * @return CompletableFuture 包含完整响应
-     */
-    public CompletableFuture<String> chat(String message) {
-        log.debug("iFlow chat: {}", message);
-
-        return CompletableFuture.supplyAsync(() -> {
-            StringBuilder response = new StringBuilder();
-
-            try (IFlowClient client = IFlowClient.create()) {
-                client.connect().block();
-                client.sendMessage(message).block();
-
-                client.receiveMessages()
-                        .doOnNext(msg -> {
-                            if (msg instanceof AssistantMessage) {
-                                AssistantMessage assistantMsg = (AssistantMessage) msg;
-                                response.append(assistantMsg.getChunk().getText());
-                            }
-                        })
-                        .doOnError(error -> log.error("iFlow receive error", error))
-                        .blockLast();
-
+                
+                String line;
+                StringBuilder output = new StringBuilder();
+                Set<String> filteredPrefixes = Set.of(
+                    "[ACP]", "🚀", "Checking", "INFO:", "DEBUG:", "Attempt",
+                    "Error when", "<Execution Info>", "session-id", 
+                    "conversation-id", "assistantRounds", "executionTimeMs", "tokenUsage"
+                );
+                
+                while ((line = reader.readLine()) != null) {
+                    // 过滤日志行
+                    if (filteredPrefixes.stream().noneMatch(line::startsWith)) {
+                        if (!line.trim().isEmpty()) {
+                            output.append(line).append("\n");
+                            sink.next(line + "\n");
+                        }
+                    }
+                }
+                
+                int exitCode = process.waitFor();
+                if (exitCode != 0) {
+                    log.error("iFlow CLI exited with code: {}", exitCode);
+                    sink.error(new RuntimeException("iFlow CLI failed with exit code: " + exitCode));
+                } else {
+                    log.info("iFlow CLI completed successfully");
+                    sink.complete();
+                }
+                
             } catch (Exception e) {
-                log.error("iFlow chat failed", e);
-                return "Error: " + e.getMessage();
+                log.error("Error running iFlow CLI", e);
+                sink.error(e);
             }
-
-            return response.toString();
         });
     }
 
@@ -125,7 +117,6 @@ public class IFlowService {
      */
     public boolean isConnected() {
         try {
-            // 尝试连接来验证状态
             iFlowClient.connect().block();
             return true;
         } catch (Exception e) {

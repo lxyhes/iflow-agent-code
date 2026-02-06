@@ -49,10 +49,9 @@ public class IFlowController {
      * 异步对话
      */
     @PostMapping("/chat")
-    public CompletableFuture<ResponseEntity<Map<String, String>>> chat(@RequestBody QueryRequest request) {
+    public Flux<String> chat(@RequestBody QueryRequest request) {
         log.debug("iFlow chat request: {}", request.getMessage());
-        return iFlowService.chat(request.getMessage())
-                .thenApply(response -> ResponseEntity.ok(Map.of("response", response)));
+        return iFlowService.queryStream(request.getMessage(), request.getModel());
     }
 
     /**
