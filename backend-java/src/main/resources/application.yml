@@ -43,18 +43,8 @@ spring:
   devtools:
     restart:
       enabled: true
-      additional-exclude:
-        - static/**
-        - public/**
-        - templates/**
-        - **/*.html
-        - **/*.css
-        - **/*.js
     livereload:
       enabled: true
-      port: 35729
-    remote:
-      secret: mysecret
 
   # Spring AI Alibaba Configuration - 可选配置
   # 如需使用 DashScope，请设置 ALIYUN_DASHSCOPE_API_KEY 环境变量
