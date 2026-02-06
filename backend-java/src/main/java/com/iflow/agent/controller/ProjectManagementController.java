@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -280,7 +281,26 @@ public class ProjectManagementController {
                 return ResponseEntity.status(404).body(Map.of("error", "File not found"));
             }
             
-            String content = Files.readString(path);
+            // 检查文件大小，过大不读取
+            long fileSize = file.length();
+            if (fileSize > 10 * 1024 * 1024) { // 10MB
+                return ResponseEntity.status(400).body(Map.of("error", "File too large (>10MB)"));
+            }
+            
+            String content;
+            try {
+                content = Files.readString(path, StandardCharsets.UTF_8);
+            } catch (java.nio.charset.MalformedInputException e) {
+                // 二进制文件，返回特殊标记
+                log.warn("Binary file detected: {}, size: {}", path, fileSize);
+                return ResponseEntity.ok(Map.of(
+                        "content", "[Binary Content - Cannot display]",
+                        "path", path.toString(),
+                        "isBinary", true,
+                        "size", fileSize
+                ));
+            }
+            
             return ResponseEntity.ok(Map.of(
                     "content", content,
                     "path", path.toString()
