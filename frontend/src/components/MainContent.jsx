@@ -554,7 +554,7 @@ function MainContent({
                   </ErrorBoundary>
                 </div>          )}
             {activeTab === 'interview' && (
-                            <div className="h-full w-full overflow-visible">
+                            <div className="h-full w-full overflow-hidden">
                               <ErrorBoundary showDetails={true}>
                                 <Suspense fallback={null}>
                                   <InterviewPreparation selectedProject={selectedProject} />
@@ -563,7 +563,7 @@ function MainContent({
                             </div>
                       )}
             {activeTab === 'resume' && (
-                            <div className="h-full w-full overflow-visible">
+                            <div className="h-full w-full overflow-hidden">
                               <ErrorBoundary showDetails={true}>
                                 <Suspense fallback={null}>
                                   <ResumeManager />

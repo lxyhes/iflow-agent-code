@@ -448,26 +448,49 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         return sb.toString();
     }
 
+    /**
+     * 清理 AI 响应，去除 Markdown 代码块标记
+     */
+    private String cleanAiResponse(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            return "";
+        }
+        String cleaned = response.trim();
+        // 去除 Markdown 代码块标记
+        if (cleaned.startsWith("```json")) {
+            cleaned = cleaned.substring(7);
+        } else if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(3);
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3);
+        }
+        return cleaned.trim();
+    }
+
     private int extractScore(String response, String scoreType) {
         try {
+            // 清理响应中的 Markdown 标记
+            String cleanedResponse = cleanAiResponse(response);
+            
             // 首先检查响应是否看起来像 JSON 格式
-            if (!response.trim().startsWith("{") || !response.trim().endsWith("}")) {
-                log.warn("AI response is not in JSON format: {}", response.substring(0, Math.min(200, response.length())));
+            if (!cleanedResponse.startsWith("{") || !cleanedResponse.endsWith("}")) {
+                log.warn("AI response is not in JSON format: {}", cleanedResponse.substring(0, Math.min(200, cleanedResponse.length())));
                 return -1; // 返回 -1 表示响应格式不正确
             }
 
             // 尝试从JSON中提取分数
-            if (response.contains("\"" + scoreType + "\":")) {
-                int start = response.indexOf("\"" + scoreType + "\":") + scoreType.length() + 3;
-                int end = response.indexOf(",", start);
-                if (end == -1) end = response.indexOf("}", start);
-                String scoreStr = response.substring(start, end).trim();
+            if (cleanedResponse.contains("\"" + scoreType + "\":")) {
+                int start = cleanedResponse.indexOf("\"" + scoreType + "\":") + scoreType.length() + 3;
+                int end = cleanedResponse.indexOf(",", start);
+                if (end == -1) end = cleanedResponse.indexOf("}", start);
+                String scoreStr = cleanedResponse.substring(start, end).trim();
                 return Integer.parseInt(scoreStr.replaceAll("[^0-9]", ""));
             }
             // 尝试从文本中提取
-            if (response.contains(scoreType)) {
-                int idx = response.indexOf(scoreType);
-                String sub = response.substring(idx, Math.min(idx + 50, response.length()));
+            if (cleanedResponse.contains(scoreType)) {
+                int idx = cleanedResponse.indexOf(scoreType);
+                String sub = cleanedResponse.substring(idx, Math.min(idx + 50, cleanedResponse.length()));
                 String[] parts = sub.split("[:：]");
                 if (parts.length > 1) {
                     String num = parts[1].replaceAll("[^0-9]", "").trim();

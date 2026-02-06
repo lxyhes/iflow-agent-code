@@ -92,7 +92,8 @@ if [ ! -d "target/classes" ] || [ -n "$(find src -newer target/classes -type f 2
 fi
 
 # 启动 Java 后端（支持热加载）
-nohup mvn spring-boot:run -Dspring-boot.run.fork=false > /tmp/backend.log 2>&1 &
+export MAVEN_OPTS="-Dspring.devtools.restart.enabled=true -Dspring.devtools.livereload.enabled=true"
+nohup mvn spring-boot:run > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 cd "$BASE_DIR"
 echo "   PID: $BACKEND_PID"

@@ -5,7 +5,7 @@
  * 采用现代化设计语言，注重留白、层次和视觉节奏
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   Download, 
   FileText, 
@@ -79,6 +79,13 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
   const [selectedTemplate, setSelectedTemplate] = useState(resume?.template || 'modern');
   const [isExporting, setIsExporting] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+
+  // 当 resume 数据更新时，同步更新模板选择
+  useEffect(() => {
+    if (resume?.template) {
+      setSelectedTemplate(resume.template);
+    }
+  }, [resume?.template]);
 
   const currentTemplate = TEMPLATES[selectedTemplate];
 

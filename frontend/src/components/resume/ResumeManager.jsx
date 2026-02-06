@@ -162,14 +162,16 @@ const ResumeManager = () => {
 
   if (view === 'edit' && selectedResume) {
     return (
-      <ResumeEditor 
-        resume={selectedResume}
-        onBack={() => setView('list')}
-        onUpdate={(updated) => {
-          setSelectedResume(updated);
-          loadResumes();
-        }}
-      />
+      <div className="h-full">
+        <ResumeEditor
+          resume={selectedResume}
+          onBack={() => setView('list')}
+          onUpdate={(updated) => {
+            setSelectedResume(updated);
+            loadResumes();
+          }}
+        />
+      </div>
     );
   }
 

@@ -100,7 +100,7 @@ const SplitScreenEditor = ({
 
   if (!isActive) {
     return (
-      <div className="relative">
+      <div className="relative h-full overflow-auto">
         {children}
         {/* 分屏预览切换按钮 */}
         <button

@@ -275,7 +275,10 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
           </div>
         </div>
         <div className="flex-1">
-          <ResumePreview resume={localResume} />
+          <ResumePreview 
+            resume={localResume} 
+            onBack={() => setShowPreview(false)}
+          />
         </div>
       </div>
     );
@@ -302,7 +305,7 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
       isActive={splitScreenActive}
       onToggle={() => setSplitScreenActive(!splitScreenActive)}
     >
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 min-h-0">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
@@ -483,12 +486,12 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+        <div className="max-w-4xl mx-auto min-h-full">
           {/* 完整性评分 */}
           <div className="mb-6">
-            <ResumeCompletionScore 
-              resume={localResume} 
+            <ResumeCompletionScore
+              resume={localResume}
               onNavigate={handleNavigate}
             />
           </div>
@@ -705,7 +708,10 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
     if (!isValid) return;
 
     try {
-      await resumeApi.updatePersonalInfo(resume.id, formData);
+      const response = await resumeApi.updatePersonalInfo(resume.id, formData);
+      if (response.success) {
+        onUpdate(response.data);
+      }
     } catch (err) {
       console.error('保存失败:', err);
     }
@@ -744,8 +750,10 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
       const compressedBase64 = await compressImage(base64, 400, 400, 0.8);
 
       setFormData(prev => ({ ...prev, avatar: compressedBase64 }));
-      await resumeApi.updatePersonalInfo(resume.id, { ...formData, avatar: compressedBase64 });
-      onUpdate({ ...resume, personal_info: { ...resume.personal_info, avatar: compressedBase64 } });
+      const response = await resumeApi.updatePersonalInfo(resume.id, { ...formData, avatar: compressedBase64 });
+      if (response.success) {
+        onUpdate(response.data);
+      }
     } catch (err) {
       console.error('上传失败:', err);
       alert('头像上传失败');

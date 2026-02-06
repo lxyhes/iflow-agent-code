@@ -39,12 +39,22 @@ spring:
   mvc:
     trailing-slash-match: true
 
-  # DevTools Configuration - 禁用 restart 避免 CGLIB 问题
+  # DevTools Configuration - 启用热加载
   devtools:
     restart:
-      enabled: false
+      enabled: true
+      additional-exclude:
+        - static/**
+        - public/**
+        - templates/**
+        - **/*.html
+        - **/*.css
+        - **/*.js
     livereload:
       enabled: true
+      port: 35729
+    remote:
+      secret: mysecret
 
   # Spring AI Alibaba Configuration - 可选配置
   # 如需使用 DashScope，请设置 ALIYUN_DASHSCOPE_API_KEY 环境变量
@@ -120,3 +130,17 @@ logging:
 # File Upload
 file:
   max-size: 104857600  # 100MB in bytes
+
+# Spring Boot Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+    info:
+      enabled: true
