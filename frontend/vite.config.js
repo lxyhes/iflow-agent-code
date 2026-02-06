@@ -57,6 +57,12 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: false
         },
+        // 项目管理 API（由 Java 后端提供）
+        '/api/projects': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: false
+        },
         // Java 后端 API 路由（其他所有 /api 请求）
         '/api': {
           target: BACKEND_URL,

@@ -36,6 +36,13 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
+  # DevTools Configuration - 禁用 restart 避免 CGLIB 问题
+  devtools:
+    restart:
+      enabled: false
+    livereload:
+      enabled: true
+
   # Spring AI Alibaba Configuration - 可选配置
   # 如需使用 DashScope，请设置 ALIYUN_DASHSCOPE_API_KEY 环境变量
   ai:
