@@ -228,56 +228,6 @@ const IFlowBackendSettings = () => {
         </div>
       </div>
 
-      {/* SDK 模式下的模型切换 */}
-      {backendMode === 'sdk' && (
-        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                SDK 模式 - 模型切换
-              </p>
-            </div>
-            <p className="text-xs text-purple-700 dark:text-purple-300">
-              选择模型后，iFlow CLI 进程将自动重启以应用新模型
-            </p>
-            
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {availableModels.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => handleSwitchModel(model.id)}
-                  disabled={isSwitchingModel}
-                  className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                    selectedModel === model.id
-                      ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-purple-400'
-                  } ${isSwitchingModel ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <div className="font-medium">{model.name}</div>
-                  <div className="text-[10px] opacity-80">{model.description}</div>
-                </button>
-              ))}
-            </div>
-
-            {saveStatus === 'success' && (
-              <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                iFlow 进程已重启
-              </div>
-            )}
-            {saveStatus === 'error' && (
-              <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-                <AlertCircle className="w-3 h-3" />
-                重启失败
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* 模式选择 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {backendModes.map((mode) => {

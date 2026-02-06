@@ -13,9 +13,9 @@ public class IFlowBackendConfig {
     
     /**
      * 后端模式: "sdk" 或 "subprocess"
-     * 默认: "subprocess" (支持模型切换)
+     * 默认: "sdk" (类型安全，更稳定)
      */
-    private String backendMode = "subprocess";
+    private String backendMode = "sdk";
     
     /**
      * 设置后端模式

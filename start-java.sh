@@ -47,10 +47,30 @@ lsof -ti:8091 | xargs kill -9 2>/dev/null
 lsof -ti:8092 | xargs kill -9 2>/dev/null
 sleep 1
 
-# 启动 iFlow CLI（使用默认模型，可通过后端 API 动态切换）
-nohup iflow --experimental-acp --port 8090 --model glm-4.7 > /tmp/iflow.log 2>&1 &
+# 确保 iFlow 配置文件存在并设置默认模型
+IFLOW_CONFIG_DIR="$HOME/.iflow"
+IFLOW_CONFIG_FILE="$IFLOW_CONFIG_DIR/settings.json"
+if [ ! -d "$IFLOW_CONFIG_DIR" ]; then
+    mkdir -p "$IFLOW_CONFIG_DIR"
+fi
+
+if [ ! -f "$IFLOW_CONFIG_FILE" ]; then
+    echo '{"modelName": "glm-4.7"}' > "$IFLOW_CONFIG_FILE"
+    echo "[INFO] Created iFlow config file: $IFLOW_CONFIG_FILE"
+else
+    # 检查配置文件中是否有 modelName 字段，如果没有则添加
+    if ! grep -q '"modelName"' "$IFLOW_CONFIG_FILE"; then
+        # 使用临时文件来更新 JSON
+        python3 -c "import json; d=json.load(open('$IFLOW_CONFIG_FILE')); d['modelName']='glm-4.7'; json.dump(d,open('$IFLOW_CONFIG_FILE','w'), indent=2)" 2>/dev/null || \
+        echo '{"modelName": "glm-4.7"}' > "$IFLOW_CONFIG_FILE"
+        echo "[INFO] Updated iFlow config file with default model"
+    fi
+fi
+
+# 启动 iFlow CLI（从配置文件读取模型，不使用 --model 参数）
+nohup iflow --experimental-acp --port 8090 > /tmp/iflow.log 2>&1 &
 IFLOW_PID=$!
-echo "   PID: $IFLOW_PID (port 8090, model: glm-4.7)"
+echo "   PID: $IFLOW_PID (port 8090, model from config)"
 
 echo "Waiting 5 seconds for iFlow to start..."
 sleep 5
