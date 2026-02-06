@@ -130,7 +130,7 @@ public class TongyiQianwenService {
 
         // 优先使用 iFlow
         if (iFlowService.isConnected()) {
-            return iFlowService.queryStream(prompt);
+            return iFlowService.queryStream(prompt, "glm-4");
         }
 
         if (chatModel != null) {
@@ -154,7 +154,7 @@ public class TongyiQianwenService {
         // 优先使用 iFlow
         if (iFlowService.isConnected() && !messages.isEmpty()) {
             String lastMessage = messages.get(messages.size() - 1).getOrDefault("content", "");
-            return iFlowService.queryStream(lastMessage);
+            return iFlowService.queryStream(lastMessage, "glm-4");
         }
 
         if (chatModel != null) {

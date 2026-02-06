@@ -38,8 +38,8 @@ public class StreamController {
             @RequestParam(required = false) String mode,
             @RequestParam(required = false) String persona) {
 
-        log.info("流式聊天请求: project={}, sessionId={}, message={}", 
-                project, sessionId, message.substring(0, Math.min(50, message.length())));
+        log.info("流式聊天请求: project={}, sessionId={}, model={}, message={}",
+                project, sessionId, model, message.substring(0, Math.min(50, message.length())));
 
         SseEmitter emitter = new SseEmitter(300000L); // 5分钟超时
 
@@ -50,8 +50,9 @@ public class StreamController {
                         .name("message")
                         .data("{\"type\": \"start\"}"));
 
-                // 使用 iFlow 进行流式查询
-                Flux<String> stream = iFlowService.queryStream(message);
+                // 使用 iFlow 进行流式查询，传递模型参数
+                String actualModel = model != null ? model : "glm-4";
+                Flux<String> stream = iFlowService.queryStream(message, actualModel);
                 
                 stream.subscribe(
                         content -> {

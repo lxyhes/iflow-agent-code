@@ -2,6 +2,7 @@ package com.iflow.agent.service.ai;
 
 import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.query.IFlowQuery;
+import cn.iflow.sdk.types.config.IFlowOptions;
 import cn.iflow.sdk.types.messages.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -50,31 +52,38 @@ public class IFlowService {
     /**
      * 异步查询 - 返回 Flux 流
      * @param message 用户消息
+     * @param model AI 模型名称
      * @return Flux 消息流
      */
-    public Flux<String> queryStream(String message) {
-        log.debug("iFlow stream query: {}", message);
+    public Flux<String> queryStream(String message, String model) {
+        log.debug("iFlow stream query with model {}: {}", model, message);
+
+        // 构建包含模型参数的 metadata
+        Map<String, Object> metadata = Map.of("model", model != null ? model : "glm-4");
+
+        // 创建包含 metadata 的 IFlowOptions
+        IFlowOptions options = IFlowOptions.builder()
+                .url("ws://localhost:8090/acp")
+                .autoStartProcess(true)
+                .metadata(metadata)
+                .build();
 
         return Mono.fromCallable(() -> {
-                    iFlowClient.connect().block();
-                    iFlowClient.sendMessage(message).block();
-                    return iFlowClient;
+                    // 使用自定义 options 创建临时客户端
+                    IFlowClient client = IFlowClient.create(options);
+                    client.connect().block();
+                    client.sendMessage(message).block();
+                    return client;
                 })
-                .flatMapMany(client -> client.receiveMessages()
+                .flatMapMany(c -> c.receiveMessages()
                         .takeUntil(msg -> msg instanceof TaskFinishMessage)
-                        .handle((msg, sink) -> {
-                            if (msg instanceof AssistantMessage) {
-                                AssistantMessage assistantMsg = (AssistantMessage) msg;
-                                String text = assistantMsg.getChunk().getText();
-                                if (text != null && !text.isEmpty()) {
-                                    sink.next(text);
-                                }
-                            }
-                            // TaskFinishMessage 会触发流完成
-                            if (msg instanceof TaskFinishMessage) {
-                                sink.complete();
-                            }
-                        }));
+                        .filter(msg -> msg instanceof AssistantMessage)
+                        .map(msg -> {
+                            AssistantMessage assistantMsg = (AssistantMessage) msg;
+                            return assistantMsg.getChunk().getText();
+                        })
+                        .filter(text -> text != null && !text.isEmpty())
+                );
     }
 
     /**

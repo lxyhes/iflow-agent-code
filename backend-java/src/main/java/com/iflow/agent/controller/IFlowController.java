@@ -40,7 +40,8 @@ public class IFlowController {
     @PostMapping(value = "/query/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> queryStream(@RequestBody QueryRequest request) {
         log.debug("iFlow stream query request: {}", request.getMessage());
-        return iFlowService.queryStream(request.getMessage())
+        String model = request.getModel() != null ? request.getModel() : "glm-4";
+        return iFlowService.queryStream(request.getMessage(), model)
                 .map(chunk -> "data: " + chunk + "\n\n");
     }
 
@@ -70,5 +71,6 @@ public class IFlowController {
     @Data
     public static class QueryRequest {
         private String message;
+        private String model;
     }
 }
