@@ -45,7 +45,13 @@ const ResumeDiagnosticReport = ({ resume, onClose, onOptimize }) => {
     try {
       const response = await resumeApi.diagnoseResume(resume.id);
       if (response.success) {
-        setDiagnosticResults(response.data);
+        // 检查后端返回的数据是否包含错误标记
+        if (response.data && response.data.error) {
+          // 即使返回了错误，也显示诊断结果（可能是不完整的）
+          setDiagnosticResults(response.data);
+        } else {
+          setDiagnosticResults(response.data);
+        }
       } else {
         setError(response.error || '诊断失败');
       }

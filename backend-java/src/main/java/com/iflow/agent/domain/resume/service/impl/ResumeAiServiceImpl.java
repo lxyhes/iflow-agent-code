@@ -108,9 +108,14 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         String prompt = buildDiagnosePrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
 
-        int diagnosisScore = extractScore(aiResponse, "诊断评分");
+        int diagnosisScore = extractScore(aiResponse, "overall_score");
 
         // 如果分数为 -1，说明 AI 响应不是 JSON 格式，可能是简历为空或其他错误
+        if (diagnosisScore == -1) {
+            // 尝试其他可能的字段名
+            diagnosisScore = extractScore(aiResponse, "诊断评分");
+        }
+
         if (diagnosisScore == -1) {
             log.warn("AI response is not in valid JSON format. Response: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
@@ -479,13 +484,32 @@ public class ResumeAiServiceImpl implements ResumeAiService {
                 return -1; // 返回 -1 表示响应格式不正确
             }
 
-            // 尝试从JSON中提取分数
-            if (cleanedResponse.contains("\"" + scoreType + "\":")) {
-                int start = cleanedResponse.indexOf("\"" + scoreType + "\":") + scoreType.length() + 3;
+            // 尝试从JSON中提取分数（支持带引号和不带引号的字段名）
+            String quotedPattern = "\"" + scoreType + "\"";
+            String unquotedPattern = scoreType;
+            
+            int start = -1;
+            if (cleanedResponse.contains(quotedPattern + ":")) {
+                start = cleanedResponse.indexOf(quotedPattern + ":") + quotedPattern.length() + 1;
+            } else if (cleanedResponse.contains(unquotedPattern + ":")) {
+                start = cleanedResponse.indexOf(unquotedPattern + ":") + unquotedPattern.length() + 1;
+            }
+            
+            if (start > 0) {
+                // 跳过冒号后的空白字符
+                while (start < cleanedResponse.length() && Character.isWhitespace(cleanedResponse.charAt(start))) {
+                    start++;
+                }
                 int end = cleanedResponse.indexOf(",", start);
                 if (end == -1) end = cleanedResponse.indexOf("}", start);
-                String scoreStr = cleanedResponse.substring(start, end).trim();
-                return Integer.parseInt(scoreStr.replaceAll("[^0-9]", ""));
+                if (end > start) {
+                    String scoreStr = cleanedResponse.substring(start, end).trim();
+                    // 去除可能的引号
+                    scoreStr = scoreStr.replaceAll("\"", "").trim();
+                    if (!scoreStr.isEmpty()) {
+                        return Integer.parseInt(scoreStr.replaceAll("[^0-9]", ""));
+                    }
+                }
             }
             // 尝试从文本中提取
             if (cleanedResponse.contains(scoreType)) {
