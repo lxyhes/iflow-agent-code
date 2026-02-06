@@ -91,12 +91,15 @@ const ChatInterfaceMinimal = memo(({
   const ragCacheRef = useRef(new Map()); // RAG 结果缓存
   const abortControllerRef = useRef(null); // SSE 请求中断控制器
 
-  // 性能监控：记录渲染时间
+  // 性能监控：记录渲染时间（正确测量每次渲染的时间）
   useEffect(() => {
-    const renderTime = performance.now() - renderStartTime.current;
-    if (process.env.NODE_ENV === 'development' && renderTime > 16) {
-      console.warn(`[ChatInterfaceMinimal] Slow render detected: ${renderTime.toFixed(2)}ms`);
-    }
+    const startTime = performance.now();
+    return () => {
+      const renderTime = performance.now() - startTime;
+      if (process.env.NODE_ENV === 'development' && renderTime > 50) {
+        console.warn(`[ChatInterfaceMinimal] Slow render detected: ${renderTime.toFixed(2)}ms`);
+      }
+    };
   });
 
   // ============================================
@@ -317,10 +320,13 @@ const ChatInterfaceMinimal = memo(({
         }, 300);
 
         // 创建空的 AI 消息用于流式响应
+        const aiMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         chatState.setChatMessages(prev => [...prev, {
+          id: aiMessageId,
           type: 'assistant',
           content: '',
           isStreaming: true,
+          isToolUse: false,
           timestamp: new Date()
         }]);
 
@@ -369,22 +375,44 @@ const ChatInterfaceMinimal = memo(({
               partialData = '';
               console.log(`[SSE] Found complete event:`, line.substring(0, 100));
 
-              if (line.startsWith('data: ')) {
+              // 从多行 SSE 事件中提取 data 行
+              const dataLine = line.split('\n').find(l => l.startsWith('data:'));
+              if (dataLine) {
                 try {
-                  const data = JSON.parse(line.slice(6));
+                  const data = JSON.parse(dataLine.slice(5));
                   console.log('[SSE] Received event:', data.type, data);
                   
                   if (data.type === 'content') {
                     // 📝 追加内容到当前 AI 消息
                     chatState.setChatMessages(prev => {
                       const updated = [...prev];
+                      console.log('[SSE Content] Total messages:', updated.length);
+                      console.log('[SSE Content] Last 5 messages:', updated.slice(-5).map(m => ({
+                        id: m.id,
+                        type: m.type,
+                        isStreaming: m.isStreaming,
+                        isToolUse: m.isToolUse,
+                        contentLength: m.content?.length || 0
+                      })));
+
                       // 找到最后一个非工具卡片的 AI 消息（isStreaming 且不是工具卡片）
+                      let found = false;
                       for (let i = updated.length - 1; i >= 0; i--) {
+                        console.log(`[SSE Content] Checking message ${i}:`, {
+                          type: updated[i].type,
+                          isStreaming: updated[i].isStreaming,
+                          isToolUse: updated[i].isToolUse
+                        });
                         if (updated[i].type === 'assistant' && updated[i].isStreaming && !updated[i].isToolUse) {
+                          console.log('[SSE Content] Found streaming AI message at index', i, 'with content length:', updated[i].content?.length || 0);
                           updated[i].content += data.content;
                           contentChunks++;
+                          found = true;
                           break;
                         }
+                      }
+                      if (!found) {
+                        console.warn('[SSE Content] No streaming AI message found to append content!');
                       }
                       return updated;
                     });
@@ -458,7 +486,7 @@ const ChatInterfaceMinimal = memo(({
                       content: data.content,
                       timestamp: new Date()
                     }]);
-                  } else if (data.type === 'done') {
+                  } else if (data.type === 'done' || data.type === 'end') {
                     // ✅ 任务完成
                     const streamTime = performance.now() - streamStartTime;
                     console.log(`[ChatInterfaceMinimal] ✅ Stream completed in ${streamTime.toFixed(2)}ms (${contentChunks} chunks)`);

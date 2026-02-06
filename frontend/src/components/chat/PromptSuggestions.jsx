@@ -44,28 +44,69 @@ const PromptSuggestions = ({
     try {
       // 获取最近的对话上下文（最近5条消息）
       const recentMessages = messages.slice(-5);
-      const context = recentMessages
+      // 过滤掉 content 为 undefined、null、或包含错误消息的消息
+      const validMessages = recentMessages.filter(msg => {
+        // 检查消息对象本身
+        if (!msg) return false;
+        // 检查 role 字段
+        if (!msg.role || typeof msg.role !== 'string') return false;
+        // 检查 content 字段
+        if (msg.content == null) return false;
+        // content 必须是字符串
+        if (typeof msg.content !== 'string') return false;
+        const contentStr = msg.content.trim();
+        // 排除空内容
+        if (!contentStr) return false;
+        // 排除内容为 "undefined" 字符串
+        if (contentStr === 'undefined') return false;
+        // 排除包含错误消息的内容
+        if (contentStr.includes('Error:') || contentStr.includes('HTTP')) return false;
+        // 排除包含 "undefined" 的内容
+        if (contentStr.includes('undefined')) return false;
+        return true;
+      });
+
+      // 如果没有有效消息，直接返回默认建议
+      if (validMessages.length === 0) {
+        const defaultSuggestions = [
+          "帮我分析这个项目的代码结构",
+          "生成项目文档",
+          "检查代码中的潜在问题"
+        ];
+        setSuggestions(defaultSuggestions);
+        return;
+      }
+
+      const context = validMessages
         .map(msg => `${msg.role}: ${msg.content}`)
         .join('\n\n');
 
       // 调用后端API生成建议
       const response = await api.chat.generateSuggestions(selectedProject.name, {
         context: context,
-        messageCount: recentMessages.length
+        messageCount: validMessages.length
       });
 
       if (response.ok) {
         const data = await response.json();
-        setSuggestions(data.suggestions || []);
+        // 后端返回的对象格式: {title, prompt}，提取 prompt 作为建议文本
+        const backendSuggestions = (data.suggestions || []).map(s =>
+          typeof s === 'string' ? s : (s.prompt || s.title || '')
+        );
+        setSuggestions(backendSuggestions);
       } else {
         // 如果API不可用，使用本地规则生成建议
-        const localSuggestions = generateLocalSuggestions(recentMessages);
+        const localSuggestions = generateLocalSuggestions(validMessages);
         setSuggestions(localSuggestions);
       }
     } catch (error) {
       console.error('Error generating suggestions:', error);
       // 降级到本地规则
-      const localSuggestions = generateLocalSuggestions(messages.slice(-5));
+      const localSuggestions = generateLocalSuggestions(messages.slice(-5).filter(msg => {
+        if (!msg || !msg.role || !msg.content) return false;
+        const contentStr = String(msg.content).trim();
+        return contentStr && contentStr !== 'undefined' && !contentStr.includes('undefined');
+      }));
       setSuggestions(localSuggestions);
     } finally {
       setIsGenerating(false);

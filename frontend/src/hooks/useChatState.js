@@ -236,6 +236,8 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
     syncSessionId,
     clearChatHistory,
     addUserMessage,
+    updateMessageStatus,
+    retryMessage,
     addErrorMessage,
     setTaskProgressInfo,
     toggleNotifications,

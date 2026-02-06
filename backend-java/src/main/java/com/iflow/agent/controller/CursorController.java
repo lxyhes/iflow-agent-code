@@ -28,10 +28,15 @@ public class CursorController {
      * 获取 Cursor 会话列表
      */
     @GetMapping("/sessions")
-    public ResponseEntity<Map<String, Object>> getSessions(@RequestParam String projectPath) {
+    public ResponseEntity<Map<String, Object>> getSessions(@RequestParam(required = false) String projectPath) {
         log.info("获取 Cursor 会话: {}", projectPath);
 
         try {
+            // 如果没有提供 projectPath，使用当前工作目录
+            if (projectPath == null || projectPath.isEmpty()) {
+                projectPath = System.getProperty("user.dir");
+            }
+
             // 计算 cwdID (MD5 hash)
             String cwdId = md5Hash(projectPath);
 

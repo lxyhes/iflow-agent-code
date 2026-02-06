@@ -61,16 +61,20 @@ public class IFlowService {
                     return iFlowClient;
                 })
                 .flatMapMany(client -> client.receiveMessages()
-                        .map(msg -> {
+                        .takeUntil(msg -> msg instanceof TaskFinishMessage)
+                        .handle((msg, sink) -> {
                             if (msg instanceof AssistantMessage) {
                                 AssistantMessage assistantMsg = (AssistantMessage) msg;
-                                return assistantMsg.getChunk().getText();
-                            } else if (msg instanceof TaskFinishMessage) {
-                                return "\n[对话完成]";
+                                String text = assistantMsg.getChunk().getText();
+                                if (text != null && !text.isEmpty()) {
+                                    sink.next(text);
+                                }
                             }
-                            return "";
-                        })
-                        .filter(text -> !text.isEmpty()));
+                            // TaskFinishMessage 会触发流完成
+                            if (msg instanceof TaskFinishMessage) {
+                                sink.complete();
+                            }
+                        }));
     }
 
     /**

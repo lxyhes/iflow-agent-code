@@ -25,8 +25,13 @@ public class GitController {
      * 获取 Git 状态
      */
     @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> getStatus(@RequestParam String projectPath) {
+    public ResponseEntity<Map<String, Object>> getStatus(@RequestParam(required = false) String projectPath) {
         log.info("Getting git status for: {}", projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output = executeGitCommand(projectPath, "status", "--porcelain");
@@ -61,8 +66,13 @@ public class GitController {
      * 获取所有分支
      */
     @GetMapping("/branches")
-    public ResponseEntity<Map<String, Object>> getBranches(@RequestParam String projectPath) {
+    public ResponseEntity<Map<String, Object>> getBranches(@RequestParam(required = false) String projectPath) {
         log.info("Getting git branches for: {}", projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output = executeGitCommand(projectPath, "branch", "-a");
@@ -102,9 +112,14 @@ public class GitController {
      */
     @GetMapping("/commits")
     public ResponseEntity<Map<String, Object>> getCommits(
-            @RequestParam String projectPath,
+            @RequestParam(required = false) String projectPath,
             @RequestParam(defaultValue = "10") int limit) {
         log.info("Getting git commits for: {}", projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output = executeGitCommand(projectPath,
@@ -143,10 +158,15 @@ public class GitController {
      */
     @PostMapping("/checkout")
     public ResponseEntity<Map<String, Object>> checkout(
-            @RequestParam String projectPath,
+            @RequestParam(required = false) String projectPath,
             @RequestBody Map<String, String> request) {
         String branch = request.get("branch");
         log.info("Checking out branch: {} in {}", branch, projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output = executeGitCommand(projectPath, "checkout", branch);
@@ -170,10 +190,15 @@ public class GitController {
      */
     @PostMapping("/create-branch")
     public ResponseEntity<Map<String, Object>> createBranch(
-            @RequestParam String projectPath,
+            @RequestParam(required = false) String projectPath,
             @RequestBody Map<String, String> request) {
         String branch = request.get("branch");
         log.info("Creating branch: {} in {}", branch, projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output = executeGitCommand(projectPath, "checkout", "-b", branch);
@@ -197,10 +222,15 @@ public class GitController {
      */
     @PostMapping("/commit")
     public ResponseEntity<Map<String, Object>> commit(
-            @RequestParam String projectPath,
+            @RequestParam(required = false) String projectPath,
             @RequestBody Map<String, String> request) {
         String message = request.get("message");
         log.info("Committing changes in {} with message: {}", projectPath, message);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             // 先添加所有更改
@@ -228,9 +258,14 @@ public class GitController {
      */
     @GetMapping("/diff")
     public ResponseEntity<Map<String, Object>> getDiff(
-            @RequestParam String projectPath,
+            @RequestParam(required = false) String projectPath,
             @RequestParam(required = false) String filePath) {
         log.info("Getting git diff for: {}", projectPath);
+
+        // 如果 projectPath 为空，使用当前工作目录
+        if (projectPath == null || projectPath.isEmpty()) {
+            projectPath = System.getProperty("user.dir");
+        }
 
         try {
             List<String> output;

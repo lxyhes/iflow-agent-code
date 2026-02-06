@@ -85,7 +85,7 @@ iflow:
     auto-start: true
     # 超时时间（秒）
     timeout-seconds: 30
-    # 权限模式: AUTO, ALWAYS_ALLOW, ALWAYS_DENY
+    # 权限模式: AUTO（SDK 1.0.4-fix 仅支持 AUTO 模式）
     permission-mode: AUTO
 
 # AgentScope Configuration - 面试功能（可选）

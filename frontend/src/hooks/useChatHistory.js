@@ -18,6 +18,35 @@ const safeLocalStorage = {
 };
 
 /**
+ * 清理格式错误的消息
+ * 移除 content 为 undefined、null、"undefined" 字符串或包含错误消息的消息
+ */
+const cleanupMalformedMessages = (messages) => {
+  if (!Array.isArray(messages)) return [];
+  
+  return messages.filter(msg => {
+    if (!msg) return false;
+    
+    // 检查 content
+    const content = msg.content;
+    if (content == null) return false;
+    
+    const contentStr = String(content).trim();
+    
+    // 排除内容为 "undefined" 字符串或包含错误消息的消息
+    if (contentStr === 'undefined' || 
+        contentStr.startsWith('undefined:') ||
+        contentStr.includes('Error:') ||
+        contentStr.includes('HTTP')) {
+      console.warn('[cleanupMalformedMessages] Filtering out malformed message:', contentStr.substring(0, 100));
+      return false;
+    }
+    
+    return true;
+  });
+};
+
+/**
  * Hook to manage chat history loading and persistence
  * mimicking the exact behavior of the original ChatInterface
  */
@@ -28,13 +57,13 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
 
   // Initialize state from localStorage (Legacy behavior)
   const [chatMessages, setChatMessages] = useState(() => {
-    if (initialMessages && initialMessages.length > 0) return initialMessages;
+    if (initialMessages && initialMessages.length > 0) return cleanupMalformedMessages(initialMessages);
     
     if (selectedProject?.name) {
       const legacyKey = `chat_messages_${selectedProject.name}`;
       const saved = safeLocalStorage.getItem(legacyKey);
       loadedKeyRef.current = legacyKey;
-      return saved ? JSON.parse(saved) : [];
+      return saved ? cleanupMalformedMessages(JSON.parse(saved)) : [];
     }
     return [];
   });
@@ -62,7 +91,7 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
   // Sync with initialMessages prop when it changes
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0) {
-      setChatMessages(initialMessages);
+      setChatMessages(cleanupMalformedMessages(initialMessages));
     }
   }, [initialMessages]);
 
@@ -92,7 +121,11 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
           console.log('[useChatHistory] Loaded from primary key:', projectSessionKey, 'messages:', msgs?.length || 0);
           
           if (msgs && msgs.length > 0) {
-            setChatMessages(msgs);
+            const cleanedMsgs = cleanupMalformedMessages(msgs);
+            if (cleanedMsgs.length !== msgs.length) {
+              console.log('[useChatHistory] Cleaned', msgs.length - cleanedMsgs.length, 'malformed messages');
+            }
+            setChatMessages(cleanedMsgs);
             loaded = true;
           } else if (isNewSession) {
             // Only force empty state for explicit new sessions
@@ -109,8 +142,12 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
         try {
           const msgs = await chatStorage.getMessages(projectLegacyKey);
           if (msgs && msgs.length > 0) {
-            console.log('[useChatHistory] Loaded from legacy key:', projectLegacyKey, 'messages:', msgs.length);
-            setChatMessages(msgs);
+            const cleanedMsgs = cleanupMalformedMessages(msgs);
+            if (cleanedMsgs.length !== msgs.length) {
+              console.log('[useChatHistory] Cleaned', msgs.length - cleanedMsgs.length, 'malformed messages');
+            }
+            console.log('[useChatHistory] Loaded from legacy key:', projectLegacyKey, 'messages:', cleanedMsgs.length);
+            setChatMessages(cleanedMsgs);
             loaded = true;
           }
         } catch (e) {
@@ -123,10 +160,14 @@ export function useChatHistory(selectedProject, selectedSession, currentSessionI
          if (saved) {
            try {
              const msgs = JSON.parse(saved);
-             console.log('[useChatHistory] Loaded from localStorage:', selectedProject.name, 'messages:', msgs.length);
-             setChatMessages(msgs);
+             const cleanedMsgs = cleanupMalformedMessages(msgs);
+             if (cleanedMsgs.length !== msgs.length) {
+               console.log('[useChatHistory] Cleaned', msgs.length - cleanedMsgs.length, 'malformed messages from localStorage');
+             }
+             console.log('[useChatHistory] Loaded from localStorage:', selectedProject.name, 'messages:', cleanedMsgs.length);
+             setChatMessages(cleanedMsgs);
              try {
-               await chatStorage.saveMessages(projectLegacyKey, msgs);
+               await chatStorage.saveMessages(projectLegacyKey, cleanedMsgs);
              } catch (e) {}
            } catch(e) {}
          }

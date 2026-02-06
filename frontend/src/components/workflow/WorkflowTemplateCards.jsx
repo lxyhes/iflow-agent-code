@@ -41,13 +41,12 @@ const TemplateCard = ({ t, onPick }) => {
   const clickable = typeof onPick === 'function';
 
   return (
-    <button
-      type="button"
-      onClick={() => onPick?.(t)}
+    <div
+      onClick={() => clickable && onPick?.(t)}
       className={cn(
         'group text-left rounded-2xl border p-4 transition-all shadow-sm hover:shadow-md',
         'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800',
-        !clickable && 'cursor-default'
+        clickable && 'cursor-pointer'
       )}
     >
       <div className={cn('rounded-2xl border bg-gradient-to-br p-3', categoryColor(t.category))}>
@@ -91,7 +90,7 @@ const TemplateCard = ({ t, onPick }) => {
       <div className="mt-4 text-xs text-gray-500 dark:text-gray-400 font-mono">
         {toSafeList(t.nodes).length} 节点 · {toSafeList(t.edges).length} 连线
       </div>
-    </button>
+    </div>
   );
 };
 
