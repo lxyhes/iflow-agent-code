@@ -8,7 +8,8 @@ const models = [
   { id: 'Qwen3-Coder-Plus', label: 'Qwen3-Coder-Plus', icon: '🤖' },
   { id: 'Kimi-K2-Thinking', label: 'Kimi-K2-Thinking', icon: '🧠' },
   { id: 'MiniMax-M2.1', label: 'MiniMax-M2.1', icon: '⚡' },
-  { id: 'Kimi-K2-0905', label: 'Kimi-K2-0905', icon: '📝' }
+  { id: 'Kimi-K2-0905', label: 'Kimi-K2-0905', icon: '📝' },
+  { id: 'Kimi-K2.5', label: 'Kimi-K2.5', icon: '🌟' }
 ];
 
 const IFlowModelSelector = () => {
