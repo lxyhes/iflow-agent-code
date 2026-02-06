@@ -150,6 +150,7 @@ const AssistantMessage = ({
 }) => {
   const provider = localStorage.getItem('selected-provider') || 'iflow';
   const [showMenu, setShowMenu] = useState(false);
+  const [showExecutionInfo, setShowExecutionInfo] = useState(false);
   const isEditing = editingMessageId === message.id;
   const isFavorited = favoritedMessages?.has(message.id);
   const shouldSeparate = !isGrouped && message.type === 'assistant' && !message.isToolUse;
@@ -225,25 +226,124 @@ const AssistantMessage = ({
         </div>
 
         {/* Token 使用量 */}
-        {message.content && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-            <svg className={`w-3 h-3 ${message.isStreaming ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span>
-              {message.isStreaming ? (
-                <>
-                  ~{Math.ceil((message.content?.length || 0) / 4)} tokens
-                  <span className="animate-pulse">...</span>
-                </>
-              ) : (
-                `~${Math.ceil((message.content?.length || 0) / 4)} tokens`
-              )}
-            </span>
-          </div>
-        )}
-
-        {/* 操作菜单按钮 */}
+                  {message.content && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+                      <svg className={`w-3 h-3 ${message.isStreaming ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>
+                        {message.isStreaming ? (
+                          <>
+                            ~{Math.ceil((message.content?.length || 0) / 4)} tokens
+                            <span className="animate-pulse">...</span>
+                          </>
+                        ) : (
+                          `~${Math.ceil((message.content?.length || 0) / 4)} tokens`
+                        )}
+                      </span>
+                    </div>
+                  )}
+        
+                  {/* Execution Info */}
+                            {message.executionInfo && !message.isStreaming && (
+                              <div className="mt-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                <div 
+                                  className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                  onClick={() => setShowExecutionInfo(!showExecutionInfo)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                      Execution Info
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                    <span className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      {(message.executionInfo.executionTimeMs / 1000).toFixed(2)}s
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      {message.executionInfo.assistantRounds} round
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                      </svg>
+                                      {message.executionInfo.tokenUsage?.total || 0} tokens
+                                    </span>
+                                    <svg 
+                                      className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${showExecutionInfo ? 'rotate-180' : ''}`}
+                                      fill="none" 
+                                      stroke="currentColor" 
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </div>
+                                
+                                {showExecutionInfo && (
+                                  <div className="p-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="grid grid-cols-2 gap-4 text-xs">
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Session ID:</span>
+                                        <div className="text-gray-700 dark:text-gray-300 font-mono break-all mt-1">
+                                          {message.executionInfo['session-id']}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Conversation ID:</span>
+                                        <div className="text-gray-700 dark:text-gray-300 font-mono break-all mt-1">
+                                          {message.executionInfo['conversation-id']}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Execution Time:</span>
+                                        <div className="text-gray-700 dark:text-gray-300 font-mono mt-1">
+                                          {(message.executionInfo.executionTimeMs / 1000).toFixed(2)}s
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Assistant Rounds:</span>
+                                        <div className="text-gray-700 dark:text-gray-300 font-mono mt-1">
+                                          {message.executionInfo.assistantRounds}
+                                        </div>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <span className="text-gray-500 dark:text-gray-400">Token Usage:</span>
+                                        <div className="grid grid-cols-3 gap-2 mt-1">
+                                          <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                                            <div className="text-gray-500 dark:text-gray-400">Input</div>
+                                            <div className="text-gray-700 dark:text-gray-300 font-mono">
+                                              {message.executionInfo.tokenUsage?.input || 0}
+                                            </div>
+                                          </div>
+                                          <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                                            <div className="text-gray-500 dark:text-gray-400">Output</div>
+                                            <div className="text-gray-700 dark:text-gray-300 font-mono">
+                                              {message.executionInfo.tokenUsage?.output || 0}
+                                            </div>
+                                          </div>
+                                          <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                                            <div className="text-gray-500 dark:text-gray-400">Total</div>
+                                            <div className="text-gray-700 dark:text-gray-300 font-mono">
+                                              {message.executionInfo.tokenUsage?.total || 0}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}        {/* 操作菜单按钮 */}
         <button
           onClick={() => setShowMenu(!showMenu)}
           className="absolute -left-10 top-2 w-8 h-8 rounded-full bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700"

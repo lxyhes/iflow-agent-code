@@ -491,6 +491,25 @@ const ChatInterfaceMinimal = memo(({
                     const streamTime = performance.now() - streamStartTime;
                     console.log(`[ChatInterfaceMinimal] ✅ Stream completed in ${streamTime.toFixed(2)}ms (${contentChunks} chunks)`);
                     console.log(`[ChatInterfaceMinimal] 📊 Stop reason: ${data.stop_reason}`);
+                  } else if (data.type === 'execution_info') {
+                    // 📊 Execution Info - 将其添加到最后一个 AI 消息
+                    chatState.setChatMessages(prev => {
+                      const updated = [...prev];
+                      // 找到最后一个 AI 消息
+                      for (let i = updated.length - 1; i >= 0; i--) {
+                        if (updated[i].type === 'assistant') {
+                          // 解析 Execution Info JSON
+                          try {
+                            const execInfo = JSON.parse(data.data);
+                            updated[i].executionInfo = execInfo;
+                          } catch (e) {
+                            console.error('[ChatInterfaceMinimal] Failed to parse execution_info:', e);
+                          }
+                          break;
+                        }
+                      }
+                      return updated;
+                    });
                   }
                 } catch (e) {
                   console.error('[ChatInterfaceMinimal] ❌ Error parsing SSE data:', e);

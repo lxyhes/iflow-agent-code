@@ -57,6 +57,29 @@ public class StreamController {
                 stream.subscribe(
                         content -> {
                             try {
+                                // 检测 Execution Info 标记
+                                if (content.equals("EXECUTION_INFO_START")) {
+                                    return; // 跳过开始标记
+                                } else if (content.equals("EXECUTION_INFO_END")) {
+                                    return; // 跳过结束标记
+                                }
+                                
+                                // 如果内容看起来像 JSON（可能包含 session-id 等字段），发送为 execution_info 事件
+                                if (content.trim().startsWith("{") && content.contains("session-id")) {
+                                    // 转义特殊字符
+                                    String escaped = content
+                                            .replace("\\", "\\\\")
+                                            .replace("\"", "\\\"")
+                                            .replace("\n", "\\n")
+                                            .replace("\r", "\\r");
+                                    
+                                    emitter.send(SseEmitter.event()
+                                            .name("message")
+                                            .data("{\"type\": \"execution_info\", \"data\": \"" + escaped + "\"}"));
+                                    return;
+                                }
+                                
+                                // 普通内容
                                 // 转义特殊字符
                                 String escaped = content
                                         .replace("\\", "\\\\")

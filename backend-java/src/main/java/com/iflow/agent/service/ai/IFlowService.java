@@ -79,14 +79,44 @@ public class IFlowService {
                 );
                 
                 String line;
+                StringBuilder executionInfo = new StringBuilder();
                 StringBuilder output = new StringBuilder();
+                boolean inExecutionInfo = false;
+                
                 Set<String> filteredPrefixes = Set.of(
-                    "[ACP]", "🚀", "Checking", "INFO:", "DEBUG:", "Attempt",
-                    "Error when", "<Execution Info>", "session-id", 
-                    "conversation-id", "assistantRounds", "executionTimeMs", "tokenUsage"
+                    "[ACP]", "🚀", "Checking", "INFO:", "DEBUG:", "Attempt", "Error when"
                 );
                 
                 while ((line = reader.readLine()) != null) {
+                    // 检测 Execution Info 开始
+                    if (line.trim().startsWith("<Execution Info>")) {
+                        inExecutionInfo = true;
+                        continue;
+                    }
+                    
+                    // 检测 Execution Info 结束
+                    if (inExecutionInfo && line.trim().startsWith("</Execution Info>")) {
+                        inExecutionInfo = false;
+                        // 发送 Execution Info 作为特殊事件
+                        if (executionInfo.length() > 0) {
+                            String jsonStr = executionInfo.toString().trim();
+                            // 尝试解析 JSON，确保是完整的 JSON 对象
+                            if (jsonStr.startsWith("{") && jsonStr.endsWith("}")) {
+                                sink.next("EXECUTION_INFO_START");
+                                sink.next(jsonStr);
+                                sink.next("EXECUTION_INFO_END");
+                            }
+                            executionInfo.setLength(0);
+                        }
+                        continue;
+                    }
+                    
+                    // 如果在 Execution Info 块中，收集内容
+                    if (inExecutionInfo) {
+                        executionInfo.append(line).append("\n");
+                        continue;
+                    }
+                    
                     // 过滤日志行
                     if (filteredPrefixes.stream().noneMatch(line::startsWith)) {
                         if (!line.trim().isEmpty()) {

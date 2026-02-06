@@ -263,12 +263,14 @@ const PromptSuggestions = ({
   }
 
   return (
-    <div className={cn(
-      'w-full transition-all duration-300',
-      isExpanded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 h-0 overflow-hidden',
-      className
-    )}>
-      <div className="bg-gradient-to-r from-purple-50 via-blue-50 to-indigo-50 dark:from-purple-950/30 dark:via-blue-950/30 dark:to-indigo-950/30 border border-purple-200/50 dark:border-purple-800/50 rounded-xl p-4 mb-4 shadow-lg shadow-purple-500/5">
+    <div 
+      className={cn(
+        'w-full transition-all duration-300 flex-shrink-0',
+        isExpanded ? 'opacity-100 translate-y-0 max-h-[300px]' : 'opacity-0 -translate-y-2 h-0 overflow-hidden'
+      )}
+      style={{ zIndex: 10 }}
+    >
+      <div className="bg-gradient-to-r from-purple-50 via-blue-50 to-indigo-50 dark:from-purple-950/30 dark:via-blue-950/30 dark:to-indigo-950/30 border border-purple-200/50 dark:border-purple-800/50 rounded-xl p-4 mb-4 shadow-lg shadow-purple-500/5 overflow-y-auto max-h-[300px]">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">

@@ -175,7 +175,7 @@
         <dependency>
             <groupId>cn.iflow</groupId>
             <artifactId>iflow-cli-sdk</artifactId>
-            <version>1.0.4-fix</version>
+            <version>1.0.5</version>
             <exclusions>
                 <!-- 排除 slf4j-simple 避免与 Spring Boot 的 logback 冲突 -->
                 <exclusion>
