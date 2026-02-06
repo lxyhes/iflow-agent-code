@@ -13,6 +13,7 @@ import LoginModal from './LoginModal';
 import ProjectTemplateGenerator from './ProjectTemplateGenerator';
 import CICDGenerator from './CICDGenerator';
 import CollaborationPanel from './CollaborationPanel';
+import IFlowBackendSettings from './settings/IFlowBackendSettings';
 import { authenticatedFetch } from '../utils/api';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
@@ -951,6 +952,16 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               >
                 <Users className="w-4 h-4 inline mr-2" />
                 协作
+              </button>
+              <button
+                onClick={() => setActiveTab('iflow-backend')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'iflow-backend'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Server className="w-4 h-4 inline mr-2" />
+                iFlow 后端
               </button>
             </div>
           </div>
@@ -2775,6 +2786,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                     开启协作
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {/* iFlow Backend Tab */}
+            {activeTab === 'iflow-backend' && (
+              <div className="space-y-6 md:space-y-8">
+                <IFlowBackendSettings />
               </div>
             )}
           </div>

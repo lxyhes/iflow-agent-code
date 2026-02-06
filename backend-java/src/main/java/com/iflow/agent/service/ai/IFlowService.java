@@ -2,6 +2,7 @@ package com.iflow.agent.service.ai;
 
 import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.query.IFlowQuery;
+import com.iflow.agent.config.IFlowBackendConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.Set;
 public class IFlowService {
 
     private final IFlowClient iFlowClient;
+    private final IFlowBackendConfig backendConfig;
 
     /**
      * 同步查询 - 最简单的方式
@@ -50,12 +52,66 @@ public class IFlowService {
 
     /**
      * 异步查询 - 返回 Flux 流
+     * 根据配置选择使用 SDK 还是 subprocess
      * @param message 用户消息
-     * @param model AI 模型名称
+     * @param model AI 模型名称 (仅在 subprocess 模式下有效)
      * @return Flux 消息流
      */
     public Flux<String> queryStream(String message, String model) {
-        log.debug("iFlow stream query with model {}: {}", model, message);
+        log.debug("iFlow stream query with backend mode: {}, model: {}", backendConfig.getBackendMode(), model);
+
+        // 根据配置选择实现方式
+        if (backendConfig.isSdkMode()) {
+            return queryStreamViaSDK(message);
+        } else {
+            return queryStreamViaSubprocess(message, model);
+        }
+    }
+
+    /**
+     * 使用 SDK 进行流式查询
+     * 注意: SDK 不支持模型切换，模型由 iFlow CLI 启动时决定
+     */
+    private Flux<String> queryStreamViaSDK(String message) {
+        log.debug("iFlow SDK stream query: {}", message);
+
+        return Flux.create(sink -> {
+            try {
+                Flux<cn.iflow.sdk.types.messages.Message> messageFlux = IFlowQuery.queryStream(message);
+                
+                messageFlux.subscribe(
+                    msg -> {
+                        if (msg instanceof cn.iflow.sdk.types.messages.AssistantMessage) {
+                            cn.iflow.sdk.types.messages.AssistantMessage assistantMsg = 
+                                (cn.iflow.sdk.types.messages.AssistantMessage) msg;
+                            String text = assistantMsg.getChunk().getText();
+                            if (text != null && !text.isEmpty()) {
+                                sink.next(text);
+                            }
+                        }
+                    },
+                    error -> {
+                        log.error("SDK query failed", error);
+                        sink.error(error);
+                    },
+                    () -> {
+                        log.info("SDK query completed successfully");
+                        sink.complete();
+                    }
+                );
+            } catch (Exception e) {
+                log.error("Error running SDK query", e);
+                sink.error(e);
+            }
+        });
+    }
+
+    /**
+     * 使用 Subprocess 进行流式查询
+     * 支持通过 --model 参数切换模型
+     */
+    private Flux<String> queryStreamViaSubprocess(String message, String model) {
+        log.debug("iFlow Subprocess stream query with model {}: {}", model, message);
 
         // 使用 subprocess 调用 iFlow CLI，传递 --model 参数
         String actualModel = model != null ? model : "glm-4";

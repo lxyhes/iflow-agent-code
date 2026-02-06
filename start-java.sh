@@ -37,30 +37,20 @@ lsof -ti:5173 | xargs kill -9 2>/dev/null
 echo "Waiting 2 seconds..."
 sleep 2
 
-# 启动 iFlow CLI（多模型支持）
+# 启动 iFlow CLI（单一进程，支持动态模型切换）
 echo ""
-echo "[1/4] Starting iFlow CLI with multi-model support..."
-echo "[INFO] iFlow will run on port 8090 (glm-4)"
+echo "[1/4] Starting iFlow CLI..."
+echo "[INFO] iFlow will run on port 8090 (默认模型: glm-4.7)"
 
 # 清理多模型端口
 lsof -ti:8091 | xargs kill -9 2>/dev/null
 lsof -ti:8092 | xargs kill -9 2>/dev/null
 sleep 1
 
-# 启动默认模型 (glm-4)
-nohup iflow --experimental-acp --port 8090 > /tmp/iflow.log 2>&1 &
+# 启动 iFlow CLI（使用默认模型，可通过后端 API 动态切换）
+nohup iflow --experimental-acp --port 8090 --model glm-4.7 > /tmp/iflow.log 2>&1 &
 IFLOW_PID=$!
-echo "   PID: $IFLOW_PID (port 8090, model: glm-4)"
-
-# 启动 ROME 模型
-nohup iflow --experimental-acp --port 8091 --model iFlow-ROME-30BA3B > /tmp/iflow-8091.log 2>&1 &
-IFLOW_PID_ROME=$!
-echo "   PID: $IFLOW_PID_ROME (port 8091, model: iFlow-ROME-30BA3B)"
-
-# 启动 glm-4.7 模型
-nohup iflow --experimental-acp --port 8092 --model glm-4.7 > /tmp/iflow-8092.log 2>&1 &
-IFLOW_PID_GLM47=$!
-echo "   PID: $IFLOW_PID_GLM47 (port 8092, model: glm-4.7)"
+echo "   PID: $IFLOW_PID (port 8090, model: glm-4.7)"
 
 echo "Waiting 5 seconds for iFlow to start..."
 sleep 5
@@ -147,14 +137,12 @@ LOG_VIEWER_PID=$!
 # 保存 PID 到文件
 PID_FILE="$BASE_DIR/.launcher_pids.txt"
 echo "$IFLOW_PID" > "$PID_FILE"
-echo "$IFLOW_PID_ROME" >> "$PID_FILE"
-echo "$IFLOW_PID_GLM47" >> "$PID_FILE"
 echo "$BACKEND_PID" >> "$PID_FILE"
 echo "$NODE_PID" >> "$PID_FILE"
 echo "$FRONTEND_PID" >> "$PID_FILE"
 
 # 监控 Ctrl+C
-trap "echo ''; echo '[INFO] Stopping all services...'; kill $LOG_VIEWER_PID $IFLOW_PID $IFLOW_PID_ROME $IFLOW_PID_GLM47 $BACKEND_PID $NODE_PID $FRONTEND_PID 2>/dev/null; rm -f $PID_FILE; echo '[INFO] All services stopped!'; exit 0" INT TERM
+trap "echo ''; echo '[INFO] Stopping all services...'; kill $LOG_VIEWER_PID $IFLOW_PID $BACKEND_PID $NODE_PID $FRONTEND_PID 2>/dev/null; rm -f $PID_FILE; echo '[INFO] All services stopped!'; exit 0" INT TERM
 
 # 保持脚本运行
 while true; do

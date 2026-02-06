@@ -79,23 +79,55 @@ const IFlowModelSelector = () => {
     }
   }, [showDropdown]);
 
-  const handleModelChange = (modelId) => {
+  const handleModelChange = async (modelId) => {
     setCurrentModel(modelId);
     localStorage.setItem('iflow-model', modelId);
     // Dispatch custom event so ChatInterface can update immediately
     window.dispatchEvent(new CustomEvent('iflow-model-changed', { detail: { model: modelId } }));
     setShowDropdown(false);
     
+    // Check backend mode first
+    let needRestart = false;
+    try {
+      const modeResponse = await fetch('/api/iflow/backend/mode');
+      if (modeResponse.ok) {
+        const modeData = await modeResponse.json();
+        needRestart = modeData.mode === 'sdk';
+      }
+    } catch (error) {
+      console.error('Failed to check backend mode:', error);
+    }
+
     // Notify backend to switch model
-    fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelId })
-    })
-    .then(() => {
-        console.log(`[Model] Switched to ${modelId}`);
-    })
-    .catch(console.error);
+    if (needRestart) {
+      // SDK 模式：需要重启 iFlow 进程
+      fetch('/api/iflow/backend/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelId })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log(`[Model] Switched to ${modelId} (with iFlow process restart)`);
+        console.log('[Model]', data.message);
+      })
+      .catch(error => {
+        console.error('Failed to switch model:', error);
+      });
+    } else {
+      // Subprocess 模式：直接通知后端，无需重启
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelId })
+      })
+      .then(() => {
+        console.log(`[Model] Switched to ${modelId} (Subprocess mode)`);
+      })
+      .catch(error => {
+        console.error('Failed to switch model:', error);
+      });
+    }
   };
 
   const currentModelInfo = models.find(m => m.id === currentModel) || models[0];
