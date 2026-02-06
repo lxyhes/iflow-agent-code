@@ -41,14 +41,16 @@ public class StreamController {
         log.info("流式聊天请求: project={}, sessionId={}, model={}, message={}",
                 project, sessionId, model, message.substring(0, Math.min(50, message.length())));
 
-        SseEmitter emitter = new SseEmitter(300000L); // 5分钟超时
+        SseEmitter emitter = new SseEmitter(600000L); // 10分钟超时
 
         executorService.execute(() -> {
+            long startTime = System.currentTimeMillis();
             try {
                 // 发送开始标记
                 emitter.send(SseEmitter.event()
                         .name("message")
                         .data("{\"type\": \"start\"}"));
+                log.info("SSE: Sent start event");
 
                 // 使用 iFlow 进行流式查询，传递模型参数
                 String actualModel = model != null ? model : "glm-4";
@@ -59,14 +61,15 @@ public class StreamController {
                             try {
                                 // 检测 Execution Info 标记
                                 if (content.equals("EXECUTION_INFO_START")) {
-                                    return; // 跳过开始标记
+                                    log.debug("SSE: Skip EXECUTION_INFO_START");
+                                    return;
                                 } else if (content.equals("EXECUTION_INFO_END")) {
-                                    return; // 跳过结束标记
+                                    log.debug("SSE: Skip EXECUTION_INFO_END");
+                                    return;
                                 }
                                 
                                 // 如果内容看起来像 JSON（可能包含 session-id 等字段），发送为 execution_info 事件
                                 if (content.trim().startsWith("{") && content.contains("session-id")) {
-                                    // 转义特殊字符
                                     String escaped = content
                                             .replace("\\", "\\\\")
                                             .replace("\"", "\\\"")
@@ -76,11 +79,11 @@ public class StreamController {
                                     emitter.send(SseEmitter.event()
                                             .name("message")
                                             .data("{\"type\": \"execution_info\", \"data\": \"" + escaped + "\"}"));
+                                    log.debug("SSE: Sent execution_info event ({} chars)", content.length());
                                     return;
                                 }
                                 
-                                // 普通内容
-                                // 转义特殊字符
+                                // 普通内容 - 立即发送，不等待累积
                                 String escaped = content
                                         .replace("\\", "\\\\")
                                         .replace("\"", "\\\"")
@@ -90,15 +93,17 @@ public class StreamController {
                                 emitter.send(SseEmitter.event()
                                         .name("message")
                                         .data("{\"type\": \"content\", \"content\": \"" + escaped + "\"}"));
+                                log.debug("SSE: Sent content chunk ({} chars), elapsed: {}ms", 
+                                    content.length(), System.currentTimeMillis() - startTime);
                             } catch (IllegalStateException e) {
-                                // Emitter 已完成，停止发送
                                 log.debug("Emitter already complete, stopping stream");
                             } catch (IOException e) {
-                                log.warn("Failed to send SSE message (client may have disconnected): {}", e.getMessage());
+                                log.warn("Failed to send SSE message: {}", e.getMessage());
                             }
                         },
                         error -> {
-                            log.error("iFlow 流式响应错误", error);
+                            log.error("iFlow stream error after {}ms: {}", 
+                                System.currentTimeMillis() - startTime, error.getMessage());
                             try {
                                 emitter.send(SseEmitter.event()
                                         .name("message")
@@ -109,20 +114,24 @@ public class StreamController {
                             }
                         },
                         () -> {
+                            long duration = System.currentTimeMillis() - startTime;
+                            log.info("SSE: Stream completed after {}ms, sending end event", duration);
                             try {
-                                // 发送结束标记
                                 emitter.send(SseEmitter.event()
                                         .name("message")
                                         .data("{\"type\": \"end\"}"));
                                 emitter.complete();
-                            } catch (IllegalStateException | IOException e) {
+                            } catch (IllegalStateException e) {
+                                // Emitter 已经完成，这通常意味着 SDK 完成后自动关闭了连接
+                                log.debug("Emitter already completed, likely auto-closed after SDK completion");
+                            } catch (IOException e) {
                                 log.debug("Failed to send end message: {}", e.getMessage());
                             }
                         }
                 );
 
             } catch (Exception e) {
-                log.error("流式响应错误", e);
+                log.error("Stream error: {}", e.getMessage(), e);
                 try {
                     emitter.completeWithError(e);
                 } catch (IllegalStateException ex) {

@@ -11,12 +11,14 @@ export function useWebSocket() {
   const reconnectAttemptsRef = useRef(0);
   const messageQueueRef = useRef([]);
   const wsRef = useRef(null);
+  const isAIProcessingRef = useRef(false); // 使用 ref 代替 state
 
   const MAX_RECONNECT_ATTEMPTS = 10;
   const INITIAL_RECONNECT_DELAY = 1000;
   const MAX_RECONNECT_DELAY = 30000;
-  const HEARTBEAT_INTERVAL = 30000;
-  const CONNECTION_TIMEOUT = 10000;
+  const HEARTBEAT_INTERVAL = 15000; // 心跳间隔 15 秒
+  const CONNECTION_TIMEOUT = 60000; // 连接超时 60 秒
+  const AI_PROCESSING_HEARTBEAT = 5000; // AI 处理期间更频繁的心跳：5 秒
 
   const getReconnectDelay = useCallback((attempt) => {
     const delay = Math.min(
@@ -38,12 +40,28 @@ export function useWebSocket() {
   const sendHeartbeat = useCallback((websocket) => {
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       try {
-        websocket.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        websocket.send(JSON.stringify({ 
+          type: 'ping', 
+          timestamp: Date.now(),
+          aiProcessing: isAIProcessingRef.current // 使用 ref 获取状态
+        }));
       } catch (error) {
         console.warn('Failed to send heartbeat:', error);
       }
     }
   }, []);
+
+  const updateHeartbeatInterval = useCallback((websocket) => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+
+    // AI 处理期间使用更频繁的心跳
+    const interval = isAIProcessingRef.current ? AI_PROCESSING_HEARTBEAT : HEARTBEAT_INTERVAL;
+    heartbeatIntervalRef.current = setInterval(() => {
+      sendHeartbeat(websocket);
+    }, interval);
+  }, [sendHeartbeat]);
 
   const connect = useCallback(async () => {
     try {
@@ -80,9 +98,8 @@ export function useWebSocket() {
         setWs(websocket);
         reconnectAttemptsRef.current = 0;
 
-        heartbeatIntervalRef.current = setInterval(() => {
-          sendHeartbeat(websocket);
-        }, HEARTBEAT_INTERVAL);
+        // 启动心跳机制
+        updateHeartbeatInterval(websocket);
 
         processMessageQueue(websocket);
       };
@@ -94,6 +111,24 @@ export function useWebSocket() {
           if (data.type === 'pong') {
             setLastHeartbeat(Date.now());
             return;
+          }
+
+          // 检测 AI 开始处理（流式响应开始）
+          if (data.type === 'content' || data.type === 'tool_start' || data.type === 'thinking') {
+            isAIProcessingRef.current = true; // 使用 ref 设置状态
+            // 更新心跳频率
+            if (wsRef.current) {
+              updateHeartbeatInterval(wsRef.current);
+            }
+          }
+
+          // 检测 AI 处理完成
+          if (data.type === 'tool_end' || data.type === 'done' || data.type === 'error') {
+            isAIProcessingRef.current = false; // 使用 ref 设置状态
+            // 恢复正常心跳频率
+            if (wsRef.current) {
+              updateHeartbeatInterval(wsRef.current);
+            }
           }
 
           setMessages(prev => {

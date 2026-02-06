@@ -76,6 +76,7 @@ public class IFlowService {
         log.debug("iFlow SDK stream query: {}", message);
 
         return Flux.create(sink -> {
+            long startTime = System.currentTimeMillis();
             try {
                 Flux<cn.iflow.sdk.types.messages.Message> messageFlux = IFlowQuery.queryStream(message);
                 
@@ -86,21 +87,25 @@ public class IFlowService {
                                 (cn.iflow.sdk.types.messages.AssistantMessage) msg;
                             String text = assistantMsg.getChunk().getText();
                             if (text != null && !text.isEmpty()) {
+                                log.debug("SDK: Received chunk ({} chars) after {}ms", 
+                                    text.length(), System.currentTimeMillis() - startTime);
                                 sink.next(text);
                             }
                         }
                     },
                     error -> {
-                        log.error("SDK query failed", error);
+                        log.error("SDK query failed after {}ms: {}", 
+                            System.currentTimeMillis() - startTime, error.getMessage());
                         sink.error(error);
                     },
                     () -> {
-                        log.info("SDK query completed successfully");
+                        log.info("SDK query completed successfully after {}ms", 
+                            System.currentTimeMillis() - startTime);
                         sink.complete();
                     }
                 );
             } catch (Exception e) {
-                log.error("Error running SDK query", e);
+                log.error("Error running SDK query: {}", e.getMessage(), e);
                 sink.error(e);
             }
         });
