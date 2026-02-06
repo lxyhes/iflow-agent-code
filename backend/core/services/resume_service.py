@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 class ResumeService:
     """简历服务类"""
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         self.db = get_db()
-        self.llm = get_llm_service()
+        self.llm = get_llm_service(api_key=api_key)
         self._init_tables()
 
     def _init_tables(self):
@@ -1568,9 +1568,23 @@ class ResumeService:
 _resume_service = None
 
 
-def get_resume_service() -> ResumeService:
-    """获取简历服务实例"""
+def get_resume_service(api_key: Optional[str] = None) -> ResumeService:
+    """
+    获取简历服务实例
+    
+    Args:
+        api_key: 可选的API Key，如果提供则创建新实例使用该Key
+        
+    Returns:
+        ResumeService实例
+    """
     global _resume_service
+    
+    # 如果提供了API Key，创建新实例
+    if api_key:
+        return ResumeService(api_key=api_key)
+    
+    # 否则返回全局实例
     if _resume_service is None:
         _resume_service = ResumeService()
     return _resume_service

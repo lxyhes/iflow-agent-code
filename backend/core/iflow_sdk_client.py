@@ -753,8 +753,10 @@ def create_sdk_client(
         api_key = os.getenv("IFLOW_API_KEY") or os.getenv("IFLOW_SDK_API_KEY")
         if api_key:
             auth_method_id = "iflow"
-            auth_method_info = {"api_key": api_key}
-            logger.info("使用环境变量中的 API Key 进行认证")
+            # 添加 base_url 以修复 "Failed to parse URL from /chat/completions:Invalid URL" 错误
+            base_url = os.getenv("IFLOW_API_BASE_URL", "https://api.iflow.cn/v1")
+            auth_method_info = {"api_key": api_key, "base_url": base_url}
+            logger.info(f"使用环境变量中的 API Key 进行认证，base_url: {base_url}")
         else:
             # 使用 iFlow 默认认证方式（需要提前运行 iflow /auth 登录）
             auth_method_id = "iflow"

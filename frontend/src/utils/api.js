@@ -2,6 +2,7 @@
 export const authenticatedFetch = (url, options = {}) => {
   const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
   const token = localStorage.getItem('auth-token');
+  const apiKey = localStorage.getItem('iflow_api_key');
 
   const isFormDataBody =
     typeof FormData !== 'undefined' && options?.body instanceof FormData;
@@ -13,6 +14,11 @@ export const authenticatedFetch = (url, options = {}) => {
 
   if (!isPlatform && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
+  // 添加API Key到请求头（用于后端AI功能）
+  if (apiKey) {
+    defaultHeaders['X-API-Key'] = apiKey;
   }
 
   return fetch(url, {

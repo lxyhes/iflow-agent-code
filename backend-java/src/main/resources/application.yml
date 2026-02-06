@@ -1,0 +1,103 @@
+server:
+  port: 8080
+  tomcat:
+    basedir: ./tomcat-work
+
+spring:
+  application:
+    name: iflow-agent-backend
+
+  datasource:
+    url: jdbc:sqlite:./database/agent.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        format_sql: true
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # Spring AI Alibaba Configuration - 可选配置
+  # 如需使用 DashScope，请设置 ALIYUN_DASHSCOPE_API_KEY 环境变量
+  ai:
+    dashscope:
+      api-key: ${ALIYUN_DASHSCOPE_API_KEY:}
+      chat:
+        options:
+          model: qwen-turbo
+          temperature: 0.7
+      embedding:
+        options:
+          model: text-embedding-v2
+
+# CORS Configuration
+cors:
+  origins: "http://localhost:5173,http://localhost:3001"
+  dev-mode: true
+
+# Cache Configuration
+cache:
+  base-dir: "./cache"
+
+# LLM Configuration - iFlow 作为主要的 AI 服务
+llm:
+  # 默认使用 iFlow
+  provider: iflow
+  api-key: ${IFLOW_API_KEY:}
+  base-url: ${IFLOW_API_BASE_URL:https://api.iflow.cn/v1}
+  default-model: glm-4
+  default-temperature: 0.7
+
+# iFlow SDK Configuration
+# iFlow SDK 自动管理 iFlow CLI 进程，提供大模型能力
+iflow:
+  enabled: true
+  sdk:
+    # WebSocket URL，默认本地 8090 端口
+    url: ws://localhost:8090/acp
+    # 是否自动启动 iFlow 进程
+    auto-start: true
+    # 超时时间（秒）
+    timeout-seconds: 30
+    # 权限模式: AUTO, ALWAYS_ALLOW, ALWAYS_DENY
+    permission-mode: AUTO
+
+# AgentScope Configuration - 面试功能（可选）
+# 如需使用 AgentScope 面试功能，请配置 API key
+agentscope:
+  enabled: true
+  dashscope:
+    api-key: ${AGENTSCOPE_DASHSCOPE_API_KEY:}
+    model: qwen-turbo
+
+# Aliyun Cloud Configuration - OCR 服务（可选）
+aliyun:
+  access-key-id: ${ALIYUN_ACCESS_KEY_ID:}
+  access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:}
+  region: cn-hangzhou
+  ocr:
+    endpoint: ocr.cn-hangzhou.aliyuncs.com
+
+# Logging
+logging:
+  level:
+    com.iflow.agent: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{HH:mm:ss} [%level] %logger{36}: %msg%n"
+
+# File Upload
+file:
+  max-size: 104857600  # 100MB in bytes

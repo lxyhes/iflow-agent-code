@@ -7,7 +7,7 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 import sys
@@ -475,6 +475,7 @@ async def delete_project(
 @router.post("/{resume_id}/ai-analyze")
 async def ai_analyze_resume(
     resume_id: str,
+    request: Request,
     user_id: str = Depends(get_optional_user_id),
 ):
     """AI深度分析简历
@@ -485,7 +486,9 @@ async def ai_analyze_resume(
     - 行业对比分析
     - 求职竞争力评估
     """
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
@@ -498,41 +501,48 @@ async def ai_analyze_resume(
 @router.post("/{resume_id}/optimize")
 async def optimize_resume(
     resume_id: str,
-    request: OptimizeRequest,
+    request: Request,
+    optimize_request: OptimizeRequest,
     user_id: str = Depends(get_optional_user_id),
 ):
     """AI优化简历"""
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
 
-    result = await service.optimize_resume(resume_id, request.job_description)
+    result = await service.optimize_resume(resume_id, optimize_request.job_description)
     return {"success": True, "data": result}
 
 
 @router.post("/{resume_id}/match-job")
 async def match_job(
     resume_id: str,
-    request: JobMatchRequest,
+    request: Request,
+    match_request: JobMatchRequest,
     user_id: str = Depends(get_optional_user_id),
 ):
     """简历与职位匹配分析"""
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
 
-    result = await service.match_job(resume_id, request.job_description)
+    result = await service.match_job(resume_id, match_request.job_description)
     return {"success": True, "data": result}
 
 
 @router.post("/{resume_id}/rewrite")
 async def rewrite_resume(
     resume_id: str,
-    request: RewriteRequest = None,
+    request: Request,
+    rewrite_request: RewriteRequest = None,
     user_id: str = Depends(get_optional_user_id),
 ):
     """根据AI诊断报告自动重写简历
@@ -545,14 +555,16 @@ async def rewrite_resume(
     
     可选传入 health_analysis 参数，使用已有的健康分析结果
     """
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
 
     # 如果传入了健康分析数据，使用它
-    health_analysis = request.health_analysis if request else None
+    health_analysis = rewrite_request.health_analysis if rewrite_request else None
     result = await service.rewrite_resume(resume, health_analysis)
     return {"success": True, "data": result}
 
@@ -560,18 +572,21 @@ async def rewrite_resume(
 @router.post("/{resume_id}/generate-cover-letter")
 async def generate_cover_letter(
     resume_id: str,
-    request: CoverLetterRequest,
+    request: Request,
+    cover_request: CoverLetterRequest,
     user_id: str = Depends(get_optional_user_id),
 ):
     """生成求职信"""
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
 
     cover_letter = await service.generate_cover_letter(
-        resume_id, request.company, request.position, request.job_description
+        resume_id, cover_request.company, cover_request.position, cover_request.job_description
     )
     return {"success": True, "data": {"cover_letter": cover_letter}}
 
@@ -579,6 +594,7 @@ async def generate_cover_letter(
 @router.post("/{resume_id}/health-check")
 async def health_check(
     resume_id: str,
+    request: Request,
     user_id: str = Depends(get_optional_user_id),
 ):
     """AI简历健康度检查
@@ -589,7 +605,9 @@ async def health_check(
     - 竞争力分析
     - 改进建议
     """
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
@@ -602,6 +620,7 @@ async def health_check(
 @router.post("/{resume_id}/layout-check")
 async def layout_check(
     resume_id: str,
+    request: Request,
     user_id: str = Depends(get_optional_user_id),
 ):
     """AI排版检查
@@ -612,7 +631,9 @@ async def layout_check(
     - 可读性评估
     - 专业外观
     """
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:
@@ -625,6 +646,7 @@ async def layout_check(
 @router.post("/{resume_id}/diagnose")
 async def diagnose_resume(
     resume_id: str,
+    request: Request,
     user_id: str = Depends(get_optional_user_id),
 ):
     """AI简历诊断
@@ -637,7 +659,9 @@ async def diagnose_resume(
     - 语言表达
     - 篇幅控制
     """
-    service = get_resume_service()
+    # 从请求头获取API Key
+    api_key = request.headers.get("X-API-Key")
+    service = get_resume_service(api_key=api_key)
 
     resume = service.get_resume(resume_id)
     if not resume:

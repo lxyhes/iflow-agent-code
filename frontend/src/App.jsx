@@ -30,6 +30,7 @@ import FocusModeToggle from './components/FocusModeToggle';
 import AIPersonaSelector from './components/AIPersonaSelector';
 import GlobalStatusBar from './components/GlobalStatusBar';
 import CommandPalette from './components/CommandPalette';
+import ApiKeySettings from './components/resume/ApiKeySettings';
 
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -68,6 +69,9 @@ function AppContent() {
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
+
+  // API Key Settings
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false);
 
   // 🚀 Killer Features: Focus Mode and AI Persona
   const [isFocusMode, setIsFocusMode] = useLocalStorage('focusMode', false);
@@ -133,6 +137,15 @@ function AppContent() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Listen for API Key settings event from Sidebar
+  useEffect(() => {
+    const handleShowApiKeySettings = () => {
+      setShowApiKeySettings(true);
+    };
+    window.addEventListener('show-apikey-settings', handleShowApiKeySettings);
+    return () => window.removeEventListener('show-apikey-settings', handleShowApiKeySettings);
   }, []);
 
   // Detect if running as PWA
@@ -1135,6 +1148,12 @@ function AppContent() {
       <FocusModeToggle
         isFocusMode={isFocusMode}
         onToggle={() => setIsFocusMode(!isFocusMode)}
+      />
+
+      {/* API Key Settings Modal */}
+      <ApiKeySettings
+        isOpen={showApiKeySettings}
+        onClose={() => setShowApiKeySettings(false)}
       />
     </div>
   );

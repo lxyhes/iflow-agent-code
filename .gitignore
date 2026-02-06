@@ -109,9 +109,29 @@ token.json
 *password*
 *credential*
 
+# --- Java/Maven ---
+target/
+temp/
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+.idea/
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.mvn/
+mvnw
+mvnw.cmd
+
 # --- Docker & DevOps ---
 .docker/
 docker-compose.override.yml
 .dockerenv
 *.tar
 *.tar.gz
+nul
+/backend-java/target/

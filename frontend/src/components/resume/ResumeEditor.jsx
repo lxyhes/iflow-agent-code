@@ -24,7 +24,7 @@ import {
   ChevronDown, ChevronUp, Loader2, Check, X,
   Clock, History, Eye, FileText, Sparkles,
   Stethoscope, Zap, Activity, Wand2, Layout,
-  Camera
+  Camera, Target
 } from 'lucide-react';
 import { resumeApi } from '../../services/resumeApi';
 import ResumeCompletionScore from './ResumeCompletionScore';
@@ -37,6 +37,10 @@ import ActionVerbsLibrary from './ActionVerbsLibrary';
 import ResumeHealthDashboard from './ResumeHealthDashboard';
 import AIOptimization from './AIOptimization';
 import FormattingChecker from './FormattingChecker';
+import KeyboardShortcuts from './KeyboardShortcuts';
+import SplitScreenEditor from './SplitScreenEditor';
+import SkillRadarChart from './SkillRadarChart';
+import ExperienceTimeline from './ExperienceTimeline';
 
 // 自动保存间隔（毫秒）
 const AUTO_SAVE_INTERVAL = 30000;
@@ -56,6 +60,11 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   // 第二阶段功能状态
   const [showDiagnostic, setShowDiagnostic] = useState(false);
   const [showHealthDashboard, setShowHealthDashboard] = useState(false);
+
+  // 第三阶段功能状态
+  const [splitScreenActive, setSplitScreenActive] = useState(false);
+  const [showSkillRadar, setShowSkillRadar] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
   
   const autoSaveTimerRef = useRef(null);
   const isDirtyRef = useRef(false);
@@ -273,6 +282,26 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
   }
 
   return (
+    <KeyboardShortcuts
+      onSave={handleSave}
+      onUndo={() => {
+        // 可以实现撤销功能
+        console.log('撤销操作');
+      }}
+      onRedo={() => {
+        // 可以实现重做功能
+        console.log('重做操作');
+      }}
+      onPreview={() => setShowPreview(true)}
+      onDiagnostic={() => setShowDiagnostic(true)}
+      onTabChange={setActiveTab}
+      currentTab={activeTab}
+    >
+    <SplitScreenEditor
+      resume={localResume}
+      isActive={splitScreenActive}
+      onToggle={() => setSplitScreenActive(!splitScreenActive)}
+    >
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
@@ -312,6 +341,22 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
               >
                 <Activity className="w-3.5 h-3.5" />
                 健康度
+              </button>
+              <button
+                onClick={() => setShowSkillRadar(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 rounded-md hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                title="技能雷达图"
+              >
+                <Target className="w-3.5 h-3.5" />
+                技能图
+              </button>
+              <button
+                onClick={() => setShowTimeline(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                title="职业时间轴"
+              >
+                <History className="w-3.5 h-3.5" />
+                时间轴
               </button>
               <AIOptimization 
                 resume={localResume} 
@@ -577,7 +622,29 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
           }}
         />
       )}
+
+      {/* 技能雷达图 */}
+      {showSkillRadar && (
+        <SkillRadarChart
+          resume={localResume}
+          onClose={() => setShowSkillRadar(false)}
+          onUpdate={(updatedSkills) => {
+            // 可以在这里更新简历的技能数据
+            console.log('Updated skills:', updatedSkills);
+          }}
+        />
+      )}
+
+      {/* 职业时间轴 */}
+      {showTimeline && (
+        <ExperienceTimeline
+          resume={localResume}
+          onClose={() => setShowTimeline(false)}
+        />
+      )}
     </div>
+    </SplitScreenEditor>
+    </KeyboardShortcuts>
   );
 };
 
