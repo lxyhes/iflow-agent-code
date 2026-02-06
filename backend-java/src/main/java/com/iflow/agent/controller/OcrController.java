@@ -1,197 +1,122 @@
 package com.iflow.agent.controller;
 
-import com.iflow.agent.service.ocr.AliyunOcrService;
-import com.iflow.agent.service.ocr.OcrResult;
-import lombok.Data;
+import com.iflow.agent.dto.ocr.OcrRequest;
+import com.iflow.agent.dto.ocr.OcrResponse;
+import com.iflow.agent.service.ocr.OcrService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Base64;
 import java.util.Map;
 
+/**
+ * OCR API - 对应 Python 的 ocr.py
+ */
 @Slf4j
 @RestController
-@RequestMapping("/api/ocr")
+@RequestMapping("/api/projects/{projectName}/ocr")
 @RequiredArgsConstructor
 public class OcrController {
 
-    private final AliyunOcrService aliyunOcrService;
+    private final OcrService ocrService;
 
-    @PostMapping("/general")
-    public ResponseEntity<?> recognizeGeneral(@RequestParam("file") MultipartFile file) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
+    /**
+     * OCR 识别
+     */
+    @PostMapping(value = "/recognize", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> recognize(
+            @PathVariable String projectName,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(defaultValue = "rapidocr") String technology,
+            @RequestParam(defaultValue = "200") int dpi,
+            @RequestParam(defaultValue = "true") boolean preprocess,
+            @RequestParam(defaultValue = "true") boolean deskew,
+            @RequestParam(defaultValue = "2200") int maxSide,
+            @RequestParam(defaultValue = "") String pageRange,
+            @RequestParam(defaultValue = "true") boolean returnImages,
+            @RequestParam(defaultValue = "900") int previewMaxSide,
+            @RequestParam(defaultValue = "1") int maxPreviewPages) {
+
+        log.info("OCR识别: project={}, file={}", projectName, file.getOriginalFilename());
 
         try {
-            byte[] imageBytes = file.getBytes();
-            String result = aliyunOcrService.recognizeGeneral(imageBytes);
+            OcrRequest request = new OcrRequest();
+            request.setTechnology(technology);
+            request.setDpi(dpi);
+            request.setPreprocess(preprocess);
+            request.setDeskew(deskew);
+            request.setMaxSide(maxSide);
+            request.setPageRange(pageRange);
+            request.setReturnImages(returnImages);
+            request.setPreviewMaxSide(previewMaxSide);
+            request.setMaxPreviewPages(maxPreviewPages);
 
-            if (result.startsWith("Error:")) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result));
-            }
+            OcrResponse result = ocrService.recognize(file, request, projectName);
 
             return ResponseEntity.ok(Map.of(
-                    "text", result,
-                    "type", "general"
+                    "success", true,
+                    "data", result
+            ));
+
+        } catch (IllegalArgumentException e) {
+            log.error("OCR参数错误: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
             ));
         } catch (Exception e) {
-            log.error("OCR general recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
+            log.error("OCR识别失败", e);
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
     }
 
-    @PostMapping("/table")
-    public ResponseEntity<?> recognizeTable(@RequestParam("file") MultipartFile file) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
+    /**
+     * 获取预览图片
+     */
+    @GetMapping("/preview")
+    public ResponseEntity<byte[]> getPreview(
+            @PathVariable String projectName,
+            @RequestParam String token,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "900") int maxSide) {
+
+        log.info("获取预览: project={}, token={}, page={}", projectName, token, page);
 
         try {
-            byte[] imageBytes = file.getBytes();
-            String result = aliyunOcrService.recognizeTable(imageBytes);
+            byte[] imageData = ocrService.getPreview(token, page, maxSide);
 
-            if (result.startsWith("Error:")) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result));
+            if (imageData.length == 0) {
+                // 返回空图片或错误提示
+                return ResponseEntity.noContent().build();
             }
 
-            return ResponseEntity.ok(Map.of(
-                    "text", result,
-                    "type", "table"
-            ));
-        } catch (Exception e) {
-            log.error("OCR table recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_JPEG)
+                    .body(imageData);
+
+        } catch (IllegalArgumentException e) {
+            log.error("预览错误: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
         }
     }
 
-    @PostMapping("/document")
-    public ResponseEntity<?> recognizeDocument(@RequestParam("file") MultipartFile file) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
+    /**
+     * 清除OCR缓存
+     */
+    @DeleteMapping("/cache")
+    public ResponseEntity<Map<String, Object>> clearCache(@PathVariable String projectName) {
+        log.info("清除OCR缓存: project={}", projectName);
 
-        try {
-            byte[] imageBytes = file.getBytes();
-            String result = aliyunOcrService.recognizeDocument(imageBytes);
-
-            if (result.startsWith("Error:")) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result));
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "text", result,
-                    "type", "document"
-            ));
-        } catch (Exception e) {
-            log.error("OCR document recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @PostMapping("/handwriting")
-    public ResponseEntity<?> recognizeHandwriting(@RequestParam("file") MultipartFile file) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
-
-        try {
-            byte[] imageBytes = file.getBytes();
-            String result = aliyunOcrService.recognizeHandwriting(imageBytes);
-
-            if (result.startsWith("Error:")) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result));
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "text", result,
-                    "type", "handwriting"
-            ));
-        } catch (Exception e) {
-            log.error("OCR handwriting recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @PostMapping("/smart")
-    public ResponseEntity<?> smartRecognize(@RequestParam("file") MultipartFile file) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
-
-        try {
-            byte[] imageBytes = file.getBytes();
-            OcrResult result = aliyunOcrService.smartRecognize(imageBytes);
-
-            if (!result.isSuccess()) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result.getError()));
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "text", result.getText(),
-                    "type", result.getType()
-            ));
-        } catch (Exception e) {
-            log.error("OCR smart recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @PostMapping("/base64")
-    public ResponseEntity<?> recognizeBase64(@RequestBody Base64Request request) {
-        if (!aliyunOcrService.isAvailable()) {
-            return ResponseEntity.status(503)
-                    .body(Map.of("error", "OCR service not configured"));
-        }
-
-        try {
-            byte[] imageBytes = Base64.getDecoder().decode(request.getImage());
-            String result = aliyunOcrService.recognizeGeneral(imageBytes);
-
-            if (result.startsWith("Error:")) {
-                return ResponseEntity.internalServerError()
-                        .body(Map.of("error", result));
-            }
-
-            return ResponseEntity.ok(Map.of(
-                    "text", result,
-                    "type", "general"
-            ));
-        } catch (Exception e) {
-            log.error("OCR base64 recognition failed", e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> getStatus() {
+        int count = ocrService.clearCache();
         return ResponseEntity.ok(Map.of(
-                "available", aliyunOcrService.isAvailable(),
-                "service", "aliyun-ocr"
+                "success", true,
+                "message", "已清除 " + count + " 条缓存数据"
         ));
-    }
-
-    @Data
-    public static class Base64Request {
-        private String image;
     }
 }

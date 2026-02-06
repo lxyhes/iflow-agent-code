@@ -6,7 +6,7 @@ import com.iflow.agent.domain.interview.enums.CoordinationMode;
 import com.iflow.agent.domain.interview.enums.InterviewPhase;
 import com.iflow.agent.domain.interview.enums.InterviewStatus;
 import com.iflow.agent.domain.interview.enums.InterviewerType;
-import com.iflow.agent.repository.InterviewSessionRepository;
+import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +51,28 @@ public class InterviewCoordinator {
     public void registerAgent(AgentScopeInterviewerAgent agent) {
         agents.put(agent.getType().getCode(), agent);
         log.info("注册面试官智能体: {}", agent.getName());
+    }
+
+    /**
+     * 初始化会话
+     */
+    public void initializeSession(String sessionId, com.iflow.agent.dto.interview.CandidateProfileDTO profile) {
+        log.info("初始化面试会话: {}", sessionId);
+
+        InterviewContext context = contexts.get(sessionId);
+        if (context == null) {
+            InterviewSession session = getSession(sessionId);
+            context = new InterviewContext(sessionId, session.getAgentOrder());
+            contexts.put(sessionId, context);
+        }
+    }
+
+    /**
+     * 启动会话
+     */
+    public void startSession(String sessionId) {
+        log.info("启动面试会话: {}", sessionId);
+        startInterview(sessionId);
     }
 
     /**

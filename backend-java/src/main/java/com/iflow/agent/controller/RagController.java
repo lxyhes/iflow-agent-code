@@ -1,17 +1,24 @@
 package com.iflow.agent.controller;
 
-import com.iflow.agent.service.rag.Document;
+import com.iflow.agent.dto.rag.RagIndexRequest;
+import com.iflow.agent.dto.rag.RagRetrieveRequest;
+import com.iflow.agent.dto.rag.RagRetrieveResponse;
+import com.iflow.agent.dto.rag.RagResult;
 import com.iflow.agent.service.rag.RagService;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * RAG API - 对应 Python 的 rag.py
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/rag")
@@ -20,129 +27,181 @@ public class RagController {
 
     private final RagService ragService;
 
-    @PostMapping("/collections/{collectionName}/documents")
-    public ResponseEntity<?> addDocument(
-            @PathVariable String collectionName,
-            @RequestBody AddDocumentRequest request) {
+    @Value("${file.base-path:./projects}")
+    private String basePath;
 
-        Document doc = ragService.addDocument(
-                collectionName,
-                request.getTitle(),
-                request.getContent(),
-                request.getSource()
-        );
+    /**
+     * 获取 RAG 统计信息
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getStats(
+            @RequestParam(required = false) String projectPath,
+            @RequestParam(required = false) String projectName) {
 
+        String finalPath = resolveProjectPath(projectPath, projectName);
+        if (finalPath == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "缺少 project_path 或 project_name 参数"
+            ));
+        }
+
+        Map<String, Object> stats = ragService.getStats(finalPath);
         return ResponseEntity.ok(Map.of(
-                "id", doc.getId(),
-                "collection", collectionName,
-                "title", doc.getTitle()
+                "success", true,
+                "stats", stats
         ));
     }
 
-    @PostMapping("/collections/{collectionName}/documents/batch")
-    public ResponseEntity<?> addDocuments(
-            @PathVariable String collectionName,
-            @RequestBody List<AddDocumentRequest> requests) {
-
-        List<RagService.DocumentInput> inputs = requests.stream()
-                .map(r -> RagService.DocumentInput.builder()
-                        .title(r.getTitle())
-                        .content(r.getContent())
-                        .source(r.getSource())
-                        .build())
-                .collect(Collectors.toList());
-
-        List<Document> docs = ragService.addDocuments(collectionName, inputs);
-
+    /**
+     * 获取 RAG 依赖状态
+     */
+    @GetMapping("/status")
+    public ResponseEntity<Map<String, Object>> getStatus() {
         return ResponseEntity.ok(Map.of(
-                "added", docs.size(),
-                "collection", collectionName
+                "success", true,
+                "dependencies", Map.of(
+                        "chromadb", false,  // 简化实现，不使用 ChromaDB
+                        "sentence_transformers", false,
+                        "sklearn", true     // 使用简单的 TF-IDF 风格检索
+                ),
+                "current_mode", "tfidf",
+                "available_retrievers", List.of("simple")
         ));
     }
 
-    @PostMapping("/collections/{collectionName}/search")
-    public ResponseEntity<?> search(
-            @PathVariable String collectionName,
-            @RequestBody SearchRequest request) {
+    /**
+     * 索引项目（SSE 流式响应）
+     */
+    @PostMapping("/index")
+    public SseEmitter indexProject(
+            @RequestParam(required = false) String projectPath,
+            @RequestParam(required = false) String projectName,
+            @RequestBody(required = false) RagIndexRequest request) {
 
-        List<RagService.SearchResult> results = ragService.search(
-                collectionName,
-                request.getQuery(),
-                request.getTopK() != null ? request.getTopK() : 5
-        );
+        String finalPath = resolveProjectPath(projectPath, projectName);
+        if (finalPath == null) {
+            SseEmitter emitter = new SseEmitter();
+            try {
+                emitter.send(Map.of("type", "error", "message", "缺少 project_path 或 project_name 参数"));
+                emitter.complete();
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
 
-        List<Map<String, Object>> response = results.stream()
-                .map(r -> Map.<String, Object>of(
-                        "id", r.getDocument().getId(),
-                        "title", r.getDocument().getTitle(),
-                        "content", r.getDocument().getContent(),
-                        "source", r.getDocument().getSource(),
-                        "score", r.getScore()
-                ))
-                .collect(Collectors.toList());
+        boolean forceReindex = request != null && Boolean.TRUE.equals(request.getForceReindex());
 
-        return ResponseEntity.ok(response);
+        SseEmitter emitter = new SseEmitter(300000L); // 5分钟超时
+
+        new Thread(() -> {
+            try {
+                List<Map<String, Object>> progress = ragService.indexProject(finalPath, forceReindex);
+
+                for (Map<String, Object> event : progress) {
+                    emitter.send(event);
+                }
+
+                emitter.complete();
+            } catch (Exception e) {
+                log.error("索引项目失败", e);
+                try {
+                    emitter.send(Map.of("type", "error", "message", e.getMessage()));
+                } catch (IOException ex) {
+                    // ignore
+                }
+                emitter.completeWithError(e);
+            }
+        }).start();
+
+        return emitter;
     }
 
-    @PostMapping("/collections/{collectionName}/query")
-    public ResponseEntity<?> query(
-            @PathVariable String collectionName,
-            @RequestBody QueryRequest request) {
+    /**
+     * 检索文档
+     */
+    @PostMapping("/retrieve/{projectName}")
+    public ResponseEntity<Map<String, Object>> retrieve(
+            @PathVariable String projectName,
+            @RequestBody RagRetrieveRequest request) {
 
-        RagService.RagResponse result = ragService.query(
-                collectionName,
-                request.getQuestion(),
-                request.getTopK() != null ? request.getTopK() : 5
-        );
+        if (request.getQuery() == null || request.getQuery().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "查询文本不能为空"
+            ));
+        }
+
+        String projectPath = basePath + "/" + projectName;
+
+        try {
+            List<RagResult> results = ragService.retrieve(
+                    projectPath,
+                    request.getQuery(),
+                    request.getNResults(),
+                    request.getSimilarityThreshold(),
+                    request.getFileTypes(),
+                    request.getLanguages(),
+                    request.getMinChunkSize(),
+                    request.getMaxChunkSize(),
+                    request.getSortBy()
+            );
+
+            RagRetrieveResponse response = RagRetrieveResponse.builder()
+                    .success(true)
+                    .query(request.getQuery())
+                    .results(results)
+                    .count(results.size())
+                    .totalFiltered(results.size())
+                    .filtersApplied(Map.of(
+                            "similarity_threshold", request.getSimilarityThreshold(),
+                            "file_types", request.getFileTypes(),
+                            "languages", request.getLanguages(),
+                            "min_chunk_size", request.getMinChunkSize(),
+                            "max_chunk_size", request.getMaxChunkSize(),
+                            "sort_by", request.getSortBy()
+                    ))
+                    .build();
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "query", response.getQuery(),
+                    "results", response.getResults(),
+                    "count", response.getCount(),
+                    "total_filtered", response.getTotalFiltered(),
+                    "filters_applied", response.getFiltersApplied()
+            ));
+
+        } catch (Exception e) {
+            log.error("RAG检索失败", e);
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "RAG检索失败: " + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 重置 RAG 索引
+     */
+    @PostMapping("/reset/{projectName}")
+    public ResponseEntity<Map<String, Object>> resetIndex(@PathVariable String projectName) {
+        String projectPath = basePath + "/" + projectName;
+
+        ragService.resetIndex(projectPath);
 
         return ResponseEntity.ok(Map.of(
-                "answer", result.getAnswer(),
-                "sources", result.getSources()
+                "success", true,
+                "message", "RAG索引已重置"
         ));
     }
 
-    @GetMapping("/collections/{collectionName}/documents")
-    public ResponseEntity<?> getDocuments(@PathVariable String collectionName) {
-        List<Document> docs = ragService.getDocuments(collectionName);
+    // ========== 私有方法 ==========
 
-        List<Map<String, Object>> response = docs.stream()
-                .map(d -> Map.<String, Object>of(
-                        "id", d.getId(),
-                        "title", d.getTitle(),
-                        "content", d.getContent().substring(0, Math.min(200, d.getContent().length())) + "...",
-                        "source", d.getSource(),
-                        "createdAt", d.getCreatedAt()
-                ))
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(response);
-    }
-
-    @DeleteMapping("/collections/{collectionName}")
-    public ResponseEntity<?> deleteCollection(@PathVariable String collectionName) {
-        ragService.deleteCollection(collectionName);
-        return ResponseEntity.ok(Map.of(
-                "status", "deleted",
-                "collection", collectionName
-        ));
-    }
-
-    @Data
-    public static class AddDocumentRequest {
-        private String title;
-        private String content;
-        private String source;
-    }
-
-    @Data
-    public static class SearchRequest {
-        private String query;
-        private Integer topK;
-    }
-
-    @Data
-    public static class QueryRequest {
-        private String question;
-        private Integer topK;
+    private String resolveProjectPath(String projectPath, String projectName) {
+        if (projectPath != null && !projectPath.isEmpty()) {
+            return projectPath;
+        } else if (projectName != null && !projectName.isEmpty()) {
+            return basePath + "/" + projectName;
+        }
+        return null;
     }
 }

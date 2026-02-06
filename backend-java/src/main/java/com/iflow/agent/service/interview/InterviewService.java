@@ -1,0 +1,64 @@
+package com.iflow.agent.service.interview;
+
+import com.iflow.agent.domain.interview.entity.InterviewSession;
+import com.iflow.agent.domain.interview.enums.InterviewStatus;
+import com.iflow.agent.dto.interview.*;
+
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * 面试服务接口 - 对应 Python 的 InterviewSessionManager
+ */
+public interface InterviewService {
+
+    /**
+     * 创建面试会话
+     */
+    InterviewResponse createSession(String userId, CreateSessionRequest request);
+
+    /**
+     * 获取会话信息
+     */
+    Optional<InterviewSession> getSession(String sessionId);
+
+    /**
+     * 开始面试
+     */
+    InterviewResponse startInterview(String sessionId);
+
+    /**
+     * 提交回答
+     */
+    InterviewResponse submitAnswer(String sessionId, AnswerRequest request);
+
+    /**
+     * 暂停面试
+     */
+    InterviewResponse pauseInterview(String sessionId);
+
+    /**
+     * 恢复面试
+     */
+    InterviewResponse resumeInterview(String sessionId);
+
+    /**
+     * 完成面试
+     */
+    InterviewResponse completeInterview(String sessionId);
+
+    /**
+     * 取消面试
+     */
+    InterviewResponse cancelInterview(String sessionId);
+
+    /**
+     * 获取面试结果
+     */
+    Map<String, Object> getInterviewResult(String sessionId);
+
+    /**
+     * 导出面试报告
+     */
+    String exportInterviewReport(String sessionId, String format);
+}

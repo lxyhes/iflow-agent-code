@@ -1,11 +1,11 @@
 package com.iflow.agent.controller;
 
+import com.iflow.agent.dto.file.FileTreeNode;
+import com.iflow.agent.dto.file.SaveFileRequest;
 import com.iflow.agent.service.file.FileService;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,12 +13,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.NoSuchFileException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 文件管理 API - 对应 Python 的 files.py
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/projects/{projectName}")
@@ -27,152 +28,196 @@ public class FileController {
 
     private final FileService fileService;
 
-    @Value("${file.max-size:104857600}")
-    private long maxFileSize;
+    @Value("${file.base-path:./projects}")
+    private String basePath;
 
-    @Value("${cache.base-dir:E:/cache/agent_project}")
-    private String baseDir;
-
+    /**
+     * 获取项目文件树
+     */
     @GetMapping("/files")
-    public ResponseEntity<List<FileService.FileNode>> getProjectFiles(@PathVariable String projectName) {
-        String projectPath = getProjectPath(projectName);
-        try {
-            List<FileService.FileNode> tree = fileService.getTree(projectPath);
-            return ResponseEntity.ok(tree);
-        } catch (IOException e) {
-            log.error("Failed to get file tree for project: {}", projectName, e);
-            return ResponseEntity.internalServerError().build();
-        }
+    public ResponseEntity<Map<String, Object>> getProjectFiles(@PathVariable String projectName) {
+        log.info("获取项目文件树: {}", projectName);
+
+        String rootPath = basePath + "/" + projectName;
+        List<FileTreeNode> tree = fileService.getTree(rootPath);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "data", tree
+        ));
     }
 
+    /**
+     * 读取文件内容
+     */
     @GetMapping("/file")
-    public ResponseEntity<Map<String, String>> readProjectFile(
+    public ResponseEntity<Map<String, Object>> readProjectFile(
             @PathVariable String projectName,
             @RequestParam String filePath) {
-        String projectRoot = getProjectPath(projectName);
+
+        log.info("读取文件: project={}, path={}", projectName, filePath);
+
         try {
-            String content = fileService.readFile(projectRoot, filePath);
-            return ResponseEntity.ok(Map.of("content", content));
+            String rootPath = basePath + "/" + projectName;
+            String content = fileService.readFile(rootPath, filePath);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "content", content
+            ));
+
+        } catch (NoSuchFileException e) {
+            return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "error", "File not found"
+            ));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         } catch (IOException e) {
-            log.error("Failed to read file: {}", filePath, e);
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
     }
 
+    /**
+     * 获取文件内容（用于下载）
+     */
     @GetMapping("/files/content")
-    public ResponseEntity<Resource> readProjectFileContent(
+    public ResponseEntity<Resource> getFileContent(
             @PathVariable String projectName,
             @RequestParam String filePath) {
-        String projectRoot = getProjectPath(projectName);
 
-        // Security check for path traversal
-        if (filePath.contains("..")) {
-            return ResponseEntity.status(403).build();
-        }
-
-        Path fullPath = Paths.get(projectRoot, filePath).normalize();
-        Path realRoot = Paths.get(projectRoot).toAbsolutePath().normalize();
-
-        if (!fullPath.startsWith(realRoot)) {
-            return ResponseEntity.status(403).build();
-        }
-
-        if (!Files.exists(fullPath) || !Files.isRegularFile(fullPath)) {
-            return ResponseEntity.notFound().build();
-        }
+        log.info("获取文件内容: project={}, path={}", projectName, filePath);
 
         try {
-            long fileSize = Files.size(fullPath);
-            if (fileSize > maxFileSize) {
-                double sizeMb = fileSize / (1024.0 * 1024.0);
-                double maxMb = maxFileSize / (1024.0 * 1024.0);
-                return ResponseEntity.status(413)
-                        .body(null);
-            }
+            String rootPath = basePath + "/" + projectName;
+            Resource resource = fileService.getFileResource(rootPath, filePath);
 
-            Resource resource = new FileSystemResource(fullPath.toFile());
-            String contentType = Files.probeContentType(fullPath);
-            if (contentType == null) {
-                contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            // 猜测 Content-Type
+            String contentType = "application/octet-stream";
+            try {
+                contentType = java.nio.file.Files.probeContentType(
+                        java.nio.file.Paths.get(filePath));
+                if (contentType == null) {
+                    contentType = "application/octet-stream";
+                }
+            } catch (Exception e) {
+                // 使用默认类型
             }
 
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fullPath.getFileName() + "\"")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filePath + "\"")
                     .body(resource);
 
-        } catch (IOException e) {
-            log.error("Error serving file: {}", filePath, e);
-            return ResponseEntity.internalServerError().build();
+        } catch (NoSuchFileException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("获取文件内容失败", e);
+            return ResponseEntity.status(500).build();
         }
     }
 
+    /**
+     * 保存文件
+     */
     @PutMapping("/file")
     public ResponseEntity<Map<String, Object>> saveProjectFile(
             @PathVariable String projectName,
             @RequestBody SaveFileRequest request) {
-        String projectRoot = getProjectPath(projectName);
 
-        // Check content size
-        int contentSize = request.getContent().getBytes().length;
-        if (contentSize > maxFileSize) {
-            double sizeMb = contentSize / (1024.0 * 1024.0);
-            double maxMb = maxFileSize / (1024.0 * 1024.0);
-            return ResponseEntity.status(413)
-                    .body(Map.of("error", String.format("File too large (%.1f MB), max allowed (%.1f MB)", sizeMb, maxMb)));
-        }
+        log.info("保存文件: project={}, path={}", projectName, request.getFilePath());
 
         try {
-            fileService.writeFile(projectRoot, request.getFilePath(), request.getContent());
+            String rootPath = basePath + "/" + projectName;
+            fileService.writeFile(rootPath, request.getFilePath(), request.getContent());
+
+            int contentSize = request.getContent().getBytes().length;
             return ResponseEntity.ok(Map.of(
+                    "success", true,
                     "status", "success",
                     "size", contentSize
             ));
+
         } catch (SecurityException e) {
-            log.error("Security error saving file: {}", request.getFilePath(), e);
-            return ResponseEntity.status(403).body(Map.of("error", "Access denied"));
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         } catch (IOException e) {
-            log.error("Failed to save file: {}", request.getFilePath(), e);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save file: " + e.getMessage()));
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
     }
 
+    /**
+     * 删除文件
+     */
     @DeleteMapping("/file")
-    public ResponseEntity<Map<String, String>> deleteProjectFile(
+    public ResponseEntity<Map<String, Object>> deleteProjectFile(
             @PathVariable String projectName,
             @RequestParam String filePath) {
-        String projectRoot = getProjectPath(projectName);
+
+        log.info("删除文件: project={}, path={}", projectName, filePath);
+
         try {
-            fileService.deleteFile(projectRoot, filePath);
-            return ResponseEntity.ok(Map.of("status", "deleted"));
+            String rootPath = basePath + "/" + projectName;
+            fileService.deleteFile(rootPath, filePath);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "File deleted successfully"
+            ));
+
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         } catch (IOException e) {
-            log.error("Failed to delete file: {}", filePath, e);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to delete file"));
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
     }
 
-    @PostMapping("/directories")
-    public ResponseEntity<Map<String, String>> createDirectory(
+    /**
+     * 创建目录
+     */
+    @PostMapping("/directory")
+    public ResponseEntity<Map<String, Object>> createDirectory(
             @PathVariable String projectName,
-            @RequestParam String dirPath) {
-        String projectRoot = getProjectPath(projectName);
+            @RequestParam String path) {
+
+        log.info("创建目录: project={}, path={}", projectName, path);
+
         try {
-            fileService.createDirectory(projectRoot, dirPath);
-            return ResponseEntity.ok(Map.of("status", "created"));
+            String rootPath = basePath + "/" + projectName;
+            fileService.createDirectory(rootPath, path);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Directory created successfully"
+            ));
+
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         } catch (IOException e) {
-            log.error("Failed to create directory: {}", dirPath, e);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to create directory"));
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
-    }
-
-    private String getProjectPath(String projectName) {
-        // For now, use a simple mapping. In production, this should come from a project registry
-        return Paths.get(baseDir, "projects", projectName).toString();
-    }
-
-    @Data
-    public static class SaveFileRequest {
-        private String filePath;
-        private String content;
     }
 }
