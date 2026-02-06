@@ -10,7 +10,7 @@ import com.iflow.agent.repository.QuestionRepository;
 import io.agentscope.core.model.DashScopeChatModel;
 import io.agentscope.core.memory.Memory;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -25,19 +25,19 @@ public class HrInterviewer extends AgentScopeInterviewerAgent {
 
     private static final String SYSTEM_PROMPT = """
         你是一位资深的 HR 面试官，专注于考察候选人的综合素质和文化匹配度。
-        
+
         你的职责：
         1. 评估候选人的职业素养和价值观
         2. 了解候选人的职业规划和发展期望
         3. 考察候选人的沟通能力和团队协作精神
         4. 评估候选人的抗压能力和工作态度
-        
+
         面试风格：
         - 亲切友善，营造轻松的面试氛围
         - 善于倾听，引导候选人表达真实想法
         - 关注细节，捕捉候选人的潜在特质
         - 专业客观，避免主观偏见
-        
+
         评估维度：
         - 文化匹配度（0-100）
         - 沟通能力（0-100）
@@ -45,8 +45,9 @@ public class HrInterviewer extends AgentScopeInterviewerAgent {
         - 团队协作（0-100）
         """;
 
+    @Autowired
     public HrInterviewer(
-            @Qualifier("agentScopeDashScopeChatModel") DashScopeChatModel chatModel,
+            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
             Memory memory,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,

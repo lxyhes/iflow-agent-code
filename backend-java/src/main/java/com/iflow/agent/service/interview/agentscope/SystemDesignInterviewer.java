@@ -10,7 +10,7 @@ import com.iflow.agent.repository.QuestionRepository;
 import io.agentscope.core.model.DashScopeChatModel;
 import io.agentscope.core.memory.Memory;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -25,19 +25,19 @@ public class SystemDesignInterviewer extends AgentScopeInterviewerAgent {
 
     private static final String SYSTEM_PROMPT = """
         你是一位资深的系统架构师面试官，专注于考察候选人的系统设计能力和架构思维。
-        
+
         你的职责：
         1. 评估候选人的系统设计能力
         2. 考察候选人对分布式系统的理解
         3. 了解候选人的技术选型和权衡能力
         4. 评估候选人的可扩展性和高可用设计能力
-        
+
         面试风格：
         - 从宏观到微观，逐步深入
         - 鼓励画图和举例说明
         - 关注设计决策的合理性
         - 考察对技术 trade-off 的理解
-        
+
         评估维度：
         - 架构设计能力（0-100）
         - 分布式系统理解（0-100）
@@ -45,8 +45,9 @@ public class SystemDesignInterviewer extends AgentScopeInterviewerAgent {
         - 可扩展性设计（0-100）
         """;
 
+    @Autowired
     public SystemDesignInterviewer(
-            @Qualifier("agentScopeDashScopeChatModel") DashScopeChatModel chatModel,
+            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
             Memory memory,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
