@@ -186,6 +186,13 @@ export const resumeApi = {
     return response.json();
   },
 
+  getAiHistory: async (resumeId, type = null) => {
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/ai-history?${params}`);
+    return response.json();
+  },
+
   healthCheck: async (resumeId) => {
     const response = await authenticatedFetch(`${API_BASE}/${resumeId}/health-check`, {
       method: 'POST',

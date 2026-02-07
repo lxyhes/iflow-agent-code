@@ -21,12 +21,14 @@ import {
   Wand2,
   Save,
   X,
-  ArrowRight
+  ArrowRight,
+  History,
+  Clock
 } from 'lucide-react';
 import { resumeApi } from '../../services/resumeApi';
 import FunLoadingScreen from './FunLoadingScreen';
 
-const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
+const ResumeScorePanel = ({ resume, onResumeUpdate, onPreviewResume }) => {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -34,10 +36,48 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
   const [rewriteResult, setRewriteResult] = useState(null);
   const [rewriting, setRewriting] = useState(false);
   const [showRewriteModal, setShowRewriteModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [aiHistory, setAiHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyType, setHistoryType] = useState('all'); // 'all', 'analyze', 'rewrite'
 
   useEffect(() => {
     performAIAnalysis();
   }, [resume.id]);
+
+const loadAiHistory = async (type = null) => {
+    setHistoryLoading(true);
+    if (type) {
+      setHistoryType(type);
+    }
+    try {
+      const response = await resumeApi.getAiHistory(resume.id, type);
+      if (response.success) {
+        setAiHistory(response.data);
+      } else {
+        console.error('加载历史记录失败:', response.message);
+      }
+    } catch (err) {
+      console.error('加载历史记录失败:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleApplyHistoryRewrite = (historyItem) => {
+    // 从历史记录中恢复优化结果
+    if (historyItem.type === 'rewrite' && historyItem.parsed_data) {
+      setRewriteResult(historyItem.parsed_data);
+      setShowRewriteModal(true);
+      setShowHistoryModal(false);
+    }
+  };
+
+  const handleShowHistory = (type = 'all') => {
+    setHistoryType(type);
+    setShowHistoryModal(true);
+    loadAiHistory(type);
+  };
 
   const performAIAnalysis = async () => {
     setLoading(true);
@@ -81,33 +121,136 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
   const applyRewrite = async () => {
     if (!rewriteResult) return;
 
-    // 构建更新后的简历数据
-    const updatedResume = {
-      ...resume,
-      personal_info: {
-        ...resume.personal_info,
-        summary: rewriteResult.personal_info?.summary || resume.personal_info?.summary
-      },
-      work_experience: resume.work_experience?.map((exp, idx) => {
-        const rewritten = rewriteResult.work_experience?.find(r => r.id === exp.id);
-        if (rewritten) {
-          return {
-            ...exp,
-            description: rewritten.description || exp.description,
-            achievements: rewritten.achievements || exp.achievements
-          };
+    try {
+      console.log('应用优化，原始简历:', resume);
+      console.log('AI 优化结果:', rewriteResult);
+
+      // 1. 更新个人简介
+      if (rewriteResult.personal_info?.summary) {
+        console.log('更新个人简介:', rewriteResult.personal_info.summary);
+        await resumeApi.updatePersonalInfo(resume.id, {
+          ...resume.personal_info,
+          summary: rewriteResult.personal_info.summary
+        });
+      }
+
+      // 2. 更新工作经历
+      if (rewriteResult.work_experience && rewriteResult.work_experience.length > 0) {
+        const existingWorkExps = resume.work_experience || [];
+        console.log('现有工作经历数量:', existingWorkExps.length);
+        
+        // 遍历优化后的工作经历
+        for (const rewritten of rewriteResult.work_experience) {
+          console.log('处理工作经历:', rewritten);
+          
+          // 如果公司名和职位都是"待补充"，生成一个默认的工作经历
+          const isPlaceholder = (rewritten.company?.includes('待补充') || !rewritten.company) &&
+                                (rewritten.position?.includes('待补充') || !rewritten.position);
+          
+          if (isPlaceholder) {
+            console.log('检测到占位符工作经历，生成默认工作经历');
+            // 添加一个新的工作经历，使用默认名称但保存 AI 生成的描述和成果
+            await resumeApi.addWorkExperience(resume.id, {
+              company: '工作经历',
+              position: '职位',
+              description: rewritten.description || '',
+              achievements: rewritten.achievements || [],
+              is_current: false,
+              sort_order: existingWorkExps.length
+            });
+            continue;
+          }
+          
+          // 尝试找到匹配的工作经历（通过公司名或职位匹配）
+          const existingExp = existingWorkExps.find(
+            exp => exp.company === rewritten.company || exp.position === rewritten.position
+          );
+          
+          if (existingExp) {
+            // 更新现有工作经历
+            console.log('更新现有工作经历:', existingExp.id);
+            await resumeApi.updateWorkExperience(resume.id, existingExp.id, {
+              ...existingExp,
+              description: rewritten.description || existingExp.description,
+              achievements: rewritten.achievements || existingExp.achievements
+            });
+          } else {
+            // 添加新的工作经历
+            console.log('添加新工作经历');
+            await resumeApi.addWorkExperience(resume.id, {
+              company: rewritten.company,
+              position: rewritten.position,
+              description: rewritten.description,
+              achievements: rewritten.achievements,
+              is_current: false,
+              sort_order: existingWorkExps.length
+            });
+          }
         }
-        return exp;
-      }),
-      skills: rewriteResult.skills || resume.skills
-    };
+      } else {
+        console.log('没有工作经历需要更新');
+      }
 
-    // 调用父组件的更新方法
-    if (onResumeUpdate) {
-      onResumeUpdate(updatedResume);
+      // 3. 更新技能列表
+      if (rewriteResult.skills && rewriteResult.skills.length > 0) {
+        console.log('更新技能列表，技能数量:', rewriteResult.skills.length);
+        
+        // 先删除所有现有技能
+        const existingSkills = resume.skills || [];
+        console.log('删除现有技能数量:', existingSkills.length);
+        for (const skill of existingSkills) {
+          await resumeApi.deleteSkill(resume.id, skill.id);
+        }
+        
+        // 去重技能名称
+        const uniqueSkills = [...new Set(rewriteResult.skills)];
+        console.log('去重后技能数量:', uniqueSkills.length);
+        
+        // 添加新的技能
+        let addedSkills = 0;
+        for (const skillName of uniqueSkills) {
+          // 跳过"待补充"类型的占位符
+          if (!skillName.includes('待补充') && !skillName.includes('请列出')) {
+            console.log('添加技能:', skillName);
+            await resumeApi.addSkill(resume.id, {
+              name: skillName,
+              level: 3,
+              category: '技术'
+            });
+            addedSkills++;
+          } else {
+            console.log('跳过占位符技能:', skillName);
+          }
+        }
+        console.log('实际添加技能数量:', addedSkills);
+      } else {
+        console.log('没有技能需要更新');
+      }
+
+      // 4. 刷新简历数据
+      if (onResumeUpdate) {
+        console.log('刷新简历数据');
+        const response = await resumeApi.getResume(resume.id);
+        if (response.success) {
+          console.log('刷新后的简历:', response.data);
+          onResumeUpdate(response.data);
+        }
+      }
+
+      // 显示成功提示
+      alert('简历已优化并保存！');
+      
+      // 关闭优化弹窗
+      setShowRewriteModal(false);
+      
+      // 跳转到简历预览
+      if (onPreviewResume) {
+        onPreviewResume();
+      }
+    } catch (err) {
+      console.error('应用优化失败:', err);
+      alert('应用优化失败: ' + err.message);
     }
-
-    setShowRewriteModal(false);
   };
 
   const toggleSection = (section) => {
@@ -134,6 +277,23 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
     if (level?.includes('良好')) return 'text-blue-600 bg-blue-100';
     if (level?.includes('一般')) return 'text-yellow-600 bg-yellow-100';
     return 'text-red-600 bg-red-100';
+  };
+
+  const getScoreLevel = (score) => {
+    if (score >= 80) return '优秀';
+    if (score >= 60) return '良好';
+    if (score >= 40) return '一般';
+    return '待评估';
+  };
+
+  const getSectionLabel = (key) => {
+    const labels = {
+      'content_quality': '内容质量',
+      'structure': '结构布局',
+      'keywords': '关键词',
+      'achievements': '成果展示'
+    };
+    return labels[key] || key;
   };
 
   if (loading) {
@@ -178,8 +338,15 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
     );
   }
 
-  const assessment = aiAnalysis.overall_assessment || {};
-  const score = assessment.score || 0;
+  const assessment = aiAnalysis;
+  const score = assessment.overall_score || 0;
+  const competitiveness = assessment.competitiveness || {};
+  const sections = assessment.sections || {};
+
+  // 从 sections 中提取各维度分数
+  const getSectionScore = (sectionName) => {
+    return sections[sectionName]?.score || 0;
+  };
 
   return (
     <div className="space-y-6">
@@ -192,14 +359,23 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
               AI 深度分析
             </h3>
           </div>
-          <button
-            onClick={performAIAnalysis}
-            disabled={loading}
-            className="p-2 text-gray-500 hover:text-blue-500 transition-colors disabled:opacity-50"
-            title="重新分析"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleShowHistory('analyze')}
+              className="p-2 text-gray-500 hover:text-blue-500 transition-colors"
+              title="查看分析历史"
+            >
+              <History className="w-5 h-5" />
+            </button>
+            <button
+              onClick={performAIAnalysis}
+              disabled={loading}
+              className="p-2 text-gray-500 hover:text-blue-500 transition-colors disabled:opacity-50"
+              title="重新分析"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-8">
@@ -237,12 +413,12 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
           {/* 评分解读 */}
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(assessment.level)}`}>
-                {assessment.level || '待评估'}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(getScoreLevel(score))}`}>
+                {getScoreLevel(score)}
               </span>
             </div>
             <p className="text-gray-900 dark:text-white font-medium mb-4">
-              {assessment.summary || '暂无评价'}
+              {competitiveness.industry_ranking || '暂无评价'}
             </p>
             {/* 一键重写按钮 */}
             <button
@@ -260,14 +436,14 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
       {/* 优势与不足 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 优势 */}
-        {aiAnalysis.strengths?.length > 0 && (
+        {competitiveness.strengths?.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h4 className="text-lg font-semibold text-green-700 dark:text-green-400 mb-4 flex items-center gap-2">
               <CheckCircle className="w-5 h-5" />
               简历亮点
             </h4>
             <ul className="space-y-3">
-              {aiAnalysis.strengths.map((strength, idx) => (
+              {competitiveness.strengths.map((strength, idx) => (
                 <li key={idx} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
                   {strength}
@@ -278,14 +454,14 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
         )}
 
         {/* 不足 */}
-        {aiAnalysis.weaknesses?.length > 0 && (
+        {competitiveness.weaknesses?.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h4 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-4 flex items-center gap-2">
               <AlertCircle className="w-5 h-5" />
               待改进
             </h4>
             <ul className="space-y-3">
-              {aiAnalysis.weaknesses.map((weakness, idx) => (
+              {competitiveness.weaknesses.map((weakness, idx) => (
                 <li key={idx} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
                   {weakness}
@@ -297,21 +473,23 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
       </div>
 
       {/* 内容分析 */}
-      {aiAnalysis.content_analysis && (
+      {Object.keys(sections).length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             内容质量分析
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(aiAnalysis.content_analysis).map(([key, value]) => (
+            {Object.entries(sections).map(([key, value]) => (
               <div key={key} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {key === 'completeness' ? '完整性' :
-                   key === 'clarity' ? '清晰度' :
-                   key === 'professionalism' ? '专业度' :
-                   key === 'impact' ? '影响力' : key}
+                  {getSectionLabel(key)}
                 </p>
-                <p className="text-sm text-gray-900 dark:text-white">{value}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                  {value.score}分
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+                  {value.analysis}
+                </p>
               </div>
             ))}
           </div>
@@ -319,170 +497,36 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
       )}
 
       {/* 优化建议 */}
-      {aiAnalysis.optimization_suggestions?.length > 0 && (
+      {assessment.suggestions?.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-yellow-500" />
             AI 优化建议
           </h4>
           <div className="space-y-4">
-            {aiAnalysis.optimization_suggestions.map((suggestion, idx) => (
+            {assessment.suggestions.map((suggestion, idx) => (
               <div
                 key={idx}
-                className={`p-4 rounded-lg border ${
-                  suggestion.priority === '高'
-                    ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' :
-                  suggestion.priority === '中'
-                    ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10' :
-                    'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10'
-                }`}
+                className="p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/10"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    suggestion.priority === '高' ? 'bg-red-100 text-red-700' :
-                    suggestion.priority === '中' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-blue-100 text-blue-700'
-                  }`}>
-                    {suggestion.priority}优先级
-                  </span>
-                  <span className="text-xs text-gray-500">{suggestion.category}</span>
-                </div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                  {suggestion.issue}
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {suggestion}
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  建议：{suggestion.suggestion}
-                </p>
-                {suggestion.example && (
-                  <p className="text-xs text-gray-500 dark:text-gray-500 bg-white dark:bg-gray-800 p-2 rounded">
-                    示例：{suggestion.example}
-                  </p>
-                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ATS 分析 */}
-      {aiAnalysis.ats_analysis && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            ATS 兼容性分析
-          </h4>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="text-2xl font-bold text-blue-600">
-              {aiAnalysis.ats_analysis.score}分
-            </div>
-            <div className="flex-1">
-              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${getScoreBg(aiAnalysis.ats_analysis.score)}`}
-                  style={{ width: `${aiAnalysis.ats_analysis.score}%` }}
-                />
-              </div>
-            </div>
-          </div>
-          {aiAnalysis.ats_analysis.keywords_present?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">已包含关键词：</p>
-              <div className="flex flex-wrap gap-2">
-                {aiAnalysis.ats_analysis.keywords_present.map((kw, idx) => (
-                  <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs">
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {aiAnalysis.ats_analysis.keywords_missing?.length > 0 && (
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">建议添加关键词：</p>
-              <div className="flex flex-wrap gap-2">
-                {aiAnalysis.ats_analysis.keywords_missing.map((kw, idx) => (
-                  <span key={idx} className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded text-xs">
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 行业对比 */}
-      {aiAnalysis.industry_comparison && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            行业对比
-          </h4>
-          <p className="text-gray-700 dark:text-gray-300 mb-4">
-            {aiAnalysis.industry_comparison.comparison}
-          </p>
-          {aiAnalysis.industry_comparison.competitive_advantages?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">竞争优势：</p>
-              <ul className="space-y-1">
-                {aiAnalysis.industry_comparison.competitive_advantages.map((adv, idx) => (
-                  <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    {adv}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 求职建议 */}
-      {aiAnalysis.job_target_analysis && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Briefcase className="w-5 h-5" />
-            求职建议
-          </h4>
-          <div className="space-y-4">
-            {aiAnalysis.job_target_analysis.suitable_positions?.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">适合的职位：</p>
-                <div className="flex flex-wrap gap-2">
-                  {aiAnalysis.job_target_analysis.suitable_positions.map((pos, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
-                      {pos}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {aiAnalysis.job_target_analysis.career_direction && (
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">职业发展方向：</p>
-                <p className="text-sm text-gray-900 dark:text-white">{aiAnalysis.job_target_analysis.career_direction}</p>
-              </div>
-            )}
-            {aiAnalysis.job_target_analysis.salary_expectation && (
-              <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  薪资建议：{aiAnalysis.job_target_analysis.salary_expectation}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* 行动计划 */}
-      {aiAnalysis.action_plan?.length > 0 && (
+      {assessment.action_items?.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Target className="w-5 h-5" />
             改进行动计划
           </h4>
           <div className="space-y-3">
-            {aiAnalysis.action_plan.map((action, idx) => (
+            {assessment.action_items.map((action, idx) => (
               <div key={idx} className="flex items-start gap-3">
                 <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center text-xs font-medium flex-shrink-0">
                   {idx + 1}
@@ -674,6 +718,134 @@ const ResumeScorePanel = ({ resume, onResumeUpdate }) => {
                   取消
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 历史记录模态框 */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <History className="w-6 h-6 text-purple-600" />
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  AI 生成历史
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* 历史类型筛选 */}
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => loadAiHistory(null)}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    historyType === 'all' || historyType === null
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  全部
+                </button>
+                <button
+                  onClick={() => loadAiHistory('analyze')}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    historyType === 'analyze'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  分析记录
+                </button>
+                <button
+                  onClick={() => loadAiHistory('rewrite')}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    historyType === 'rewrite'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  优化记录
+                </button>
+              </div>
+
+              {/* 历史记录列表 */}
+              {historyLoading ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="w-8 h-8 text-purple-600 mx-auto mb-4 animate-spin" />
+                  <p className="text-gray-600 dark:text-gray-400">加载中...</p>
+                </div>
+              ) : aiHistory.length === 0 ? (
+                <div className="text-center py-8">
+                  <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">暂无历史记录</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {aiHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            item.type === 'analyze'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                          }`}>
+                            {item.type === 'analyze' ? '分析' : '优化'}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(item.created_at).toLocaleString('zh-CN')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            模型: {item.model}
+                          </span>
+                          {item.type === 'rewrite' && (
+                            <button
+                              onClick={() => handleApplyHistoryRewrite(item)}
+                              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                            >
+                              应用
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        {item.type === 'analyze' ? (
+                          <div>
+                            <p className="font-medium mb-1">评分: {item.parsed_data.overall_score}/100</p>
+                            <p className="text-gray-600 dark:text-gray-400">
+                              {item.parsed_data.competitiveness?.industry_ranking}
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-medium mb-1">改进点:</p>
+                            <ul className="list-disc list-inside text-gray-600 dark:text-gray-400">
+                              {item.parsed_data.improvements?.slice(0, 3).map((imp, idx) => (
+                                <li key={idx}>{imp}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

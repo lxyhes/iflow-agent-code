@@ -29,8 +29,20 @@ public class ResumeServiceImpl implements ResumeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Resume> getResume(String resumeId) {
-        return resumeRepository.findById(resumeId);
+        // 分两次查询避免 MultipleBagFetchException
+        Optional<Resume> resume = resumeRepository.findWithBasicRelationsById(resumeId);
+        
+        // 初始化其他关联数据
+        resume.ifPresent(r -> {
+            // 访问关联集合以触发懒加载
+            if (r.getEducations() != null) r.getEducations().size();
+            if (r.getSkills() != null) r.getSkills().size();
+            if (r.getProjects() != null) r.getProjects().size();
+        });
+        
+        return resume;
     }
 
     @Override

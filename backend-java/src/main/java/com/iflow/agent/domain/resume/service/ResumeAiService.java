@@ -2,6 +2,7 @@ package com.iflow.agent.domain.resume.service;
 
 import com.iflow.agent.domain.resume.entity.Resume;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,4 +39,12 @@ public interface ResumeAiService {
      * 使用AI分析结果，自动优化简历内容，包括重写个人简介、优化工作经历描述、改进技能展示、提升整体表达
      */
     Map<String, Object> rewriteResume(Resume resume, Map<String, Object> healthAnalysis);
+
+    /**
+     * 获取 AI 生成历史记录
+     * @param resumeId 简历 ID
+     * @param type 类型（analyze 或 rewrite），如果为 null 则返回全部
+     * @return 历史记录列表
+     */
+    List<Map<String, Object>> getAiHistory(String resumeId, String type);
 }

@@ -232,17 +232,16 @@ const ResumeManager = () => {
             <ResumeScorePanel
               resume={selectedResume}
               onResumeUpdate={async (updatedResume) => {
-                // 保存更新后的简历
-                try {
-                  const response = await resumeApi.updateResume(selectedResume.id, updatedResume);
-                  if (response.success) {
-                    setSelectedResume(response.data);
-                    loadResumes();
-                    alert('简历已优化并保存！');
-                  }
-                } catch (err) {
-                  console.error('保存简历失败:', err);
-                  alert('保存失败，请重试');
+                // 只更新本地状态，因为 applyRewrite 已经调用了保存 API
+                setSelectedResume(updatedResume);
+                loadResumes();
+              }}
+              onPreviewResume={async () => {
+                // 重新加载简历数据以确保显示最新内容
+                const response = await resumeApi.getResume(selectedResume.id);
+                if (response.success) {
+                  setSelectedResume(response.data);
+                  setView('preview');
                 }
               }}
             />

@@ -1,10 +1,8 @@
 package com.iflow.agent.domain.resume.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,7 +12,8 @@ import java.util.List;
  */
 @Entity
 @Table(name = "resumes")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -44,22 +43,32 @@ public class Resume {
     private LocalDateTime updatedAt;
 
     @OneToOne(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private PersonalInfo personalInfo;
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("sortOrder ASC, startDate DESC")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<WorkExperience> workExperiences;
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("startDate DESC")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<Education> educations;
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("category, name")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<Skill> skills;
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("startDate DESC")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<Project> projects;
 
     @PrePersist

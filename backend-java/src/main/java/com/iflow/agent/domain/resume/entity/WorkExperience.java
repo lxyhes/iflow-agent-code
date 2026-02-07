@@ -2,17 +2,16 @@ package com.iflow.agent.domain.resume.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 /**
  * 工作经历实体 - 对应 Python 的 resume_work_experience 表
  */
 @Entity
 @Table(name = "resume_work_experience")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -23,6 +22,8 @@ public class WorkExperience {
     private Long id;
 
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resume_id", nullable = false)
     private Resume resume;
@@ -47,9 +48,11 @@ public class WorkExperience {
     private String description;
 
     @Column(name = "achievements", length = 2000)
-    private String achievements;
+    @Convert(converter = com.iflow.agent.domain.resume.converter.StringListConverter.class)
+    private java.util.List<String> achievements;
 
     @Column(name = "sort_order")
     @Builder.Default
+    @com.fasterxml.jackson.annotation.JsonProperty("sort_order")
     private Integer sortOrder = 0;
 }

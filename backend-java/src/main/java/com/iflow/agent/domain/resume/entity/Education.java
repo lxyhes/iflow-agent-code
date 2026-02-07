@@ -2,17 +2,16 @@ package com.iflow.agent.domain.resume.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 /**
  * 教育经历实体 - 对应 Python 的 resume_education 表
  */
 @Entity
 @Table(name = "resume_education")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -23,6 +22,8 @@ public class Education {
     private Long id;
 
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resume_id", nullable = false)
     private Resume resume;

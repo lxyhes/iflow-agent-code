@@ -259,6 +259,18 @@ public class ResumeController {
     }
 
     /**
+     * 获取 AI 生成历史记录
+     */
+    @GetMapping("/{id}/ai-history")
+    public ResponseEntity<Map<String, Object>> getAiHistory(
+            @PathVariable String id,
+            @RequestParam(required = false) String type) {
+        log.info("获取 AI 历史: resumeId={}, type={}", id, type);
+        List<Map<String, Object>> history = resumeAiService.getAiHistory(id, type);
+        return ResponseEntity.ok(Map.of("success", true, "data", history));
+    }
+
+    /**
      * AI简历健康度检查
      */
     @PostMapping("/{id}/health-check")

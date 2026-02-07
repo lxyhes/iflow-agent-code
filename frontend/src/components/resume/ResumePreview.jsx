@@ -6,9 +6,9 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { 
-  Download, 
-  FileText, 
+import {
+  Download,
+  FileText,
   Printer,
   Palette,
   ChevronDown,
@@ -74,11 +74,80 @@ const TEMPLATES = {
   },
 };
 
-const ResumePreview = ({ resume, onBack, onEdit }) => {
+// 数据适配器：将后端 snake_case 格式转换为前端 camelCase 格式
+const normalizeResumeData = (rawResume) => {
+  if (!rawResume) return rawResume;
+
+  // 不做提前返回，始终进行字段转换以确保兼容性
+
+  // 转换 personal_info
+  let personalInfo = rawResume.personalInfo || rawResume.personal_info;
+  if (personalInfo) {
+    personalInfo = {
+      ...personalInfo,
+      fullName: personalInfo.fullName || personalInfo.full_name,
+      // 保留其他字段
+    };
+  }
+
+  // 转换工作经历：work_experience -> workExperiences
+  const workExperiences = rawResume.workExperiences || rawResume.work_experience || [];
+
+  // 转换教育经历：education -> educations（保持兼容）
+  const educations = rawResume.educations || rawResume.education || [];
+
+  // 技能和项目通常命名一致，但也做兼容处理
+  const skills = rawResume.skills || [];
+  const projects = rawResume.projects || [];
+
+  // 调试日志：显示转换前后的数据
+  console.log('[normalizeResumeData] 原始数据字段:', {
+    hasPersonalInfo: !!rawResume.personalInfo,
+    hasPersonal_info: !!rawResume.personal_info,
+    hasWorkExperiences: !!rawResume.workExperiences,
+    hasWork_experience: !!rawResume.work_experience,
+    work_experience_count: rawResume.work_experience?.length || 0,
+    education_count: rawResume.education?.length || 0,
+    projects_count: rawResume.projects?.length || 0,
+  });
+
+  console.log('[normalizeResumeData] 转换后:', {
+    workExperiences_count: workExperiences.length,
+    educations_count: educations.length,
+    skills_count: skills.length,
+    projects_count: projects.length,
+  });
+
+  return {
+    ...rawResume,
+    personalInfo,
+    workExperiences,
+    educations,
+    education: educations, // 保持两种格式兼容
+    skills,
+    projects,
+  };
+};
+
+const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
+  // 使用数据适配器转换数据格式
+  const resume = normalizeResumeData(rawResume);
+
   const previewRef = useRef(null);
   const [selectedTemplate, setSelectedTemplate] = useState(resume?.template || 'modern');
   const [isExporting, setIsExporting] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+
+  // 调试：打印简历数据
+  useEffect(() => {
+    console.log('ResumePreview - raw resume data:', rawResume);
+    console.log('ResumePreview - normalized resume data:', resume);
+    console.log('ResumePreview - personalInfo:', resume?.personalInfo);
+    console.log('ResumePreview - workExperiences:', resume?.workExperiences);
+    console.log('ResumePreview - educations/education:', resume?.educations, resume?.education);
+    console.log('ResumePreview - skills:', resume?.skills);
+    console.log('ResumePreview - projects:', resume?.projects);
+  }, [rawResume, resume]);
 
   // 当 resume 数据更新时，同步更新模板选择
   useEffect(() => {
@@ -91,7 +160,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
 
   const handleExportPDF = async () => {
     if (!previewRef.current) return;
-    
+
     setIsExporting(true);
     try {
       const element = previewRef.current;
@@ -109,12 +178,12 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
       const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      
+
       const imgX = (pdfWidth - imgWidth * ratio) / 2;
       let imgY = 0;
-      
+
       pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
-      
+
       const fileName = `${resume.name || '简历'}_${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
     } catch (error) {
@@ -339,9 +408,8 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
                   {[...Array(5)].map((_, i) => (
                     <div
                       key={i}
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        i < skill.level ? 'bg-blue-500' : 'bg-slate-200'
-                      }`}
+                      className={`w-1.5 h-1.5 rounded-full ${i < skill.level ? 'bg-blue-500' : 'bg-slate-200'
+                        }`}
                     />
                   ))}
                 </div>
@@ -704,7 +772,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
             <span>profile.json</span>
           </div>
           <pre className="text-sm">
-{`{
+            {`{
   "name": "${resume.personalInfo?.fullName || '姓名'}",
   "position": "${resume.target_position || '求职意向'}",
   "contact": {
@@ -734,9 +802,8 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
                     {[...Array(5)].map((_, i) => (
                       <div
                         key={i}
-                        className={`w-2 h-2 rounded-sm ${
-                          i < skill.level ? 'bg-emerald-500' : 'bg-slate-200'
-                        }`}
+                        className={`w-2 h-2 rounded-sm ${i < skill.level ? 'bg-emerald-500' : 'bg-slate-200'
+                          }`}
                       />
                     ))}
                   </div>
@@ -1168,7 +1235,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
             简历预览
           </h2>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* 编辑按钮 */}
           {onEdit && (
@@ -1192,7 +1259,7 @@ const ResumePreview = ({ resume, onBack, onEdit }) => {
               {TEMPLATES[selectedTemplate]?.name || '现代简约'}
               <ChevronDown className="w-4 h-4" />
             </button>
-            
+
             {showTemplateMenu && (
               <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10 max-h-80 overflow-y-auto">
                 {Object.entries(TEMPLATES).map(([key, tmpl]) => (

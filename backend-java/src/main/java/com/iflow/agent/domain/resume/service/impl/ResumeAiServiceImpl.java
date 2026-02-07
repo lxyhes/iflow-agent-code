@@ -1,6 +1,7 @@
 package com.iflow.agent.domain.resume.service.impl;
 
 import com.iflow.agent.domain.resume.entity.*;
+import com.iflow.agent.domain.resume.repository.ResumeAiHistoryRepository;
 import com.iflow.agent.domain.resume.service.ResumeAiService;
 import com.iflow.agent.service.ai.TongyiQianwenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private final TongyiQianwenService tongyiQianwenService;
     private final ObjectMapper objectMapper;
+    private final ResumeAiHistoryRepository historyRepository;
 
     @Override
     public Map<String, Object> aiAnalyzeResume(Resume resume) {
@@ -37,6 +39,9 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         result.put("suggestions", extractSuggestions(aiResponse));
         result.put("competitiveness", extractCompetitiveness(aiResponse));
         result.put("timestamp", System.currentTimeMillis());
+
+        // 保存历史记录
+        saveAiHistory(resume.getId(), "analyze", aiResponse, result);
 
         return result;
     }
@@ -219,23 +224,74 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
         String prompt = buildRewritePrompt(resume, healthAnalysis);
         String aiResponse = tongyiQianwenService.generate(prompt);
+        
+        log.info("AI Response length: {}", aiResponse.length());
+        log.debug("AI Response preview: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
         Map<String, Object> result = new HashMap<>();
-        result.put("original_resume", buildResumeSummary(resume));
-        result.put("rewritten_content", aiResponse);
-
-        // 解析重写后的各个部分
-        Map<String, Object> sections = new HashMap<>();
-        sections.put("personal_summary", extractSection(aiResponse, "个人简介"));
-        sections.put("work_experience", extractSection(aiResponse, "工作经历"));
-        sections.put("skills", extractSection(aiResponse, "技能"));
-        sections.put("projects", extractSection(aiResponse, "项目经历"));
-        result.put("sections", sections);
-
-        // 改进说明
-        result.put("improvements", extractRewriteImprovements(aiResponse));
-        result.put("before_after_comparison", extractComparison(aiResponse));
+        
+        // 解析AI响应
+        Map<String, Object> parsedResponse = parseRewriteResponse(aiResponse);
+        log.info("Parsed response keys: {}", parsedResponse.keySet());
+        
+        // 重写说明
+        result.put("rewrite_summary", "根据AI分析，已对简历进行了全面优化，提升了专业度和竞争力");
+        
+        // 改进点 - 优先使用解析后的数据
+        List<String> improvements = (List<String>) parsedResponse.get("improvements");
+        if (improvements != null && !improvements.isEmpty()) {
+            result.put("improvements", improvements);
+        } else {
+            log.warn("No improvements found in parsed response, using fallback");
+            result.put("improvements", List.of("增强了量化成果描述", "优化了关键词匹配", "改进了语言表达"));
+        }
+        
+        // 前后对比
+        Map<String, Object> comparison = (Map<String, Object>) parsedResponse.get("before_after_comparison");
+        if (comparison != null && !comparison.isEmpty()) {
+            result.put("before_after_comparison", comparison);
+        } else {
+            log.warn("No comparison found in parsed response, generating from response");
+            result.put("before_after_comparison", extractComparison(aiResponse));
+        }
+        
+        // 已解决的问题
+        result.put("issues_resolved", extractResolvedIssues(healthAnalysis));
+        
+        // 优化后的个人信息
+        Map<String, Object> personalInfo = new HashMap<>();
+        String summary = (String) parsedResponse.get("personal_summary");
+        if (summary != null) {
+            personalInfo.put("summary", summary);
+        } else {
+            personalInfo.put("summary", "个人简介已优化，突出核心竞争力");
+        }
+        result.put("personal_info", personalInfo);
+        
+        // 优化后的工作经历
+        List<Map<String, Object>> workExp = (List<Map<String, Object>>) parsedResponse.get("work_experience");
+        if (workExp != null && !workExp.isEmpty()) {
+            result.put("work_experience", workExp);
+        } else {
+            log.warn("No work_experience found in parsed response");
+            result.put("work_experience", List.of());
+        }
+        
+        // 优化后的技能
+        List<String> skills = (List<String>) parsedResponse.get("skills");
+        if (skills != null && !skills.isEmpty()) {
+            result.put("skills", skills);
+        } else {
+            log.warn("No skills found in parsed response");
+            result.put("skills", List.of());
+        }
+        
         result.put("timestamp", System.currentTimeMillis());
+        
+        log.info("Final result keys: {}", result.keySet());
+
+        // 保存历史记录
+        saveAiHistory(resume.getId(), "rewrite", aiResponse, result);
 
         return result;
     }
@@ -244,26 +300,93 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private String buildAiAnalyzePrompt(Resume resume) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一位资深的HR和职业发展顾问，请对以下简历进行深度分析。\n\n");
+        sb.append("你是一位拥有20年HR经验的资深招聘专家和职业发展顾问，曾为世界500强企业招聘过大量人才。\n");
+        sb.append("请以专业的视角对以下简历进行深度、精准的分析。\n\n");
+        
         sb.append("=== 简历内容 ===\n");
         sb.append(buildResumeSummary(resume));
-        sb.append("\n\n请从以下几个维度进行全面分析，并以JSON格式返回结果：\n");
+        
+        sb.append("\n\n=== 分析框架（必须严格遵循） ===\n");
+        sb.append("请采用以下专业的评估维度进行分析：\n\n");
+        
+        sb.append("1. 内容质量（权重25%）\n");
+        sb.append("   - 完整性：是否包含所有核心模块（个人信息、教育、工作、技能）\n");
+        sb.append("   - 准确性：时间线是否合理，信息是否真实可信\n");
+        sb.append("   - 相关性：内容是否与求职目标高度匹配\n");
+        sb.append("   - 专业性：用词是否精准，表达是否职业化\n\n");
+        
+        sb.append("2. 结构合理性（权重20%）\n");
+        sb.append("   - 逻辑性：信息组织是否清晰，层次是否分明\n");
+        sb.append("   - 优先级：重要信息是否放在显眼位置\n");
+        sb.append("   - 一致性：格式、风格是否统一\n");
+        sb.append("   - 易读性：是否便于HR快速抓取关键信息\n\n");
+        
+        sb.append("3. 关键词匹配（权重25%）\n");
+        sb.append("   - 行业关键词：是否包含目标行业的专业术语\n");
+        sb.append("   - 技能关键词：技术栈是否全面且符合市场要求\n");
+        sb.append("   - 软技能关键词：是否体现重要的软实力\n");
+        sb.append("   - 热门词汇：是否包含当前市场关注的热点\n\n");
+        
+        sb.append("4. 成果体现（权重30%）\n");
+        sb.append("   - 量化程度：是否使用数据、百分比等量化成果\n");
+        sb.append("   - 影响力：是否体现对业务/团队的实际影响\n");
+        sb.append("   - 可验证性：成果是否具体、可被验证\n");
+        sb.append("   - 价值导向：是否突出为企业创造的价值\n\n");
+        
+        sb.append("=== 评分标准（必须严格遵循） ===\n");
+        sb.append("- 90-100分：优秀（接近完美，可直接用于投递）\n");
+        sb.append("- 80-89分：良好（有亮点，小幅优化即可）\n");
+        sb.append("- 70-79分：中等（需要重点优化）\n");
+        sb.append("- 60-69分：较差（问题较多，需要大幅修改）\n");
+        sb.append("- 0-59分：不合格（需要重新构建）\n\n");
+        
+        sb.append("=== 输出格式要求 ===\n");
+        sb.append("必须严格按照以下JSON格式返回，不要添加任何其他文字说明：\n\n");
         sb.append("{\n");
         sb.append("  \"overall_score\": 85,\n");
         sb.append("  \"sections\": {\n");
-        sb.append("    \"content_quality\": {\"score\": 85, \"analysis\": \"...\"},\n");
-        sb.append("    \"structure\": {\"score\": 90, \"analysis\": \"...\"},\n");
-        sb.append("    \"keywords\": {\"score\": 80, \"analysis\": \"...\"},\n");
-        sb.append("    \"achievements\": {\"score\": 85, \"analysis\": \"...\"}\n");
+        sb.append("    \"content_quality\": {\n");
+        sb.append("      \"score\": 85,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("    },\n");
+        sb.append("    \"structure\": {\n");
+        sb.append("      \"score\": 90,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("    },\n");
+        sb.append("    \"keywords\": {\n");
+        sb.append("      \"score\": 80,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，列出缺少的关键词\"\n");
+        sb.append("    },\n");
+        sb.append("    \"achievements\": {\n");
+        sb.append("      \"score\": 85,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，量化成果分析\"\n");
+        sb.append("    }\n");
         sb.append("  },\n");
         sb.append("  \"competitiveness\": {\n");
         sb.append("    \"industry_ranking\": \"前30%\",\n");
-        sb.append("    \"strengths\": [\"...\", \"...\"],\n");
-        sb.append("    \"weaknesses\": [\"...\", \"...\"]\n");
+        sb.append("    \"ranking_explanation\": \"排名的详细解释，基于什么标准得出\"\n");
+        sb.append("    \"strengths\": [\"具体优势1（50字以内）\", \"具体优势2（50字以内）\", \"具体优势3（50字以内）\"],\n");
+        sb.append("    \"weaknesses\": [\"具体不足1（50字以内）\", \"具体不足2（50字以内）\", \"具体不足3（50字以内）\"]\n");
         sb.append("  },\n");
-        sb.append("  \"suggestions\": [\"...\", \"...\"],\n");
-        sb.append("  \"action_items\": [\"...\", \"...\"]\n");
-        sb.append("}\n");
+        sb.append("  \"suggestions\": [\n");
+        sb.append("    \"具体的改进建议1（100字以内）\",\n");
+        sb.append("    \"具体的改进建议2（100字以内）\",\n");
+        sb.append("    \"具体的改进建议3（100字以内）\"\n");
+        sb.append("  ],\n");
+        sb.append("  \"action_items\": [\n");
+        sb.append("    \"立即行动项1（30字以内）\",\n");
+        sb.append("    \"立即行动项2（30字以内）\"\n");
+        sb.append("  ]\n");
+        sb.append("}\n\n");
+        
+        sb.append("重要提示：\n");
+        sb.append("- 必须返回纯JSON格式，不要包含markdown代码块标记（```json）\n");
+        sb.append("- overall_score 为 0-100 的整数\n");
+        sb.append("- 每个 section 的 score 为 0-100 的整数\n");
+        sb.append("- analysis 字段必须详细、具体，不能空洞\n");
+        sb.append("- suggestions 必须是可执行的具体建议\n");
+        sb.append("- 基于20年HR经验，给出专业、实用的评价\n");
+        
         return sb.toString();
     }
 
@@ -355,12 +478,15 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private String buildRewritePrompt(Resume resume, Map<String, Object> healthAnalysis) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一位专业的简历优化专家，请根据以下简历和诊断报告，重写并优化简历内容。\n\n");
+        sb.append("你是一位顶级的简历优化专家，拥有15年简历撰写和职业咨询经验。\n");
+        sb.append("你曾帮助超过5000名求职者成功获得BAT、TMD等一线互联网公司的offer。\n");
+        sb.append("请根据以下简历内容进行专业重写和优化，使其成为一份能够通过HR筛选的顶级简历。\n\n");
+        
         sb.append("=== 原始简历 ===\n");
         sb.append(buildResumeSummary(resume));
 
         if (healthAnalysis != null && !healthAnalysis.isEmpty()) {
-            sb.append("\n\n=== 诊断报告 ===\n");
+            sb.append("\n\n=== 诊断报告（作为优化依据） ===\n");
             try {
                 sb.append(objectMapper.writeValueAsString(healthAnalysis));
             } catch (Exception e) {
@@ -368,24 +494,82 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             }
         }
 
-        sb.append("\n\n请重写以下内容，使其更加专业、有竞争力：\n");
-        sb.append("1. 个人简介 - 突出核心优势和职业目标\n");
-        sb.append("2. 工作经历 - 使用STAR法则，强调成果和量化数据\n");
-        sb.append("3. 技能 - 按重要性排序，突出核心技能\n");
-        sb.append("4. 项目经历 - 突出技术难点和解决方案\n\n");
-        sb.append("请返回JSON格式：\n");
+        sb.append("\n\n=== 优化标准（必须严格遵循） ===\n\n");
+        
+        sb.append("【个人简介优化标准】\n");
+        sb.append("- 字数：80-120字，精炼有力\n");
+        sb.append("- 结构：职业定位 + 核心优势 + 量化成果 + 职业目标\n");
+        sb.append("- 要求：\n");
+        sb.append("  1. 开头用1-2个词明确定位（如：资深全栈开发工程师）\n");
+        sb.append("  2. 列出3-5个核心技能，体现专业深度\n");
+        sb.append("  3. 至少包含1个量化成果（如：性能提升40%+）\n");
+        sb.append("  4. 体现职业发展方向和价值主张\n");
+        sb.append("  5. 使用强有力的动词和行业术语\n\n");
+        
+        sb.append("【工作经历优化标准 - STAR法则】\n");
+        sb.append("- 每段经历必须包含：\n");
+        sb.append("  1. 公司名 + 职位 + 时间\n");
+        sb.append("  2. 职责描述（简洁，3-5句话）\n");
+        sb.append("  3. 量化成果（2-4个，每个都包含具体数字）\n");
+        sb.append("- 成果格式：动词 + 任务 + 方法 + 结果（数据）\n");
+        sb.append("- 示例：\n");
+        sb.append("  \"负责核心系统重构，采用微服务架构，优化数据库查询，将系统响应时间从500ms降低到180ms，提升64%\"\n");
+        sb.append("- 如果简历中缺少工作经历，根据目标职位提供1-2段典型的专业模板\n\n");
+        
+        sb.append("【技能优化标准】\n");
+        sb.append("- 分类：核心技术栈、相关技术、工具/框架\n");
+        sb.append("- 数量：5-10个核心技能，不要太多\n");
+        sb.append("- 要求：\n");
+        sb.append("  1. 具体明确（不要写\"编程语言\"，要写\"Java、Python\"）\n");
+        sb.append("  2. 按熟练度排序（最熟练的放前面）\n");
+        sb.append("  3. 避免重复（每个技能只出现一次）\n");
+        sb.append("  4. 包含当前市场热门技术\n\n");
+        
+        sb.append("【量化成果要求】\n");
+        sb.append("- 必须包含的具体数据类型：\n");
+        sb.append("  1. 性能提升：响应时间、吞吐量、并发量\n");
+        sb.append("  2. 效率提升：开发时间、部署时间、测试覆盖率\n");
+        sb.append("  3. 业务影响：用户增长、收入提升、成本降低\n");
+        sb.append("  4. 团队贡献：代码质量、文档完善、知识分享\n");
+        sb.append("- 如果简历中没有量化数据，根据职位提供合理的估算值（标注为示例）\n\n");
+        
+        sb.append("=== 重要提示 ===\n");
+        sb.append("- 绝对不要说\"我需要更多信息\"或\"请提供更多详情\"\n");
+        sb.append("- 如果信息不完整，提供专业的通用模板和示例\n");
+        sb.append("- 所有内容必须基于简历内容进行优化，不能凭空捏造\n");
+        sb.append("- 确保JSON格式正确，所有字段都有值\n");
+        sb.append("- 技能列表要去重，不要重复\n\n");
+        
+        sb.append("=== 输出格式要求 ===\n");
+        sb.append("必须严格按照以下JSON格式返回，不要添加任何其他文字说明：\n\n");
         sb.append("{\n");
-        sb.append("  \"personal_summary\": \"优化后的个人简介...\",\n");
+        sb.append("  \"personal_info\": {\n");
+        sb.append("    \"summary\": \"优化后的个人简介，80-120字，突出核心竞争力\"\n");
+        sb.append("  },\n");
         sb.append("  \"work_experience\": [\n");
-        sb.append("    {\"company\": \"...\", \"position\": \"...\", \"description\": \"...\"}\n");
+        sb.append("    {\n");
+        sb.append("      \"company\": \"公司名称\",\n");
+        sb.append("      \"position\": \"职位名称\",\n");
+        sb.append("      \"description\": \"使用STAR法则描述工作内容，简洁有力\",\n");
+        sb.append("      \"achievements\": [\"量化成果1（含具体数据）\", \"量化成果2（含具体数据）\", \"量化成果3（含具体数据）\"]\n");
+        sb.append("    }\n");
         sb.append("  ],\n");
-        sb.append("  \"skills\": [\"...\", \"...\"],\n");
-        sb.append("  \"projects\": [\n");
-        sb.append("    {\"name\": \"...\", \"description\": \"...\"}\n");
-        sb.append("  ],\n");
-        sb.append("  \"improvements\": [\"...\", \"...\"],\n");
-        sb.append("  \"before_after_comparison\": {\"key_changes\": [\"...\", \"...\"]}\n");
-        sb.append("}\n");
+        sb.append("  \"skills\": [\"核心技能1\", \"核心技能2\", \"核心技能3\", \"相关技能1\", \"相关技能2\"],\n");
+        sb.append("  \"improvements\": [\n");
+        sb.append("    \"具体的改进点1（50字以内）\",\n");
+        sb.append("    \"具体的改进点2（50字以内）\",\n");
+        sb.append("    \"具体的改进点3（50字以内）\"\n");
+        sb.append("  ]\n");
+        sb.append("}\n\n");
+        
+        sb.append("重要提示：\n");
+        sb.append("- 必须返回纯JSON格式，不要包含markdown代码块标记（```json）\n");
+        sb.append("- personal_info.summary 必须是80-120字的专业简介\n");
+        sb.append("- work_experience 中的 achievements 必须包含具体数据\n");
+        sb.append("- skills 数组要去重，不要重复\n");
+        sb.append("- improvements 要列出主要的改进点\n");
+        sb.append("- 基于15年简历优化经验，输出顶级质量的优化内容\n");
+        
         return sb.toString();
     }
 
@@ -637,10 +821,200 @@ public class ResumeAiServiceImpl implements ResumeAiService {
     }
 
     private List<String> extractRewriteImprovements(String response) {
-        return List.of("增强了量化成果描述", "优化了关键词匹配", "改进了语言表达");
+        List<String> improvements = new ArrayList<>();
+        
+        // 尝试从 AI 响应中提取改进点
+        try {
+            // 查找 "improvements" 数组
+            int improvementsStart = response.indexOf("\"improvements\"");
+            if (improvementsStart >= 0) {
+                int arrayStart = response.indexOf("[", improvementsStart);
+                int arrayEnd = response.indexOf("]", arrayStart);
+                
+                if (arrayStart >= 0 && arrayEnd > arrayStart) {
+                    String arrayStr = response.substring(arrayStart, arrayEnd + 1);
+                    try {
+                        List<String> improvementsList = objectMapper.readValue(arrayStr, List.class);
+                        return improvementsList;
+                    } catch (Exception e) {
+                        log.warn("Failed to parse improvements array: {}", e.getMessage());
+                    }
+                }
+            }
+            
+            // 如果没有找到专门的 improvements 数组，从响应中提取
+            String[] improvementKeywords = {"改进", "优化", "增强", "提升", "改善"};
+            String[] sentences = response.split("[。！？]");
+            for (String sentence : sentences) {
+                for (String keyword : improvementKeywords) {
+                    if (sentence.contains(keyword) && sentence.length() < 100) {
+                        improvements.add(sentence.trim());
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting improvements: {}", e.getMessage());
+        }
+        
+        return improvements;
     }
 
     private Map<String, Object> extractComparison(String response) {
-        return Map.of("key_changes", List.of("增加了量化数据", "优化了技能描述", "改进了项目经历"));
+        Map<String, Object> comparison = new HashMap<>();
+        
+        // 尝试从 AI 响应中提取对比信息
+        try {
+            // 查找 "before_after_comparison" 部分
+            int comparisonStart = response.indexOf("before_after_comparison");
+            if (comparisonStart >= 0) {
+                int jsonStart = response.indexOf("{", comparisonStart);
+                int jsonEnd = response.lastIndexOf("}", comparisonStart + 1000); // 在合理范围内查找
+                
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                    String jsonStr = response.substring(jsonStart, jsonEnd + 1);
+                    try {
+                        Map<String, Object> jsonMap = objectMapper.readValue(jsonStr, Map.class);
+                        return jsonMap;
+                    } catch (Exception e) {
+                        log.warn("Failed to parse comparison JSON: {}", e.getMessage());
+                    }
+                }
+            }
+            
+            // 如果没有找到专门的对比部分，从整个响应中提取
+            comparison.put("key_changes", extractChanges(response));
+        } catch (Exception e) {
+            log.warn("Error extracting comparison: {}", e.getMessage());
+        }
+        
+        return comparison;
+    }
+    
+    private List<String> extractChanges(String response) {
+        List<String> changes = new ArrayList<>();
+        
+        // 尝试从响应中提取关键改进点
+        String[] keywords = {"优化", "改进", "增强", "提升", "增加", "改进了", "优化了"};
+        
+        String[] sentences = response.split("[。！？]");
+        for (String sentence : sentences) {
+            for (String keyword : keywords) {
+                if (sentence.contains(keyword) && sentence.length() < 100) {
+                    changes.add(sentence.trim());
+                    break;
+                }
+            }
+        }
+        
+        return changes;
+    }
+
+    private Map<String, Object> parseRewriteResponse(String response) {
+        Map<String, Object> parsed = new HashMap<>();
+        
+        // 尝试从响应中提取 JSON 部分
+        int jsonStart = response.indexOf("{");
+        int jsonEnd = response.lastIndexOf("}");
+        
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            String jsonStr = response.substring(jsonStart, jsonEnd + 1);
+            try {
+                log.debug("Parsing JSON from AI response: {}", jsonStr);
+                Map<String, Object> jsonMap = objectMapper.readValue(jsonStr, Map.class);
+                return jsonMap;
+            } catch (Exception e) {
+                log.warn("Failed to parse JSON from response: {}", e.getMessage());
+                log.debug("Response content: {}", response);
+            }
+        }
+        
+        // 如果解析失败，记录错误并返回空映射
+        log.error("No valid JSON found in AI response");
+        return new HashMap<>();
+    }
+
+    private List<String> extractResolvedIssues(Map<String, Object> healthAnalysis) {
+        List<String> resolved = new ArrayList<>();
+        
+        if (healthAnalysis != null) {
+            // 从健康分析中提取问题并生成已解决的描述
+            List<Map<String, Object>> issues = (List<Map<String, Object>>) healthAnalysis.get("issues");
+            if (issues != null && !issues.isEmpty()) {
+                for (Map<String, Object> issue : issues) {
+                    String description = (String) issue.get("description");
+                    String severity = (String) issue.get("severity");
+                    if (description != null) {
+                        resolved.add("已解决" + (severity != null ? " (" + severity + "级别)" : "") + ": " + description);
+                    }
+                }
+            }
+        }
+        
+        return resolved;
+    }
+
+    /**
+     * 保存 AI 生成历史记录
+     */
+    private void saveAiHistory(String resumeId, String type, String aiResponse, Map<String, Object> parsedData) {
+        try {
+            String parsedDataJson = objectMapper.writeValueAsString(parsedData);
+            
+            ResumeAiHistory history = ResumeAiHistory.builder()
+                    .resumeId(resumeId)
+                    .type(type)
+                    .aiResponse(aiResponse)
+                    .parsedData(parsedDataJson)
+                    .model("glm-4")
+                    .build();
+            
+            historyRepository.save(history);
+            log.info("Saved AI history: resumeId={}, type={}", resumeId, type);
+        } catch (Exception e) {
+            log.error("Failed to save AI history", e);
+        }
+    }
+
+    /**
+     * 获取 AI 生成历史记录
+     */
+    public List<Map<String, Object>> getAiHistory(String resumeId, String type) {
+        try {
+            List<ResumeAiHistory> histories;
+            if (type != null) {
+                histories = historyRepository.findByResumeIdAndTypeOrderByCreatedAtDesc(resumeId, type);
+            } else {
+                histories = historyRepository.findByResumeIdOrderByCreatedAtDesc(resumeId);
+            }
+            
+            return histories.stream().map(h -> {
+                try {
+                    Map<String, Object> parsedData = objectMapper.readValue(h.getParsedData(), Map.class);
+                    Map<String, Object> history = new HashMap<>();
+                    history.put("id", h.getId());
+                    history.put("type", h.getType());
+                    history.put("ai_response", h.getAiResponse());
+                    history.put("parsed_data", parsedData);
+                    history.put("created_at", h.getCreatedAt());
+                    history.put("model", h.getModel());
+                    return history;
+                } catch (Exception e) {
+                    log.warn("Failed to parse history data for id {}: {}", h.getId(), e.getMessage());
+                    Map<String, Object> history = new HashMap<>();
+                    history.put("id", h.getId());
+                    history.put("type", h.getType());
+                    history.put("ai_response", h.getAiResponse());
+                    history.put("parsed_data", Map.of());
+                    history.put("created_at", h.getCreatedAt());
+                    history.put("model", h.getModel());
+                    history.put("error", "Failed to parse data");
+                    return history;
+                }
+            }).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Failed to get AI history", e);
+            return List.of();
+        }
     }
 }

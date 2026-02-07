@@ -54,7 +54,12 @@ public class TongyiQianwenService {
 
         // 优先使用 iFlow
         if (iFlowService.isConnected()) {
-            return iFlowService.querySync(prompt);
+            // 使用流式查询并收集完整响应，避免同步查询的截断问题
+            StringBuilder result = new StringBuilder();
+            iFlowService.queryStream(prompt, "glm-4")
+                    .doOnNext(result::append)
+                    .blockLast(); // 等待流完成
+            return result.toString();
         }
 
         // 降级使用 Spring AI
