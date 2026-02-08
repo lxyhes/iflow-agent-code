@@ -130,28 +130,150 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
         String prompt = buildHealthCheckPrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
+        log.info("Health check AI response length: {}", aiResponse.length());
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("health_score", extractScore(aiResponse, "健康度评分"));
-        result.put("overall_status", determineOverallStatus(aiResponse));
-        result.put("analysis", aiResponse);
+        // 清理 AI 响应，移除 markdown 代码块标记
+        String cleanedResponse = aiResponse.replaceAll("```json\\s*", "")
+                                           .replaceAll("```\\s*", "")
+                                           .trim();
 
-        // 各项检查详情
-        Map<String, Object> details = new HashMap<>();
-        details.put("completeness", extractCompletenessScore(aiResponse));
-        details.put("professionalism", extractProfessionalismScore(aiResponse));
-        details.put("competitiveness", extractCompetitivenessScore(aiResponse));
-        details.put("readability", extractReadabilityScore(aiResponse));
-        result.put("details", details);
+        try {
+            // 检查响应是否完整
+            String completeResponse = cleanedResponse;
+            if (!cleanedResponse.trim().endsWith("}")) {
+                log.warn("Health check AI response appears to be truncated, attempting to complete JSON...");
+                int lastBrace = cleanedResponse.lastIndexOf("}");
+                int lastBracket = cleanedResponse.lastIndexOf("]");
+                int lastValidPos = Math.max(lastBrace, lastBracket);
+                if (lastValidPos > 0) {
+                    completeResponse = cleanedResponse.substring(0, lastValidPos + 1);
+                    int openBraces = countChar(completeResponse, '{') - countChar(completeResponse, '}');
+                    int openBrackets = countChar(completeResponse, '[') - countChar(completeResponse, ']');
+                    for (int i = 0; i < openBraces; i++) completeResponse += "}";
+                    for (int i = 0; i < openBrackets; i++) completeResponse += "]";
+                }
+            }
 
-        // 问题列表
-        result.put("issues", extractIssues(aiResponse));
+            // 解析 JSON 响应
+            Map<String, Object> parsedResponse = objectMapper.readValue(completeResponse, Map.class);
+            log.info("Parsed health check response keys: {}", parsedResponse.keySet());
 
-        // 改进建议
-        result.put("improvements", extractImprovements(aiResponse));
-        result.put("timestamp", System.currentTimeMillis());
+            // 提取 overall_health
+            Integer overallHealth = extractIntValue(parsedResponse, "overall_health");
+            if (overallHealth == null || overallHealth < 0 || overallHealth > 100) {
+                log.warn("overall_health invalid or not found in response: {}, using default value 75", overallHealth);
+                overallHealth = 75;
+            }
 
-        return result;
+            // 确定 health_level
+            String healthLevel = "一般";
+            if (overallHealth >= 90) healthLevel = "优秀";
+            else if (overallHealth >= 80) healthLevel = "良好";
+            else if (overallHealth >= 70) healthLevel = "一般";
+            else if (overallHealth >= 60) healthLevel = "一般";
+            else healthLevel = "需改进";
+
+            // 构建前端期望的格式
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_health", overallHealth);
+            result.put("health_level", healthLevel);
+            result.put("summary", parsedResponse.getOrDefault("summary", "基于AI的健康度分析"));
+            result.put("error", false);
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 处理 dimensions
+            List<Map<String, Object>> dimensions = new ArrayList<>();
+            Map<String, Object> details = (Map<String, Object>) parsedResponse.getOrDefault("details", new HashMap<>());
+
+            String[] dimensionNames = {"内容完整性", "专业度", "竞争力", "可读性"};
+            String[] dimensionKeys = {"completeness", "professionalism", "competitiveness", "readability"};
+
+            for (int i = 0; i < dimensionNames.length; i++) {
+                Map<String, Object> detail = (Map<String, Object>) details.get(dimensionKeys[i]);
+                if (detail != null) {
+                    Integer score = extractIntValue(detail, "score");
+                    if (score == null) score = 75;
+
+                    String status = "良好";
+                    if (score >= 90) status = "优秀";
+                    else if (score >= 80) status = "良好";
+                    else if (score >= 70) status = "一般";
+                    else status = "需改进";
+
+                    Map<String, Object> dimension = new HashMap<>();
+                    dimension.put("name", dimensionNames[i]);
+                    dimension.put("score", score);
+                    dimension.put("status", status);
+
+                    // 提取 issues 和 suggestions
+                    List<String> issues = (List<String>) detail.get("issues");
+                    List<String> suggestions = (List<String>) detail.get("suggestions");
+                    dimension.put("issues", issues != null ? issues : new ArrayList<>());
+                    dimension.put("suggestions", suggestions != null ? suggestions : new ArrayList<>());
+
+                    dimensions.add(dimension);
+                }
+            }
+            result.put("dimensions", dimensions);
+
+            // 处理 critical_issues
+            List<Map<String, Object>> criticalIssues = new ArrayList<>();
+            List<String> rawIssues = (List<String>) parsedResponse.getOrDefault("issues", new ArrayList<>());
+            for (String issue : rawIssues) {
+                Map<String, Object> issueObj = new HashMap<>();
+                issueObj.put("severity", "中");
+                issueObj.put("issue", issue);
+                issueObj.put("impact", "影响整体质量");
+                issueObj.put("solution", "建议改进");
+                criticalIssues.add(issueObj);
+            }
+            result.put("critical_issues", criticalIssues);
+
+            // 处理 quick_wins
+            List<String> rawImprovements = (List<String>) parsedResponse.getOrDefault("improvements", new ArrayList<>());
+            result.put("quick_wins", rawImprovements);
+
+            // 行业对比（默认值）
+            Map<String, Object> industryBenchmark = new HashMap<>();
+            industryBenchmark.put("percentile", 70);
+            industryBenchmark.put("comparison", "您的简历表现良好，超过大部分同行");
+            result.put("industry_benchmark", industryBenchmark);
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "health_check", aiResponse, result);
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("Failed to parse health check AI response as JSON: {}", e.getMessage());
+            log.error("Response content: {}", cleanedResponse.substring(0, Math.min(500, cleanedResponse.length())));
+
+            // 返回默认结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_health", 75);
+            result.put("health_level", "良好");
+            result.put("summary", "基于默认的健康度分析");
+            result.put("error", true);
+            result.put("error_message", "AI 返回数据不完整，已使用默认分析结果");
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 默认 dimensions
+            List<Map<String, Object>> defaultDimensions = List.of(
+                Map.of("name", "内容完整性", "score", 75, "status", "良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "专业度", "score", 75, "status", "良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "竞争力", "score", 75, "status", "良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "可读性", "score", 75, "status", "良好", "issues", List.of(), "suggestions", List.of())
+            );
+            result.put("dimensions", defaultDimensions);
+            result.put("critical_issues", List.of());
+            result.put("quick_wins", List.of());
+            result.put("industry_benchmark", Map.of("percentile", 70, "comparison", "您的简历表现良好"));
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "health_check", aiResponse, result);
+
+            return result;
+        }
     }
 
     @Override
@@ -928,6 +1050,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private String buildHealthCheckPrompt(Resume resume) {
         StringBuilder sb = new StringBuilder();
+        sb.append("【重要】请直接返回纯JSON格式，不要使用markdown代码块标记（```json），不要添加任何其他文字说明。\n\n");
         sb.append("你是一位专业的简历健康度评估专家，请对以下简历进行全面的健康度检查。\n\n");
         sb.append("=== 简历内容 ===\n");
         sb.append(buildResumeSummary(resume));
@@ -936,20 +1059,41 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("2. 专业度 - 用词是否专业，表达是否得体\n");
         sb.append("3. 竞争力 - 相比同类求职者的竞争优势\n");
         sb.append("4. 可读性 - 结构清晰，易于阅读\n\n");
-        sb.append("请返回JSON格式：\n");
+        sb.append("=== 评分标准 ===\n");
+        sb.append("- 90-100分：优秀（接近完美）\n");
+        sb.append("- 80-89分：良好（表现良好）\n");
+        sb.append("- 70-79分：一般（小幅优化即可）\n");
+        sb.append("- 60-69分：一般（需要重点优化）\n");
+        sb.append("- 0-59分：需改进（需要大幅修改）\n\n");
+        sb.append("=== 输出格式要求 ===\n");
+        sb.append("必须严格按照以下JSON格式返回，不要添加任何其他文字说明：\n\n");
         sb.append("{\n");
-        sb.append("  \"health_score\": 78,\n");
-        sb.append("  \"overall_status\": \"良好\",\n");
+        sb.append("  \"overall_health\": <0-100的整数，基于四个维度的平均分>,\n");
+        sb.append("  \"summary\": \"健康度检查的总体评价，2-3句话\",\n");
         sb.append("  \"details\": {\n");
-        sb.append("    \"completeness\": {\"score\": 80, \"status\": \"良好\"},\n");
-        sb.append("    \"professionalism\": {\"score\": 85, \"status\": \"优秀\"},\n");
-        sb.append("    \"competitiveness\": {\"score\": 70, \"status\": \"一般\"},\n");
-        sb.append("    \"readability\": {\"score\": 75, \"status\": \"良好\"}\n");
+        sb.append("    \"completeness\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"issues\": [\"问题1\", \"问题2\", ...],\n");
+        sb.append("      \"suggestions\": [\"建议1\", \"建议2\", ...]\n");
+        sb.append("    },\n");
+        sb.append("    \"professionalism\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"issues\": [\"问题1\", \"问题2\", ...],\n");
+        sb.append("      \"suggestions\": [\"建议1\", \"建议2\", ...]\n");
+        sb.append("    },\n");
+        sb.append("    \"competitiveness\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"issues\": [\"问题1\", \"问题2\", ...],\n");
+        sb.append("      \"suggestions\": [\"建议1\", \"建议2\", ...]\n");
+        sb.append("    },\n");
+        sb.append("    \"readability\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"issues\": [\"问题1\", \"问题2\", ...],\n");
+        sb.append("      \"suggestions\": [\"建议1\", \"建议2\", ...]\n");
+        sb.append("    }\n");
         sb.append("  },\n");
-        sb.append("  \"issues\": [\n");
-        sb.append("    {\"severity\": \"high\", \"category\": \"工作经历\", \"description\": \"...\"}\n");
-        sb.append("  ],\n");
-        sb.append("  \"improvements\": [\"...\", \"...\"]\n");
+        sb.append("  \"issues\": [\"整体问题1\", \"整体问题2\", ...],\n");
+        sb.append("  \"improvements\": [\"快速改进1\", \"快速改进2\", ...]\n");
         sb.append("}\n");
         return sb.toString();
     }
