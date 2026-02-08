@@ -134,18 +134,26 @@ const loadAiHistory = async (type = null) => {
 
       // 1. 更新个人简介
       if (rewriteResult.personal_info?.summary) {
-        console.log('更新个人简介:', rewriteResult.personal_info.summary);
+        console.log('=== 更新个人简介 ===');
+        console.log('新简介:', rewriteResult.personal_info.summary);
         console.log('当前 personal_info:', resume.personal_info);
-        // 只传递 summary 字段，避免覆盖其他已填写的字段
-        await resumeApi.updatePersonalInfo(resume.id, {
-          summary: rewriteResult.personal_info.summary
-        });
+        try {
+          const response = await resumeApi.updatePersonalInfo(resume.id, {
+            summary: rewriteResult.personal_info.summary
+          });
+          console.log('个人简介更新结果:', response);
+        } catch (err) {
+          console.error('更新个人简介失败:', err);
+          throw new Error('更新个人简介失败: ' + err.message);
+        }
       }
 
       // 2. 更新工作经历
       if (rewriteResult.workExperiences && rewriteResult.workExperiences.length > 0) {
+        console.log('=== 开始更新工作经历 ===');
         const existingWorkExps = resume.workExperiences || [];
         console.log('现有工作经历数量:', existingWorkExps.length);
+        console.log('AI 生成的工作经历:', JSON.stringify(rewriteResult.workExperiences));
 
         // 遍历优化后的工作经历
         for (const rewritten of rewriteResult.workExperiences) {
@@ -157,15 +165,19 @@ const loadAiHistory = async (type = null) => {
 
           if (isPlaceholder) {
             console.log('检测到占位符工作经历，生成默认工作经历');
-            // 添加一个新的工作经历，使用默认名称但保存 AI 生成的描述和成果
-            await resumeApi.addWorkExperience(resume.id, {
-              company: '工作经历',
-              position: '职位',
-              description: rewritten.description || '',
-              achievements: rewritten.achievements || [],
-              isCurrent: false,
-              sortOrder: existingWorkExps.length
-            });
+            try {
+              const response = await resumeApi.addWorkExperience(resume.id, {
+                company: '工作经历',
+                position: '职位',
+                description: rewritten.description || '',
+                achievements: rewritten.achievements || [],
+                isCurrent: false,
+                sortOrder: existingWorkExps.length
+              });
+              console.log('添加占位符工作经历结果:', response);
+            } catch (err) {
+              console.error('添加工作经历失败:', err);
+            }
             continue;
           }
 
@@ -173,28 +185,39 @@ const loadAiHistory = async (type = null) => {
           const existingExp = existingWorkExps.find(
             exp => exp.company === rewritten.company || exp.position === rewritten.position
           );
-          
+
           if (existingExp) {
             // 更新现有工作经历
-            console.log('更新现有工作经历:', existingExp.id);
-            await resumeApi.updateWorkExperience(resume.id, existingExp.id, {
-              ...existingExp,
-              description: rewritten.description || existingExp.description,
-              achievements: rewritten.achievements || existingExp.achievements
-            });
+            console.log('更新现有工作经历:', existingExp.id, existingExp.company);
+            try {
+              const response = await resumeApi.updateWorkExperience(resume.id, existingExp.id, {
+                ...existingExp,
+                description: rewritten.description || existingExp.description,
+                achievements: rewritten.achievements || existingExp.achievements
+              });
+              console.log('更新工作经历结果:', response);
+            } catch (err) {
+              console.error('更新工作经历失败:', err);
+            }
           } else {
             // 添加新的工作经历
-            console.log('添加新工作经历');
-            await resumeApi.addWorkExperience(resume.id, {
-              company: rewritten.company,
-              position: rewritten.position,
-              description: rewritten.description,
-              achievements: rewritten.achievements,
-              isCurrent: false,
-              sortOrder: existingWorkExps.length
-            });
+            console.log('添加新工作经历:', rewritten.company);
+            try {
+              const response = await resumeApi.addWorkExperience(resume.id, {
+                company: rewritten.company,
+                position: rewritten.position,
+                description: rewritten.description,
+                achievements: rewritten.achievements,
+                isCurrent: false,
+                sortOrder: existingWorkExps.length
+              });
+              console.log('添加工作经历结果:', response);
+            } catch (err) {
+              console.error('添加工作经历失败:', err);
+            }
           }
         }
+        console.log('=== 工作经历更新完成 ===');
       } else {
         console.log('没有工作经历需要更新');
       }
@@ -212,7 +235,12 @@ const loadAiHistory = async (type = null) => {
         // 逐个删除现有技能
         for (const skill of existingSkills) {
           console.log('删除现有技能:', skill.name, `(ID: ${skill.id})`);
-          await resumeApi.deleteSkill(resume.id, skill.id);
+          try {
+            const response = await resumeApi.deleteSkill(resume.id, skill.id);
+            console.log('删除技能结果:', response);
+          } catch (err) {
+            console.error('删除技能失败:', err);
+          }
         }
 
         // 去重技能名称（标准化处理：去除空格、统一大小写）
@@ -246,13 +274,18 @@ const loadAiHistory = async (type = null) => {
             // 再次检查是否已经添加过（防止大小写不同的重复）
             if (!addedSkillNames.has(lowerName)) {
               console.log('✅ 添加技能:', skillName);
-              await resumeApi.addSkill(resume.id, {
-                name: skillName,
-                level: 3,
-                category: '技术'
-              });
-              addedSkillNames.add(lowerName);
-              addedSkills++;
+              try {
+                const response = await resumeApi.addSkill(resume.id, {
+                  name: skillName,
+                  level: 3,
+                  category: '技术'
+                });
+                console.log('添加技能结果:', response);
+                addedSkillNames.add(lowerName);
+                addedSkills++;
+              } catch (err) {
+                console.error('添加技能失败:', err);
+              }
             } else {
               console.log('⏭️  跳过重复技能:', skillName);
             }
@@ -268,76 +301,102 @@ const loadAiHistory = async (type = null) => {
 
       // 4. 更新教育经历
       if (rewriteResult.education && rewriteResult.education.length > 0) {
-        console.log('更新教育经历，数量:', rewriteResult.education.length);
+        console.log('=== 开始更新教育经历 ===');
+        console.log('AI 生成的教育经历:', JSON.stringify(rewriteResult.education));
         const existingEdu = resume.education || [];
-        
+        console.log('现有教育经历数量:', existingEdu.length);
+
         for (const rewritten of rewriteResult.education) {
           // 尝试找到匹配的教育经历（通过学校名或专业匹配）
           const existing = existingEdu.find(
             edu => edu.school === rewritten.school || edu.major === rewritten.major
           );
-          
+
           if (existing) {
-            console.log('更新现有教育经历:', existing.id);
-            await resumeApi.updateEducation(resume.id, existing.id, {
-              ...existing,
-              school: rewritten.school || existing.school,
-              degree: rewritten.degree || existing.degree,
-              major: rewritten.major || existing.major,
-              startDate: rewritten.startDate || existing.startDate,
-              endDate: rewritten.endDate || existing.endDate
-            });
+            console.log('更新现有教育经历:', existing.id, existing.school);
+            try {
+              const response = await resumeApi.updateEducation(resume.id, existing.id, {
+                ...existing,
+                school: rewritten.school || existing.school,
+                degree: rewritten.degree || existing.degree,
+                major: rewritten.major || existing.major,
+                startDate: rewritten.startDate || existing.startDate,
+                endDate: rewritten.endDate || existing.endDate
+              });
+              console.log('更新教育经历结果:', response);
+            } catch (err) {
+              console.error('更新教育经历失败:', err);
+            }
           } else {
             console.log('添加新教育经历:', rewritten.school);
-            await resumeApi.addEducation(resume.id, {
-              school: rewritten.school || '学校',
-              degree: rewritten.degree || '本科',
-              major: rewritten.major || '专业',
-              startDate: rewritten.startDate,
-              endDate: rewritten.endDate
-            });
+            try {
+              const response = await resumeApi.addEducation(resume.id, {
+                school: rewritten.school || '学校',
+                degree: rewritten.degree || '本科',
+                major: rewritten.major || '专业',
+                startDate: rewritten.startDate,
+                endDate: rewritten.endDate
+              });
+              console.log('添加教育经历结果:', response);
+            } catch (err) {
+              console.error('添加教育经历失败:', err);
+            }
           }
         }
+        console.log('=== 教育经历更新完成 ===');
       } else {
         console.log('没有教育经历需要更新');
       }
 
       // 5. 更新项目经历
       if (rewriteResult.projects && rewriteResult.projects.length > 0) {
-        console.log('更新项目经历，数量:', rewriteResult.projects.length);
+        console.log('=== 开始更新项目经历 ===');
+        console.log('AI 生成的项目经历:', JSON.stringify(rewriteResult.projects));
         const existingProjects = resume.projects || [];
-        
+        console.log('现有项目经历数量:', existingProjects.length);
+
         for (const rewritten of rewriteResult.projects) {
           // 尝试找到匹配的项目（通过项目名称匹配）
           const existing = existingProjects.find(
             proj => proj.name === rewritten.name
           );
-          
+
           if (existing) {
-            console.log('更新现有项目:', existing.id);
-            await resumeApi.updateProject(resume.id, existing.id, {
-              ...existing,
-              name: rewritten.name || existing.name,
-              role: rewritten.role || existing.role,
-              description: rewritten.description || existing.description,
-              technologies: rewritten.technologies || existing.technologies,
-              achievements: rewritten.achievements || existing.achievements,
-              startDate: rewritten.startDate || existing.startDate,
-              endDate: rewritten.endDate || existing.endDate
-            });
+            console.log('更新现有项目:', existing.id, existing.name);
+            try {
+              const response = await resumeApi.updateProject(resume.id, existing.id, {
+                ...existing,
+                name: rewritten.name || existing.name,
+                role: rewritten.role || existing.role,
+                description: rewritten.description || existing.description,
+                technologies: rewritten.technologies || existing.technologies,
+                achievements: rewritten.achievements || existing.achievements,
+                startDate: rewritten.startDate || existing.startDate,
+                endDate: rewritten.endDate || existing.endDate
+              });
+              console.log('更新项目经历结果:', response);
+            } catch (err) {
+              console.error('更新项目经历失败:', err);
+            }
           } else {
             console.log('添加新项目:', rewritten.name);
-            await resumeApi.addProject(resume.id, {
-              name: rewritten.name || '项目',
-              role: rewritten.role || '角色',
-              description: rewritten.description || '',
-              technologies: rewritten.technologies || [],
-              achievements: rewritten.achievements || [],
-              startDate: rewritten.startDate,
-              endDate: rewritten.endDate
-            });
+            try {
+              const response = await resumeApi.addProject(resume.id, {
+                name: rewritten.name || '项目',
+                role: rewritten.role || '角色',
+                description: rewritten.description || '',
+                technologies: rewritten.technologies || [],
+                achievements: rewritten.achievements || [],
+                startDate: rewritten.startDate,
+                endDate: rewritten.endDate
+              });
+              console.log('添加项目经历结果:', response);
+            } catch (err) {
+              console.error('添加项目经历失败:', err);
+            }
           }
         }
+        console.log('=== 项目经历更新完成 ===');
       } else {
         console.log('没有项目经历需要更新');
       }
