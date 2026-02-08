@@ -29,26 +29,26 @@ const ExperienceTimeline = ({ resume, onClose }) => {
 
   // 处理工作经历数据
   const timelineData = useMemo(() => {
-    if (!resume.work_experience || resume.work_experience.length === 0) {
+    if (!resume.workExperiences || resume.workExperiences.length === 0) {
       return [];
     }
 
     // 按开始时间排序（最新的在前）
-    const sorted = [...resume.work_experience].sort((a, b) => {
-      const dateA = new Date(a.start_date || '2000-01-01');
-      const dateB = new Date(b.start_date || '2000-01-01');
+    const sorted = [...resume.workExperiences].sort((a, b) => {
+      const dateA = new Date(a.startDate || '2000-01-01');
+      const dateB = new Date(b.startDate || '2000-01-01');
       return dateB - dateA;
     });
 
     // 计算每段工作的时长
     return sorted.map((exp, index) => {
-      const startDate = new Date(exp.start_date || '2000-01-01');
-      const endDate = exp.end_date ? new Date(exp.end_date) : new Date();
-      
+      const startDate = new Date(exp.startDate || '2000-01-01');
+      const endDate = exp.endDate ? new Date(exp.endDate) : new Date();
+
       const diffTime = Math.abs(endDate - startDate);
       const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365));
       const diffMonths = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 365)) / (1000 * 60 * 60 * 24 * 30));
-      
+
       let duration = '';
       if (diffYears > 0) duration += `${diffYears}年`;
       if (diffMonths > 0) duration += `${diffMonths}个月`;
@@ -77,18 +77,18 @@ const ExperienceTimeline = ({ resume, onClose }) => {
         duration,
         durationMonths: diffYears * 12 + diffMonths,
         achievements: achievements.slice(0, 3), // 最多显示3个成就
-        isCurrent: !exp.end_date,
+        isCurrent: !exp.endDate,
         index
       };
     });
-  }, [resume.work_experience]);
+  }, [resume.workExperiences]);
 
   // 计算总工作年限
   const totalExperience = useMemo(() => {
     if (timelineData.length === 0) return 0;
-    
-    const earliest = new Date(timelineData[timelineData.length - 1].start_date);
-    const latest = timelineData[0].end_date ? new Date(timelineData[0].end_date) : new Date();
+
+    const earliest = new Date(timelineData[timelineData.length - 1].startDate);
+    const latest = timelineData[0].endDate ? new Date(timelineData[0].endDate) : new Date();
     const diffYears = (latest - earliest) / (1000 * 60 * 60 * 24 * 365);
     return Math.round(diffYears);
   }, [timelineData]);
@@ -270,7 +270,7 @@ const ExperienceTimeline = ({ resume, onClose }) => {
                             <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5" />
-                                {formatDate(item.start_date)} - {formatDate(item.end_date)}
+                                {formatDate(item.startDate)} - {formatDate(item.endDate)}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5" />

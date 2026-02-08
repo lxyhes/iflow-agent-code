@@ -287,6 +287,79 @@ python3 log_viewer.py
 - 使用 `class-variance-authority` 管理样式变体
 - 使用 `clsx` 和 `tailwind-merge` 合并类名
 
+### 字段命名规范
+
+**重要：前后端字段命名必须保持一致**
+
+#### 命名规则
+- **后端（Java/Spring Boot）**: 统一使用驼峰命名（camelCase）
+  - 例如：`fullName`、`startDate`、`endDate`、`isCurrent`
+  - 实体类字段使用 `@Column` 注解映射数据库列名（通常为下划线）
+
+- **前端（JavaScript/React）**: 必须使用与后端一致的驼峰命名
+  - 例如：`fullName`、`startDate`、`endDate`、`isCurrent`
+  - ❌ 禁止使用下划线命名：`full_name`、`start_date`、`end_date`
+
+#### 常见字段对照表
+
+| 后端字段（驼峰） | 前端字段（驼峰） | ❌ 错误示例（下划线） |
+|----------------|----------------|---------------------|
+| `fullName` | `fullName` | `full_name` |
+| `startDate` | `startDate` | `start_date` |
+| `endDate` | `endDate` | `end_date` |
+| `isCurrent` | `isCurrent` | `is_current` |
+| `sortOrder` | `sortOrder` | `sort_order` |
+| `workExperiences` | `workExperiences` | `work_experience` |
+| `educations` | `educations` | `education` |
+| `personalInfo` | `personalInfo` | `personal_info` |
+
+#### 实现规范
+
+1. **后端实体类**：
+   ```java
+   @Entity
+   public class PersonalInfo {
+       @Column(name = "full_name")
+       private String fullName;  // Java 字段使用驼峰
+   }
+   ```
+
+2. **前端表单状态**：
+   ```javascript
+   const [formData, setFormData] = useState({
+       fullName: '',  // ✅ 正确：驼峰命名
+       startDate: '',
+       // ❌ 错误：不要使用 full_name, start_date
+   });
+   ```
+
+3. **API 调用**：
+   ```javascript
+   // 直接传递 formData，无需转换
+   await resumeApi.updatePersonalInfo(resume.id, formData);
+   ```
+
+4. **组件渲染**：
+   ```javascript
+   // 直接使用驼峰字段
+   <input value={formData.fullName} onChange={...} />
+   <span>{experience.startDate} - {experience.endDate}</span>
+   ```
+
+#### 注意事项
+
+- ⚠️ **严禁混用命名规范**：前后端必须统一使用驼峰命名
+- ⚠️ **避免字段转换**：不要在前端进行字段名转换，直接使用后端返回的字段名
+- ⚠️ **兼容性处理**：如需兼容旧数据，应在数据适配器层进行转换，而非在业务逻辑中
+- ⚠️ **代码审查重点**：字段命名规范是代码审查的重点项目
+
+#### 历史问题案例
+
+**问题**：前端使用下划线命名（`full_name`），后端期望驼峰命名（`fullName`）
+**影响**：导致数据无法正确保存，用户填写的信息丢失
+**修复**：统一将前端所有字段名改为驼峰命名
+**教训**：字段命名不一致是导致数据丢失的常见原因，必须严格遵守命名规范
+
 ### API 设计
 
 - RESTful API 风格

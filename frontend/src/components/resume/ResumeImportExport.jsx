@@ -45,29 +45,29 @@ const ResumeImportExport = ({ resume, onImport }) => {
       return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}`;
     };
 
-    let md = `# ${resume.personal_info?.full_name || '姓名'}\n\n`;
-    md += `**${resume.target_position || '求职意向'}**\n\n`;
-    
+    let md = `# ${resume.personalInfo?.fullName || '姓名'}\n\n`;
+    md += `**${resume.targetPosition || '求职意向'}**\n\n`;
+
     // 联系方式
     const contacts = [];
-    if (resume.personal_info?.phone) contacts.push(`📱 ${resume.personal_info.phone}`);
-    if (resume.personal_info?.email) contacts.push(`📧 ${resume.personal_info.email}`);
-    if (resume.personal_info?.location) contacts.push(`📍 ${resume.personal_info.location}`);
+    if (resume.personalInfo?.phone) contacts.push(`📱 ${resume.personalInfo.phone}`);
+    if (resume.personalInfo?.email) contacts.push(`📧 ${resume.personalInfo.email}`);
+    if (resume.personalInfo?.location) contacts.push(`📍 ${resume.personalInfo.location}`);
     if (contacts.length > 0) {
       md += contacts.join(' | ') + '\n\n';
     }
 
     // 个人简介
-    if (resume.personal_info?.summary) {
-      md += `## 个人简介\n\n${resume.personal_info.summary}\n\n`;
+    if (resume.personalInfo?.summary) {
+      md += `## 个人简介\n\n${resume.personalInfo.summary}\n\n`;
     }
 
     // 工作经历
-    if (resume.work_experience?.length > 0) {
+    if (resume.workExperiences?.length > 0) {
       md += `## 工作经历\n\n`;
-      resume.work_experience.forEach(exp => {
+      resume.workExperiences.forEach(exp => {
         md += `### ${exp.company} - ${exp.position}\n`;
-        md += `*${formatDate(exp.start_date)} - ${exp.is_current ? '至今' : formatDate(exp.end_date)}*\n\n`;
+        md += `*${formatDate(exp.startDate)} - ${exp.isCurrent ? '至今' : formatDate(exp.endDate)}*\n\n`;
         if (exp.description) {
           md += `${exp.description}\n\n`;
         }
@@ -75,12 +75,12 @@ const ResumeImportExport = ({ resume, onImport }) => {
     }
 
     // 教育经历
-    if (resume.education?.length > 0) {
+    if (resume.educations?.length > 0) {
       md += `## 教育经历\n\n`;
-      resume.education.forEach(edu => {
+      resume.educations.forEach(edu => {
         md += `### ${edu.school}\n`;
         md += `**${edu.degree}** · ${edu.major}\n`;
-        md += `*${formatDate(edu.start_date)} - ${formatDate(edu.end_date)}*\n\n`;
+        md += `*${formatDate(edu.startDate)} - ${formatDate(edu.endDate)}*\n\n`;
       });
     }
 
@@ -102,7 +102,7 @@ const ResumeImportExport = ({ resume, onImport }) => {
         if (project.role) {
           md += `**${project.role}**\n`;
         }
-        md += `*${formatDate(project.start_date)} - ${formatDate(project.end_date)}*\n\n`;
+        md += `*${formatDate(project.startDate)} - ${formatDate(project.endDate)}*\n\n`;
         if (project.description) {
           md += `${project.description}\n\n`;
         }
@@ -148,7 +148,7 @@ const ResumeImportExport = ({ resume, onImport }) => {
       const data = JSON.parse(importData);
       
       // 验证基本结构
-      if (!data.personal_info && !data.work_experience && !data.education) {
+      if (!data.personalInfo && !data.workExperiences && !data.educations) {
         throw new Error('无效的简历数据格式');
       }
 

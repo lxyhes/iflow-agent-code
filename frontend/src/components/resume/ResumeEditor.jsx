@@ -654,7 +654,7 @@ const ResumeEditor = ({ resume, onBack, onUpdate }) => {
 // 个人信息标签页
 const PersonalInfoTab = ({ resume, onUpdate }) => {
   const [formData, setFormData] = useState({
-    full_name: resume.personalInfo?.fullName || '',
+    fullName: resume.personalInfo?.fullName || '',
     email: resume.personalInfo?.email || '',
     phone: resume.personalInfo?.phone || '',
     location: resume.personalInfo?.location || '',
@@ -668,7 +668,7 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
   const validateField = (field, value) => {
     let error = '';
     switch (field) {
-      case 'full_name':
+      case 'fullName':
         if (!value || value.trim().length < 2) error = '姓名至少需要2个字符';
         break;
       case 'email':
@@ -845,16 +845,16 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
           </label>
           <input
             type="text"
-            value={formData.full_name}
-            onChange={(e) => handleChange('full_name', e.target.value)}
+            value={formData.fullName}
+            onChange={(e) => handleChange('fullName', e.target.value)}
             onBlur={handleBlur}
             placeholder="您的姓名"
             className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-              errors.full_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+              errors.fullName ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
             }`}
           />
-          {errors.full_name && (
-            <p className="mt-1 text-xs text-red-500">{errors.full_name}</p>
+          {errors.fullName && (
+            <p className="mt-1 text-xs text-red-500">{errors.fullName}</p>
           )}
         </div>
 
@@ -933,23 +933,20 @@ const PersonalInfoTab = ({ resume, onUpdate }) => {
 
 // 工作经历标签页（带拖拽排序和AI描述生成）
 const ExperienceTab = ({ resume, onUpdate }) => {
-  const [experiences, setExperiences] = useState(resume.workExperiences || []);
+  const [experiences, setExperiences] = useState(resume?.workExperiences || []);
   const [editingId, setEditingId] = useState(null);
   const [draggedItem, setDraggedItem] = useState(null);
 
   const handleAdd = async () => {
     try {
-      const response = await resumeApi.addWorkExperience(resume.id, {
-        company: '新公司',
-        position: '职位名称',
-        start_date: '',
-        end_date: '',
-        is_current: false,
-        description: '',
-        achievements: []
+setFormData({
+        company: '',
+        position: '',
+        startDate: '',
+        endDate: ''
       });
       if (response.success) {
-        setExperiences(response.data.workExperiences);
+        setExperiences(response.data.workExperiences || []);
         setEditingId(response.experience_id);
         onUpdate(response.data);
       }
@@ -962,7 +959,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.updateWorkExperience(resume.id, id, data);
       if (response.success) {
-        setExperiences(response.data.workExperiences);
+        setExperiences(response.data.workExperiences || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -975,7 +972,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.deleteWorkExperience(resume.id, id);
       if (response.success) {
-        setExperiences(response.data.workExperiences);
+        setExperiences(response.data.workExperiences || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1014,7 +1011,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
     
     // 保存排序到服务器
     try {
-      const order = experiences.map(exp => exp.id);
+      const order = (experiences || []).map(exp => exp.id);
       const response = await resumeApi.updateWorkExperienceOrder(resume.id, order);
       if (response.success) {
         setExperiences(response.data.workExperiences);
@@ -1065,7 +1062,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
         </div>
       </div>
 
-      {experiences.length === 0 ? (
+      {(experiences || []).length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
           <Briefcase className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">还没有工作经历</p>
@@ -1073,7 +1070,7 @@ const ExperienceTab = ({ resume, onUpdate }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          {experiences.map((exp, index) => (
+          {(experiences || []).map((exp, index) => (
             <div
               key={exp.id}
               draggable
@@ -1107,9 +1104,9 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
   const [formData, setFormData] = useState({
     company: experience.company || '',
     position: experience.position || '',
-    start_date: experience.start_date || '',
-    end_date: experience.end_date || '',
-    is_current: experience.is_current || false,
+    startDate: experience.startDate || '',
+    endDate: experience.endDate || '',
+    isCurrent: experience.isCurrent || false,
     description: experience.description || '',
     achievements: experience.achievements || [],
     ...experience
@@ -1147,8 +1144,8 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
             </label>
             <input
               type="month"
-              value={formData.start_date}
-              onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+              value={formData.startDate}
+              onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
@@ -1159,16 +1156,16 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
             <div className="flex items-center gap-2">
               <input
                 type="month"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                disabled={formData.is_current}
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                disabled={formData.isCurrent}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50"
               />
               <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <input
                   type="checkbox"
-                  checked={formData.is_current}
-                  onChange={(e) => setFormData({ ...formData, is_current: e.target.checked })}
+                  checked={formData.isCurrent}
+                  onChange={(e) => setFormData({ ...formData, isCurrent: e.target.checked })}
                   className="rounded"
                 />
                 在职
@@ -1217,7 +1214,7 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
               <span className="text-gray-700 dark:text-gray-300">{experience.position}</span>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-              {experience.start_date} - {experience.is_current ? '至今' : experience.end_date}
+              {experience.startDate} - {experience.isCurrent ? '至今' : experience.endDate}
             </p>
             {experience.description && (
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-2">{experience.description}</p>
@@ -1245,7 +1242,7 @@ const ExperienceCard = ({ experience, index, isEditing, onEdit, onSave, onCancel
 
 // 教育经历标签页
 const EducationTab = ({ resume, onUpdate }) => {
-  const [education, setEducation] = useState(resume.educations || []);
+  const [education, setEducation] = useState(resume?.educations || []);
 
   const handleAdd = async () => {
     try {
@@ -1253,11 +1250,11 @@ const EducationTab = ({ resume, onUpdate }) => {
         school: '学校名称',
         degree: '学位',
         major: '专业',
-        start_date: '',
-        end_date: ''
+        startDate: '',
+        endDate: ''
       });
       if (response.success) {
-        setEducation(response.data.educations);
+        setEducation(response.data.educations || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1269,7 +1266,7 @@ const EducationTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.updateEducation(resume.id, id, data);
       if (response.success) {
-        setEducation(response.data.educations);
+        setEducation(response.data.educations || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1282,7 +1279,7 @@ const EducationTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.deleteEducation(resume.id, id);
       if (response.success) {
-        setEducation(response.data.educations);
+        setEducation(response.data.educations || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1303,14 +1300,14 @@ const EducationTab = ({ resume, onUpdate }) => {
         </button>
       </div>
 
-      {education.length === 0 ? (
+      {(education || []).length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
           <BookOpen className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">还没有教育经历</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {education.map((edu) => (
+          {(education || []).map((edu) => (
             <EducationCard
               key={edu.id}
               education={edu}
@@ -1331,8 +1328,8 @@ const EducationCard = ({ education, onUpdate, onDelete }) => {
     school: education.school || '',
     major: education.major || '',
     degree: education.degree || '',
-    start_date: education.start_date || '',
-    end_date: education.end_date || '',
+    startDate: education.startDate || '',
+    endDate: education.endDate || '',
     ...education
   });
 
@@ -1386,8 +1383,8 @@ const EducationCard = ({ education, onUpdate, onDelete }) => {
               </label>
               <input
                 type="month"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
@@ -1397,8 +1394,8 @@ const EducationCard = ({ education, onUpdate, onDelete }) => {
               </label>
               <input
                 type="month"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
@@ -1434,7 +1431,7 @@ const EducationCard = ({ education, onUpdate, onDelete }) => {
             {education.degree} · {education.major}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {education.start_date} - {education.end_date}
+            {education.startDate} - {education.endDate}
           </p>
         </div>
         <div className="flex gap-1">
@@ -1458,7 +1455,7 @@ const EducationCard = ({ education, onUpdate, onDelete }) => {
 
 // 技能标签页（带推荐功能）
 const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition }) => {
-  const [skills, setSkills] = useState(resume.skills || []);
+  const [skills, setSkills] = useState(resume?.skills || []);
   const [newSkill, setNewSkill] = useState({ name: '', level: 3, category: '技术' });
 
   const handleAdd = async (skillData = null) => {
@@ -1468,7 +1465,7 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
     try {
       const response = await resumeApi.addSkill(resume.id, skillToAdd);
       if (response.success) {
-        setSkills(response.data.skills);
+        setSkills(response.data.skills || []);
         if (!skillData) {
           setNewSkill({ name: '', level: 3, category: '技术' });
         }
@@ -1483,7 +1480,7 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
     try {
       const response = await resumeApi.updateSkill(resume.id, id, data);
       if (response.success) {
-        setSkills(response.data.skills);
+        setSkills(response.data.skills || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1495,7 +1492,7 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
     try {
       const response = await resumeApi.deleteSkill(resume.id, id);
       if (response.success) {
-        setSkills(response.data.skills);
+        setSkills(response.data.skills || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1503,7 +1500,7 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
     }
   };
 
-  const categories = [...new Set(skills.map(s => s.category))];
+  const categories = [...new Set((skills || []).map(s => s.category))];
 
   return (
     <div className="space-y-4">
@@ -1573,7 +1570,7 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
         </div>
       ))}
 
-      {skills.length === 0 && (
+      {(skills || []).length === 0 && (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
           <Code2 className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">还没有添加技能</p>
@@ -1660,7 +1657,7 @@ const SkillTag = ({ skill, onUpdate, onDelete }) => {
 
 // 项目经历标签页
 const ProjectsTab = ({ resume, onUpdate }) => {
-  const [projects, setProjects] = useState(resume.projects || []);
+  const [projects, setProjects] = useState(resume?.projects || []);
 
   const handleAdd = async () => {
     try {
@@ -1686,7 +1683,7 @@ const ProjectsTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.updateProject(resume.id, id, data);
       if (response.success) {
-        setProjects(response.data.projects);
+        setProjects(response.data.projects || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1699,7 +1696,7 @@ const ProjectsTab = ({ resume, onUpdate }) => {
     try {
       const response = await resumeApi.deleteProject(resume.id, id);
       if (response.success) {
-        setProjects(response.data.projects);
+        setProjects(response.data.projects || []);
         onUpdate(response.data);
       }
     } catch (err) {
@@ -1720,7 +1717,7 @@ const ProjectsTab = ({ resume, onUpdate }) => {
         </button>
       </div>
 
-      {projects.length === 0 ? (
+      {(projects || []).length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
           <FolderOpen className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">还没有项目经历</p>
@@ -1728,7 +1725,7 @@ const ProjectsTab = ({ resume, onUpdate }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          {projects.map((project) => (
+          {(projects || []).map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
@@ -1745,21 +1742,20 @@ const ProjectsTab = ({ resume, onUpdate }) => {
 // 项目卡片
 const ProjectCard = ({ project, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    name: project.name || '',
-    description: project.description || '',
-    role: project.role || '',
-    start_date: project.start_date || '',
-    end_date: project.end_date || '',
-    technologies: Array.isArray(project.technologies)
-      ? project.technologies
-      : (project.technologies ? JSON.parse(project.technologies) : []),
-    achievements: Array.isArray(project.achievements)
-      ? project.achievements
-      : (project.achievements ? JSON.parse(project.achievements) : []),
-    ...project
-  });
-  const [newTech, setNewTech] = useState('');
+      const [formData, setFormData] = useState({
+      name: project.name || '',
+      description: project.description || '',
+      role: project.role || '',
+      startDate: project.startDate || '',
+      endDate: project.endDate || '',
+      technologies: Array.isArray(project.technologies)
+        ? project.technologies
+        : (project.technologies ? JSON.parse(project.technologies) : []),
+      achievements: Array.isArray(project.achievements)
+        ? project.achievements
+        : (project.achievements ? JSON.parse(project.achievements) : []),
+      ...project
+    });  const [newTech, setNewTech] = useState('');
 
   if (isEditing) {
     return (
@@ -1783,8 +1779,8 @@ const ProjectCard = ({ project, onUpdate, onDelete }) => {
               </label>
               <input
                 type="month"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
@@ -1794,8 +1790,8 @@ const ProjectCard = ({ project, onUpdate, onDelete }) => {
               </label>
               <input
                 type="month"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
@@ -1909,10 +1905,9 @@ const ProjectCard = ({ project, onUpdate, onDelete }) => {
           {project.role && (
             <p className="text-gray-700 dark:text-gray-300 mt-1">{project.role}</p>
           )}
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {project.start_date} - {project.end_date}
-          </p>
-          {project.description && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {project.startDate} - {project.endDate}
+                    </p>          {project.description && (
             <p className="text-gray-600 dark:text-gray-400 mt-3">{project.description}</p>
           )}
           {Array.isArray(project.technologies) && project.technologies.length > 0 && (

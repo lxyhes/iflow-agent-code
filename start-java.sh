@@ -77,30 +77,32 @@ sleep 5
 
 # 构建并启动 Java 后端
 echo ""
-echo "[2/4] Building & Starting Java Backend..."
-cd "$BASE_DIR/backend-java"
-
-# 检查是否需要构建
-if [ ! -d "target/classes" ] || [ -n "$(find src -newer target/classes -type f 2>/dev/null | head -1)" ]; then
-    echo "[INFO] Building Java project..."
-    mvn clean compile -q
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] Java build failed!"
-        exit 1
-    fi
-    echo "[OK] Build successful"
-fi
-
-# 启动 Java 后端（支持热加载）
-export MAVEN_OPTS="-Dspring.devtools.restart.enabled=true -Dspring.devtools.livereload.enabled=true"
-nohup mvn spring-boot:run > /tmp/backend.log 2>&1 &
-BACKEND_PID=$!
-cd "$BASE_DIR"
-echo "   PID: $BACKEND_PID"
-echo "   Port: 8080"
-
-echo "Waiting 10 seconds for Java backend to start..."
-sleep 10
+echo "[2/4] Java Backend - SKIPPED (temporarily disabled)"
+echo "[INFO] Java backend build and startup skipped as requested"
+# cd "$BASE_DIR/backend-java"
+#
+# # 检查是否需要构建
+# if [ ! -d "target/classes" ] || [ -n "$(find src -newer target/classes -type f 2>/dev/null | head -1)" ]; then
+#     echo "[INFO] Building Java project..."
+#     mvn clean compile -q
+#     if [ $? -ne 0 ]; then
+#         echo "[ERROR] Java build failed!"
+#         exit 1
+#     fi
+#     echo "[OK] Build successful"
+# fi
+#
+# # 启动 Java 后端（支持热加载）
+# export MAVEN_OPTS="-Dspring.devtools.restart.enabled=true -Dspring.devtools.livereload.enabled=true"
+# nohup mvn spring-boot:run > /tmp/backend.log 2>&1 &
+# BACKEND_PID=$!
+# cd "$BASE_DIR"
+# echo "   PID: $BACKEND_PID"
+# echo "   Port: 8080"
+#
+# echo "Waiting 10 seconds for Java backend to start..."
+# sleep 10
+BACKEND_PID=""
 
 # 启动 Node.js Server
 echo ""
@@ -134,17 +136,17 @@ echo "   PID: $FRONTEND_PID"
 
 echo ""
 echo "==================================================="
-echo "  All Services Started!"
+echo "  Services Started (Java Backend Disabled)!"
 echo "==================================================="
 echo "  iFlow CLI:        ws://localhost:8090/acp"
-echo "  Backend (Java):   http://localhost:8080"
+echo "  Backend (Java):   DISABLED"
 echo "  Backend (Node):   http://localhost:3001"
 echo "  Frontend:         http://localhost:5173"
 echo "==================================================="
 echo ""
 echo "[INFO] Logs location:"
 echo "  iFlow CLI:        tail -f /tmp/iflow.log"
-echo "  Backend (Java):   tail -f /tmp/backend.log"
+echo "  Backend (Java):   DISABLED"
 echo "  Node.js Server:   tail -f /tmp/node_server.log"
 echo "  Frontend:         tail -f /tmp/frontend.log"
 echo ""
@@ -152,18 +154,18 @@ echo "[INFO] Press Ctrl+C to stop all services..."
 echo ""
 
 # 显示后端日志（在后台运行，用户可以按 Ctrl+C 停止）
-(sleep 2 && echo "" && echo "[INFO] Showing Java backend logs (last 50 lines)..." && echo "---" && tail -n 50 -f /tmp/backend.log) &
-LOG_VIEWER_PID=$!
+# (sleep 2 && echo "" && echo "[INFO] Showing Java backend logs (last 50 lines)..." && echo "---" && tail -n 50 -f /tmp/backend.log) &
+# LOG_VIEWER_PID=$!
 
 # 保存 PID 到文件
 PID_FILE="$BASE_DIR/.launcher_pids.txt"
 echo "$IFLOW_PID" > "$PID_FILE"
-echo "$BACKEND_PID" >> "$PID_FILE"
+# echo "$BACKEND_PID" >> "$PID_FILE"
 echo "$NODE_PID" >> "$PID_FILE"
 echo "$FRONTEND_PID" >> "$PID_FILE"
 
 # 监控 Ctrl+C
-trap "echo ''; echo '[INFO] Stopping all services...'; kill $LOG_VIEWER_PID $IFLOW_PID $BACKEND_PID $NODE_PID $FRONTEND_PID 2>/dev/null; rm -f $PID_FILE; echo '[INFO] All services stopped!'; exit 0" INT TERM
+trap "echo ''; echo '[INFO] Stopping all services...'; kill $IFLOW_PID $NODE_PID $FRONTEND_PID 2>/dev/null; rm -f $PID_FILE; echo '[INFO] All services stopped!'; exit 0" INT TERM
 
 # 保持脚本运行
 while true; do

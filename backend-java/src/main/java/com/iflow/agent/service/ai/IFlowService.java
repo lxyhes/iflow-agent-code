@@ -119,12 +119,13 @@ public class IFlowService {
         log.debug("iFlow Subprocess stream query with model {}: {}", model, message);
 
         // 使用 subprocess 调用 iFlow CLI，传递 --model 参数
-        String actualModel = model != null ? model : "glm-4";
+        String actualModel = model != null ? model : "GLM-4.7";
         
         // 构建命令
         String iflowPath = System.getenv().getOrDefault("IFLOW_PATH", "iflow");
         String escapedMessage = message.replace("\"", "\\\"").replace("\n", "\\n");
-        String command = String.format("%s -p \"%s\" --model \"%s\" -y", 
+        // 添加 temperature 参数以增加输出多样性（0.7 是一个平衡的值，既保持一致性又有一定的随机性）
+        String command = String.format("%s -p \"%s\" --model \"%s\" --temperature 0.7 -y",
             iflowPath, escapedMessage, actualModel);
         
         log.info("Running iFlow CLI with model {}: {}", actualModel, command);

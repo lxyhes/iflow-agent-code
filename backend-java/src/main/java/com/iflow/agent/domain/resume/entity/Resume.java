@@ -51,25 +51,29 @@ public class Resume {
     @OrderBy("sortOrder ASC, startDate DESC")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private List<WorkExperience> workExperiences;
+    @Builder.Default
+    private List<WorkExperience> workExperiences = new java.util.ArrayList<>();
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("startDate DESC")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private List<Education> educations;
+    @Builder.Default
+    private List<Education> educations = new java.util.ArrayList<>();
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("category, name")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private List<Skill> skills;
+    @Builder.Default
+    private List<Skill> skills = new java.util.ArrayList<>();
 
     @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("startDate DESC")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private List<Project> projects;
+    @Builder.Default
+    private List<Project> projects = new java.util.ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

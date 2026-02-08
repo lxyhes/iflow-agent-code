@@ -126,7 +126,7 @@ const AIOptimization = ({ resume, onApply }) => {
     }
 
     // 分析工作经历
-    (resume.work_experience || []).forEach((exp, index) => {
+    (resume.workExperiences || []).forEach((exp, index) => {
       if (exp.description) {
         // 检查是否包含平淡词汇
         if (/^(负责|参与)/.test(exp.description)) {
@@ -135,7 +135,7 @@ const AIOptimization = ({ resume, onApply }) => {
 
           results.push({
             type: 'experience',
-            field: `work_experience[${index}].description`,
+            field: `workExperiences[${index}].description`,
             title: `${exp.company} - ${exp.position}`,
             original: exp.description,
             optimized: exp.description
@@ -152,7 +152,7 @@ const AIOptimization = ({ resume, onApply }) => {
         if (!/\d+%?|\d+倍|\d+万/i.test(exp.description)) {
           results.push({
             type: 'experience',
-            field: `work_experience[${index}].description`,
+            field: `workExperiences[${index}].description`,
             title: `${exp.company} - ${exp.position}`,
             original: exp.description,
             optimized: `${exp.description}，提升系统性能30%，服务用户规模达100万+`,

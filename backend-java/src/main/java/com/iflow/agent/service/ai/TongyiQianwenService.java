@@ -46,6 +46,9 @@ public class TongyiQianwenService {
         }
     }
 
+    // 默认模型配置，可通过环境变量或配置文件覆盖
+    private static final String DEFAULT_MODEL = "GLM-4.7";
+
     /**
      * 简单的文本生成 - 优先使用 iFlow
      */
@@ -56,7 +59,7 @@ public class TongyiQianwenService {
         if (iFlowService.isConnected()) {
             // 使用流式查询并收集完整响应，避免同步查询的截断问题
             StringBuilder result = new StringBuilder();
-            iFlowService.queryStream(prompt, "glm-4")
+            iFlowService.queryStream(prompt, DEFAULT_MODEL)
                     .doOnNext(result::append)
                     .blockLast(); // 等待流完成
             return result.toString();
@@ -135,7 +138,7 @@ public class TongyiQianwenService {
 
         // 优先使用 iFlow
         if (iFlowService.isConnected()) {
-            return iFlowService.queryStream(prompt, "glm-4");
+            return iFlowService.queryStream(prompt, DEFAULT_MODEL);
         }
 
         if (chatModel != null) {
@@ -159,7 +162,7 @@ public class TongyiQianwenService {
         // 优先使用 iFlow
         if (iFlowService.isConnected() && !messages.isEmpty()) {
             String lastMessage = messages.get(messages.size() - 1).getOrDefault("content", "");
-            return iFlowService.queryStream(lastMessage, "glm-4");
+            return iFlowService.queryStream(lastMessage, DEFAULT_MODEL);
         }
 
         if (chatModel != null) {
@@ -219,14 +222,18 @@ public class TongyiQianwenService {
     }
 
     /**
-     * 使用特定模型生成
+     * 使用特定模型生成 - 支持 iFlow 和 Spring AI
      */
     public String generateWithModel(String prompt, String model, Double temperature) {
         log.debug("Generating with model: {}, temperature: {}", model, temperature);
         
-        // 优先使用 iFlow
+        // 优先使用 iFlow（流式收集完整响应）
         if (iFlowService.isConnected()) {
-            return iFlowService.querySync(prompt);
+            StringBuilder result = new StringBuilder();
+            iFlowService.queryStream(prompt, model != null ? model : DEFAULT_MODEL)
+                    .doOnNext(result::append)
+                    .blockLast();
+            return result.toString();
         }
 
         if (chatModel != null) {

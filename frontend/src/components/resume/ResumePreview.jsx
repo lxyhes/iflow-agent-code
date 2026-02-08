@@ -90,15 +90,25 @@ const normalizeResumeData = (rawResume) => {
     };
   }
 
-  // 转换工作经历：work_experience -> workExperiences
-  const workExperiences = rawResume.workExperiences || rawResume.work_experience || [];
+  // 转换工作经历：work_experience -> workExperiences，并转换字段名
+  const workExperiences = (rawResume.workExperiences || rawResume.work_experience || []).map(exp => ({
+    ...exp,
+    startDate: exp.startDate || exp.startDate,
+          endDate: exp.endDate || exp.endDate,
+          isCurrent: exp.isCurrent !== undefined ? exp.isCurrent : exp.isCurrent,  }));
 
-  // 转换教育经历：education -> educations（保持兼容）
-  const educations = rawResume.educations || rawResume.education || [];
+  // 转换教育经历：education -> educations，并转换字段名
+  const educations = (rawResume.educations || rawResume.education || []).map(edu => ({
+    ...edu,
+    startDate: edu.startDate || edu.startDate,
+          endDate: edu.endDate || edu.endDate,  }));
 
   // 技能和项目通常命名一致，但也做兼容处理
   const skills = rawResume.skills || [];
-  const projects = rawResume.projects || [];
+  const projects = (rawResume.projects || []).map(project => ({
+    ...project,
+    startDate: project.startDate || project.startDate,
+          endDate: project.endDate || project.endDate,  }));
 
   // 调试日志：显示转换前后的数据
   console.log('[normalizeResumeData] 原始数据字段:', {
@@ -297,7 +307,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                   </div>
                   <span className="text-sm text-slate-400 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    {formatDate(exp.start_date)} - {exp.is_current ? '至今' : formatDate(exp.end_date)}
+                    {formatDate(exp.startDate)} - {exp.isCurrent ? '至今' : formatDate(exp.endDate)}
                   </span>
                 </div>
                 {exp.description && (
@@ -335,7 +345,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                   <h3 className="font-semibold text-slate-900 text-lg">{project.name}</h3>
                   <span className="text-sm text-slate-400 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    {formatDate(project.start_date)} - {formatDate(project.end_date)}
+                    {formatDate(project.startDate)} - {formatDate(project.endDate)}
                   </span>
                 </div>
                 {project.role && (
@@ -380,7 +390,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                 </div>
                 <span className="text-sm text-slate-400 flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
-                  {formatDate(edu.start_date)} - {formatDate(edu.end_date)}
+                  {formatDate(edu.startDate)} - {formatDate(edu.endDate)}
                 </span>
               </div>
             ))}
@@ -482,7 +492,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                       <p className="text-blue-700 font-medium">{exp.position}</p>
                     </div>
                     <span className="text-sm text-slate-500 font-medium bg-blue-50 px-3 py-1 rounded">
-                      {formatDate(exp.start_date)} - {exp.is_current ? '至今' : formatDate(exp.end_date)}
+                      {formatDate(exp.startDate)} - {exp.isCurrent ? '至今' : formatDate(exp.endDate)}
                     </span>
                   </div>
                   {exp.description && (
@@ -516,7 +526,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-slate-900">{project.name}</h3>
                     <span className="text-sm text-slate-500 font-medium bg-blue-50 px-3 py-1 rounded">
-                      {formatDate(project.start_date)} - {formatDate(project.end_date)}
+                      {formatDate(project.startDate)} - {formatDate(project.endDate)}
                     </span>
                   </div>
                   {project.role && (
@@ -557,7 +567,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                     <p className="text-blue-700">{edu.degree} · {edu.major}</p>
                   </div>
                   <span className="text-sm text-slate-500 font-medium bg-blue-50 px-3 py-1 rounded">
-                    {formatDate(edu.start_date)} - {formatDate(edu.end_date)}
+                    {formatDate(edu.startDate)} - {formatDate(edu.endDate)}
                   </span>
                 </div>
               ))}
@@ -652,7 +662,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                     <p className="text-purple-600 font-medium">{exp.position}</p>
                   </div>
                   <span className="text-sm text-slate-400 bg-purple-50 px-3 py-1 rounded-full">
-                    {formatDate(exp.start_date)} - {exp.is_current ? '至今' : formatDate(exp.end_date)}
+                    {formatDate(exp.startDate)} - {exp.isCurrent ? '至今' : formatDate(exp.endDate)}
                   </span>
                 </div>
                 {exp.description && (
@@ -679,7 +689,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="font-bold text-slate-900 text-lg">{project.name}</h3>
                   <span className="text-sm text-slate-400 bg-pink-50 px-3 py-1 rounded-full">
-                    {formatDate(project.start_date)} - {formatDate(project.end_date)}
+                    {formatDate(project.startDate)} - {formatDate(project.endDate)}
                   </span>
                 </div>
                 {project.role && (
@@ -723,7 +733,7 @@ const ResumePreview = ({ resume: rawResume, onBack, onEdit }) => {
                   <p className="text-purple-600">{edu.degree} · {edu.major}</p>
                 </div>
                 <span className="text-sm text-slate-400 bg-purple-50 px-3 py-1 rounded-full">
-                  {formatDate(edu.start_date)} - {formatDate(edu.end_date)}
+                  {formatDate(edu.startDate)} - {formatDate(edu.endDate)}
                 </span>
               </div>
             ))}

@@ -128,25 +128,26 @@ const loadAiHistory = async (type = null) => {
       // 1. 更新个人简介
       if (rewriteResult.personal_info?.summary) {
         console.log('更新个人简介:', rewriteResult.personal_info.summary);
+        console.log('当前 personal_info:', resume.personal_info);
+        // 只传递 summary 字段，避免覆盖其他已填写的字段
         await resumeApi.updatePersonalInfo(resume.id, {
-          ...resume.personal_info,
           summary: rewriteResult.personal_info.summary
         });
       }
 
       // 2. 更新工作经历
-      if (rewriteResult.work_experience && rewriteResult.work_experience.length > 0) {
-        const existingWorkExps = resume.work_experience || [];
+      if (rewriteResult.workExperiences && rewriteResult.workExperiences.length > 0) {
+        const existingWorkExps = resume.workExperiences || [];
         console.log('现有工作经历数量:', existingWorkExps.length);
-        
+
         // 遍历优化后的工作经历
-        for (const rewritten of rewriteResult.work_experience) {
+        for (const rewritten of rewriteResult.workExperiences) {
           console.log('处理工作经历:', rewritten);
-          
+
           // 如果公司名和职位都是"待补充"，生成一个默认的工作经历
           const isPlaceholder = (rewritten.company?.includes('待补充') || !rewritten.company) &&
                                 (rewritten.position?.includes('待补充') || !rewritten.position);
-          
+
           if (isPlaceholder) {
             console.log('检测到占位符工作经历，生成默认工作经历');
             // 添加一个新的工作经历，使用默认名称但保存 AI 生成的描述和成果
@@ -155,12 +156,12 @@ const loadAiHistory = async (type = null) => {
               position: '职位',
               description: rewritten.description || '',
               achievements: rewritten.achievements || [],
-              is_current: false,
-              sort_order: existingWorkExps.length
+              isCurrent: false,
+              sortOrder: existingWorkExps.length
             });
             continue;
           }
-          
+
           // 尝试找到匹配的工作经历（通过公司名或职位匹配）
           const existingExp = existingWorkExps.find(
             exp => exp.company === rewritten.company || exp.position === rewritten.position
@@ -182,8 +183,8 @@ const loadAiHistory = async (type = null) => {
               position: rewritten.position,
               description: rewritten.description,
               achievements: rewritten.achievements,
-              is_current: false,
-              sort_order: existingWorkExps.length
+              isCurrent: false,
+              sortOrder: existingWorkExps.length
             });
           }
         }
@@ -667,13 +668,13 @@ const loadAiHistory = async (type = null) => {
               )}
 
               {/* 工作经历优化预览 */}
-              {rewriteResult.work_experience?.length > 0 && (
+              {rewriteResult.workExperiences?.length > 0 && (
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
                     工作经历优化预览
                   </h4>
                   <div className="space-y-4">
-                    {rewriteResult.work_experience.slice(0, 2).map((exp, idx) => (
+                    {rewriteResult.workExperiences.slice(0, 2).map((exp, idx) => (
                       <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="font-medium text-gray-900 dark:text-white">{exp.company}</span>
@@ -693,9 +694,9 @@ const loadAiHistory = async (type = null) => {
                         )}
                       </div>
                     ))}
-                    {rewriteResult.work_experience.length > 2 && (
-                      <p className="text-sm text-gray-500 text-center">
-                        还有 {rewriteResult.work_experience.length - 2} 段工作经历已优化...
+{rewriteResult.workExperiences.length > 2 && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+                      还有 {rewriteResult.workExperiences.length - 2} 段工作经历已优化...
                       </p>
                     )}
                   </div>

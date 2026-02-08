@@ -27,8 +27,8 @@ const ResumeCompletionScore = ({ resume, onNavigate }) => {
         label: '个人信息',
         required: true,
         check: () => {
-          const info = resume.personal_info || {};
-          return info.full_name && info.email && info.phone;
+          const info = resume.personalInfo || {};
+          return info.fullName && info.email && info.phone;
         },
         fields: ['姓名', '邮箱', '电话']
       },
@@ -37,7 +37,7 @@ const ResumeCompletionScore = ({ resume, onNavigate }) => {
         label: '个人简介',
         required: false,
         check: () => {
-          const info = resume.personal_info || {};
+          const info = resume.personalInfo || {};
           return info.summary && info.summary.length > 50;
         },
         fields: ['个人简介（建议50字以上）']
@@ -47,7 +47,7 @@ const ResumeCompletionScore = ({ resume, onNavigate }) => {
         label: '工作经历',
         required: true,
         check: () => {
-          const exp = resume.work_experience || [];
+          const exp = resume.workExperiences || [];
           return exp.length > 0;
         },
         fields: ['至少1段工作经历']

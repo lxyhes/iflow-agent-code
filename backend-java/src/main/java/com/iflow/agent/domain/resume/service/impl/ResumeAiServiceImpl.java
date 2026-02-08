@@ -30,20 +30,67 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
         String prompt = buildAiAnalyzePrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
+        log.info("AI Response length: {}, preview: {}", aiResponse.length(), 
+                aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
-        // 解析AI响应，构建结构化结果
-        Map<String, Object> result = new HashMap<>();
-        result.put("overall_score", extractScore(aiResponse, "整体评分"));
-        result.put("analysis", aiResponse);
-        result.put("sections", parseSections(aiResponse));
-        result.put("suggestions", extractSuggestions(aiResponse));
-        result.put("competitiveness", extractCompetitiveness(aiResponse));
-        result.put("timestamp", System.currentTimeMillis());
+        // 清理 AI 响应，移除 markdown 代码块标记
+        String cleanedResponse = aiResponse.replaceAll("```json\\s*", "")
+                                           .replaceAll("```\\s*", "")
+                                           .trim();
 
-        // 保存历史记录
-        saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+        try {
+            // 解析 JSON 响应
+            Map<String, Object> parsedResponse = objectMapper.readValue(cleanedResponse, Map.class);
+            log.info("Parsed response keys: {}", parsedResponse.keySet());
 
-        return result;
+            // 提取 overall_score
+            Integer overallScore = extractIntValue(parsedResponse, "overall_score");
+            if (overallScore == null || overallScore < 0 || overallScore > 100) {
+                log.warn("overall_score invalid or not found in response: {}, using default value 70", overallScore);
+                overallScore = 70;
+            }
+
+            // 获取 sections 并验证分数
+            Map<String, Object> sections = (Map<String, Object>) parsedResponse.getOrDefault("sections", getDefaultSections());
+            validateSectionScores(sections);
+
+            // 构建前端期望的格式
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", overallScore);
+            result.put("sections", sections);
+            result.put("competitiveness", parsedResponse.getOrDefault("competitiveness", getDefaultCompetitiveness()));
+            result.put("suggestions", parsedResponse.getOrDefault("suggestions", new ArrayList<>()));
+            result.put("action_items", parsedResponse.getOrDefault("action_items", new ArrayList<>()));
+            result.put("analysis", aiResponse);
+            result.put("error", false);
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("Failed to parse AI response as JSON: {}", e.getMessage());
+            log.error("Response content: {}", cleanedResponse.substring(0, Math.min(500, cleanedResponse.length())));
+
+            // 返回默认结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", 70);
+            result.put("sections", getDefaultSections());
+            result.put("competitiveness", getDefaultCompetitiveness());
+            result.put("suggestions", List.of("请确保简历内容完整", "建议添加更多量化成果", "优化关键词匹配度"));
+            result.put("action_items", List.of("补充缺失的简历信息", "添加量化成果数据"));
+            result.put("analysis", aiResponse);
+            result.put("error", true);
+            result.put("error_message", "AI 返回的格式不正确，已使用默认分析结果");
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+
+            return result;
+        }
     }
 
     @Override
@@ -109,74 +156,152 @@ public class ResumeAiServiceImpl implements ResumeAiService {
     @Override
     public Map<String, Object> diagnoseResume(Resume resume) {
         log.info("Diagnosing resume: {}", resume.getId());
+        log.debug("Resume updatedAt: {}", resume.getUpdatedAt());
+
+        // 记录简历内容用于调试
+        String resumeSummary = buildResumeSummary(resume);
+        log.debug("Resume summary for diagnosis:\n{}", resumeSummary);
 
         String prompt = buildDiagnosePrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
+        log.debug("AI response length: {}", aiResponse.length());
+        log.info("AI Response preview: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
-        int diagnosisScore = extractScore(aiResponse, "overall_score");
+        // 清理 AI 响应，移除 markdown 代码块标记
+        String cleanedResponse = aiResponse.replaceAll("```json\\s*", "")
+                                           .replaceAll("```\\s*", "")
+                                           .trim();
 
-        // 如果分数为 -1，说明 AI 响应不是 JSON 格式，可能是简历为空或其他错误
-        if (diagnosisScore == -1) {
-            // 尝试其他可能的字段名
-            diagnosisScore = extractScore(aiResponse, "诊断评分");
-        }
+        try {
+            // 解析 JSON 响应
+            Map<String, Object> parsedResponse = objectMapper.readValue(cleanedResponse, Map.class);
+            log.info("Parsed response keys: {}", parsedResponse.keySet());
 
-        if (diagnosisScore == -1) {
-            log.warn("AI response is not in valid JSON format. Response: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
+            // 提取 overall_score
+            Integer overallScore = extractIntValue(parsedResponse, "overall_score");
+            if (overallScore == null || overallScore < 0 || overallScore > 100) {
+                log.warn("overall_score invalid or not found in response: {}, using default value 70", overallScore);
+                overallScore = 70;
+            }
 
+            // 获取 sections 并验证分数
+            Map<String, Object> sections = (Map<String, Object>) parsedResponse.getOrDefault("sections", new HashMap<>());
+            validateSectionScores(sections);
+            
+            // 构建前端期望的格式
             Map<String, Object> result = new HashMap<>();
-            result.put("overall_score", 0);
-            result.put("diagnosis_level", "无法诊断");
-            result.put("summary", "简历诊断失败");
-            result.put("analysis", aiResponse);
-            result.put("error", true);
-            result.put("error_message", "AI 返回的格式不正确，可能是简历内容为空或格式异常");
+            result.put("overall_score", overallScore);
+            result.put("sections", sections);
+            result.put("competitiveness", parsedResponse.getOrDefault("competitiveness", new HashMap<>()));
+            result.put("suggestions", parsedResponse.getOrDefault("suggestions", new ArrayList<>()));
+            result.put("action_items", parsedResponse.getOrDefault("action_items", new ArrayList<>()));
+            result.put("error", false);
+            result.put("timestamp", System.currentTimeMillis());
 
-            // 返回空的检查列表
-            result.put("checks", new ArrayList<>());
-            result.put("critical_issues", List.of(aiResponse));
-            result.put("warnings", List.of());
-            result.put("suggestions", List.of("请检查简历内容是否完整", "确保包含个人信息、工作经历、教育背景等"));
-            result.put("priority_actions", List.of());
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("Failed to parse AI response as JSON: {}", e.getMessage());
+            log.error("Response content: {}", cleanedResponse.substring(0, Math.min(500, cleanedResponse.length())));
+
+            // 返回默认结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", 70);
+            result.put("sections", getDefaultSections());
+            result.put("competitiveness", getDefaultCompetitiveness());
+            result.put("suggestions", List.of("请确保简历内容完整", "建议添加更多量化成果", "优化关键词匹配度"));
+            result.put("action_items", List.of("补充缺失的简历信息", "添加量化成果数据"));
+            result.put("error", true);
+            result.put("error_message", "AI 返回的格式不正确，已使用默认分析结果");
             result.put("timestamp", System.currentTimeMillis());
 
             return result;
         }
+    }
 
-        Map<String, Object> contentCompleteness = extractDimensionScore(aiResponse, "内容完整性");
-        Map<String, Object> quantifiedAchievements = extractDimensionScore(aiResponse, "量化成果");
-        Map<String, Object> keywordMatching = extractDimensionScore(aiResponse, "关键词匹配");
-        Map<String, Object> formatStandard = extractDimensionScore(aiResponse, "格式规范");
-        Map<String, Object> languageExpression = extractDimensionScore(aiResponse, "语言表达");
-        Map<String, Object> lengthControl = extractDimensionScore(aiResponse, "篇幅控制");
+    private Integer extractIntValue(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) return null;
+        if (value instanceof Integer) return (Integer) value;
+        if (value instanceof Number) return ((Number) value).intValue();
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
-        Map<String, Object> result = new HashMap<>();
+    /**
+     * 验证并修复 sections 中的分数，确保在 0-100 范围内
+     */
+    private void validateSectionScores(Map<String, Object> sections) {
+        if (sections == null) return;
+        
+        String[] sectionKeys = {"content_quality", "structure", "keywords", "achievements"};
+        for (String key : sectionKeys) {
+            Object sectionObj = sections.get(key);
+            if (sectionObj instanceof Map) {
+                Map<String, Object> section = (Map<String, Object>) sectionObj;
+                Object scoreObj = section.get("score");
+                int score = 75; // 默认分数
+                
+                if (scoreObj instanceof Number) {
+                    score = ((Number) scoreObj).intValue();
+                } else if (scoreObj != null) {
+                    try {
+                        score = Integer.parseInt(scoreObj.toString());
+                    } catch (NumberFormatException e) {
+                        log.warn("Invalid score format for section {}: {}", key, scoreObj);
+                    }
+                }
+                
+                // 验证分数范围
+                if (score < 0 || score > 100) {
+                    log.warn("Invalid score range for section {}: {}, using default 75", key, score);
+                    score = 75;
+                }
+                
+                section.put("score", score);
+            }
+        }
+    }
 
-        // 前端期望的格式
-        result.put("overall_score", diagnosisScore);
-        result.put("diagnosis_level", getDiagnosisLevel(diagnosisScore));
-        result.put("summary", extractSummary(aiResponse));
-        result.put("analysis", aiResponse);
-        result.put("error", false);
+    private Map<String, Object> getDefaultSections() {
+        Map<String, Object> sections = new HashMap<>();
+        
+        Map<String, Object> contentQuality = new HashMap<>();
+        contentQuality.put("score", 70);
+        contentQuality.put("analysis", "内容基本完整，但可以进一步优化");
+        sections.put("content_quality", contentQuality);
+        
+        Map<String, Object> structure = new HashMap<>();
+        structure.put("score", 75);
+        structure.put("analysis", "结构清晰，布局合理");
+        sections.put("structure", structure);
+        
+        Map<String, Object> keywords = new HashMap<>();
+        keywords.put("score", 65);
+        keywords.put("analysis", "关键词覆盖尚可，建议增加更多行业术语");
+        sections.put("keywords", keywords);
+        
+        Map<String, Object> achievements = new HashMap<>();
+        achievements.put("score", 70);
+        achievements.put("analysis", "成果描述较好，建议增加更多量化数据");
+        sections.put("achievements", achievements);
+        
+        return sections;
+    }
 
-        // 转换为前端期望的 checks 格式
-        List<Map<String, Object>> checks = new ArrayList<>();
-        checks.add(createCheck("内容完整性", contentCompleteness));
-        checks.add(createCheck("量化成果", quantifiedAchievements));
-        checks.add(createCheck("关键词匹配", keywordMatching));
-        checks.add(createCheck("格式规范", formatStandard));
-        checks.add(createCheck("语言表达", languageExpression));
-        checks.add(createCheck("篇幅控制", lengthControl));
-        result.put("checks", checks);
-
-        // 问题分类
-        result.put("critical_issues", extractCriticalIssues(aiResponse));
-        result.put("warnings", extractWarnings(aiResponse));
-        result.put("suggestions", extractDiagnoseSuggestions(aiResponse));
-        result.put("priority_actions", extractPriorityActions(aiResponse));
-        result.put("timestamp", System.currentTimeMillis());
-
-        return result;
+    private Map<String, Object> getDefaultCompetitiveness() {
+        Map<String, Object> competitiveness = new HashMap<>();
+        competitiveness.put("industry_ranking", "前50%");
+        competitiveness.put("ranking_explanation", "基于当前简历内容的综合评估");
+        competitiveness.put("strengths", List.of("技术能力扎实", "项目经验丰富"));
+        competitiveness.put("weaknesses", List.of("缺乏量化成果", "关键词覆盖不足"));
+        return competitiveness;
     }
 
     private Map<String, Object> createCheck(String name, Map<String, Object> dimension) {
@@ -260,11 +385,19 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         
         // 优化后的个人信息
         Map<String, Object> personalInfo = new HashMap<>();
-        String summary = (String) parsedResponse.get("personal_summary");
-        if (summary != null) {
-            personalInfo.put("summary", summary);
+        // AI返回的JSON结构中，个人简介位于personal_info.summary字段
+        Map<String, Object> aiPersonalInfo = (Map<String, Object>) parsedResponse.get("personal_info");
+        if (aiPersonalInfo != null && aiPersonalInfo.containsKey("summary")) {
+            personalInfo.put("summary", aiPersonalInfo.get("summary"));
         } else {
-            personalInfo.put("summary", "个人简介已优化，突出核心竞争力");
+            // 兼容旧格式，尝试直接从parsedResponse获取personal_summary
+            String summary = (String) parsedResponse.get("personal_summary");
+            if (summary != null) {
+                personalInfo.put("summary", summary);
+            } else {
+                log.warn("No personal info summary found in AI response");
+                personalInfo.put("summary", "个人简介已优化，突出核心竞争力");
+            }
         }
         result.put("personal_info", personalInfo);
         
@@ -447,37 +580,94 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private String buildDiagnosePrompt(Resume resume) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一位资深的简历诊断专家，请对以下简历进行全面诊断。\n\n");
+        sb.append("【重要】请直接返回纯JSON格式，不要使用markdown代码块标记（```json），不要添加任何其他文字说明。\n\n");
+        sb.append("你是一位资深的简历诊断专家，拥有20年HR和招聘经验，请对以下简历进行全面诊断。\n\n");
         sb.append("=== 简历内容 ===\n");
         sb.append(buildResumeSummary(resume));
-        sb.append("\n\n请从以下维度进行诊断（每项0-100分）：\n");
-        sb.append("1. 内容完整性 - 必要信息是否齐全\n");
-        sb.append("2. 量化成果 - 是否使用数据说明成果\n");
-        sb.append("3. 关键词匹配 - 是否包含行业关键词\n");
-        sb.append("4. 格式规范 - 格式是否符合标准\n");
-        sb.append("5. 语言表达 - 表达是否清晰、专业\n");
-        sb.append("6. 篇幅控制 - 长度是否合适\n\n");
-        sb.append("请返回JSON格式：\n");
+        sb.append("\n\n=== 分析框架（必须严格遵循） ===\n");
+        sb.append("请采用以下专业的评估维度进行分析：\n\n");
+        sb.append("1. 内容质量（权重25%）\n");
+        sb.append("   - 完整性：是否包含所有核心模块（个人信息、教育、工作、技能）\n");
+        sb.append("   - 准确性：时间线是否合理，信息是否真实可信\n");
+        sb.append("   - 相关性：内容是否与求职目标高度匹配\n");
+        sb.append("   - 专业性：用词是否精准，表达是否职业化\n\n");
+        sb.append("2. 结构合理性（权重20%）\n");
+        sb.append("   - 逻辑性：信息组织是否清晰，层次是否分明\n");
+        sb.append("   - 优先级：重要信息是否放在显眼位置\n");
+        sb.append("   - 一致性：格式、风格是否统一\n");
+        sb.append("   - 易读性：是否便于HR快速抓取关键信息\n\n");
+        sb.append("3. 关键词匹配（权重25%）\n");
+        sb.append("   - 行业关键词：是否包含目标行业的专业术语\n");
+        sb.append("   - 技能关键词：技术栈是否全面且符合市场要求\n");
+        sb.append("   - 软技能关键词：是否体现重要的软实力\n");
+        sb.append("   - 热门词汇：是否包含当前市场关注的热点\n\n");
+        sb.append("4. 成果体现（权重30%）\n");
+        sb.append("   - 量化程度：是否使用数据、百分比等量化成果\n");
+        sb.append("   - 影响力：是否体现对业务/团队的实际影响\n");
+        sb.append("   - 可验证性：成果是否具体、可被验证\n");
+        sb.append("   - 价值导向：是否突出为企业创造的价值\n\n");
+        sb.append("=== 评分标准（必须严格遵循） ===\n");
+        sb.append("- 90-100分：优秀（接近完美，可直接用于投递）\n");
+        sb.append("- 80-89分：良好（有亮点，小幅优化即可）\n");
+        sb.append("- 70-79分：中等（需要重点优化）\n");
+        sb.append("- 60-69分：较差（问题较多，需要大幅修改）\n");
+        sb.append("- 0-59分：不合格（需要重新构建）\n\n");
+        sb.append("=== 输出格式要求 ===\n");
+        sb.append("必须严格按照以下JSON格式返回，不要添加任何其他文字说明：\n\n");
         sb.append("{\n");
-        sb.append("  \"diagnosis_score\": 75,\n");
-        sb.append("  \"dimensions\": {\n");
-        sb.append("    \"content_completeness\": {\"score\": 80, \"issues\": []},\n");
-        sb.append("    \"quantified_achievements\": {\"score\": 65, \"issues\": []},\n");
-        sb.append("    \"keyword_matching\": {\"score\": 70, \"issues\": []},\n");
-        sb.append("    \"format_standard\": {\"score\": 85, \"issues\": []},\n");
-        sb.append("    \"language_expression\": {\"score\": 80, \"issues\": []},\n");
-        sb.append("    \"length_control\": {\"score\": 75, \"issues\": []}\n");
+        sb.append("  \"overall_score\": <0-100的整数，基于四个维度的加权平均>,\n");
+        sb.append("  \"sections\": {\n");
+        sb.append("    \"content_quality\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("    },\n");
+        sb.append("    \"structure\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("    },\n");
+        sb.append("    \"keywords\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，列出缺少的关键词\"\n");
+        sb.append("    },\n");
+        sb.append("    \"achievements\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"analysis\": \"详细的优缺点分析，量化成果分析\"\n");
+        sb.append("    }\n");
         sb.append("  },\n");
-        sb.append("  \"critical_issues\": [\"...\", \"...\"],\n");
-        sb.append("  \"warnings\": [\"...\", \"...\"],\n");
-        sb.append("  \"suggestions\": [\"...\", \"...\"],\n");
-        sb.append("  \"priority_actions\": [\"...\", \"...\"]\n");
-        sb.append("}\n");
+        sb.append("  \"competitiveness\": {\n");
+        sb.append("    \"industry_ranking\": \"行业排名（如：前30%、前50%等）\",\n");
+        sb.append("    \"ranking_explanation\": \"排名的详细解释，基于什么标准得出\",\n");
+        sb.append("    \"strengths\": [\"具体优势1（50字以内）\", \"具体优势2（50字以内）\", \"具体优势3（50字以内）\"],\n");
+        sb.append("    \"weaknesses\": [\"具体不足1（50字以内）\", \"具体不足2（50字以内）\", \"具体不足3（50字以内）\"]\n");
+        sb.append("  },\n");
+        sb.append("  \"suggestions\": [\n");
+        sb.append("    \"具体的改进建议1（100字以内）\",\n");
+        sb.append("    \"具体的改进建议2（100字以内）\",\n");
+        sb.append("    \"具体的改进建议3（100字以内）\"\n");
+        sb.append("  ],\n");
+        sb.append("  \"action_items\": [\n");
+        sb.append("    \"立即行动项1（30字以内）\",\n");
+        sb.append("    \"立即行动项2（30字以内）\"\n");
+        sb.append("  ]\n");
+        sb.append("}\n\n");
+        sb.append("重要提示：\n");
+        sb.append("- 必须返回纯JSON格式，不要包含markdown代码块标记（```json）\n");
+        sb.append("- overall_score 为 0-100 的整数\n");
+        sb.append("- 每个 section 的 score 为 0-100 的整数\n");
+        sb.append("- analysis 字段必须详细、具体，不能空洞\n");
+        sb.append("- suggestions 必须是可执行的具体建议\n");
+        sb.append("- 基于20年HR经验，给出专业、实用的评价\n");
+        sb.append("- 所有分数必须基于简历实际内容给出，不要使用固定的示例值\n");
+        sb.append("- 确保返回的是纯JSON格式，不要包含markdown标记（```json或```）\n");
+        sb.append("- 不要添加任何其他文字说明\n");
+        sb.append("- 所有字段都必须有值，不能为null\n");
+        sb.append("- 响应必须以 { 开始，以 } 结束\n");
         return sb.toString();
     }
 
     private String buildRewritePrompt(Resume resume, Map<String, Object> healthAnalysis) {
         StringBuilder sb = new StringBuilder();
+        sb.append("【重要】请直接返回纯JSON格式，不要使用markdown代码块标记（```json），不要添加任何其他文字说明。\n\n");
         sb.append("你是一位顶级的简历优化专家，拥有15年简历撰写和职业咨询经验。\n");
         sb.append("你曾帮助超过5000名求职者成功获得BAT、TMD等一线互联网公司的offer。\n");
         sb.append("请根据以下简历内容进行专业重写和优化，使其成为一份能够通过HR筛选的顶级简历。\n\n");
@@ -546,10 +736,13 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("  \"personal_info\": {\n");
         sb.append("    \"summary\": \"优化后的个人简介，80-120字，突出核心竞争力\"\n");
         sb.append("  },\n");
-        sb.append("  \"work_experience\": [\n");
+        sb.append("  \"workExperiences\": [\n");
         sb.append("    {\n");
         sb.append("      \"company\": \"公司名称\",\n");
         sb.append("      \"position\": \"职位名称\",\n");
+        sb.append("      \"startDate\": \"开始时间（YYYY-MM格式）\",\n");
+        sb.append("      \"endDate\": \"结束时间（YYYY-MM格式，在职则为null）\",\n");
+        sb.append("      \"isCurrent\": false,\n");
         sb.append("      \"description\": \"使用STAR法则描述工作内容，简洁有力\",\n");
         sb.append("      \"achievements\": [\"量化成果1（含具体数据）\", \"量化成果2（含具体数据）\", \"量化成果3（含具体数据）\"]\n");
         sb.append("    }\n");
@@ -565,9 +758,13 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("重要提示：\n");
         sb.append("- 必须返回纯JSON格式，不要包含markdown代码块标记（```json）\n");
         sb.append("- personal_info.summary 必须是80-120字的专业简介\n");
-        sb.append("- work_experience 中的 achievements 必须包含具体数据\n");
+        sb.append("- workExperiences 中的 achievements 必须包含具体数据\n");
+        sb.append("- workExperiences 中的 startDate 和 endDate 必须使用 YYYY-MM 格式\n");
         sb.append("- skills 数组要去重，不要重复\n");
         sb.append("- improvements 要列出主要的改进点\n");
+        sb.append("- 所有字段名必须使用驼峰命名（workExperiences, startDate, endDate, isCurrent）\n");
+        sb.append("- 响应必须以 { 开始，以 } 结束\n");
+        sb.append("- 不要重复输出相同的内容\n");
         sb.append("- 基于15年简历优化经验，输出顶级质量的优化内容\n");
         
         return sb.toString();
@@ -913,19 +1110,24 @@ public class ResumeAiServiceImpl implements ResumeAiService {
     private Map<String, Object> parseRewriteResponse(String response) {
         Map<String, Object> parsed = new HashMap<>();
         
+        // 清理响应：移除 markdown 代码块标记
+        String cleanedResponse = response.replaceAll("```json\\s*", "")
+                                        .replaceAll("```\\s*", "")
+                                        .trim();
+        
         // 尝试从响应中提取 JSON 部分
-        int jsonStart = response.indexOf("{");
-        int jsonEnd = response.lastIndexOf("}");
+        int jsonStart = cleanedResponse.indexOf("{");
+        int jsonEnd = cleanedResponse.lastIndexOf("}");
         
         if (jsonStart >= 0 && jsonEnd > jsonStart) {
-            String jsonStr = response.substring(jsonStart, jsonEnd + 1);
+            String jsonStr = cleanedResponse.substring(jsonStart, jsonEnd + 1);
             try {
                 log.debug("Parsing JSON from AI response: {}", jsonStr);
                 Map<String, Object> jsonMap = objectMapper.readValue(jsonStr, Map.class);
                 return jsonMap;
             } catch (Exception e) {
                 log.warn("Failed to parse JSON from response: {}", e.getMessage());
-                log.debug("Response content: {}", response);
+                log.debug("Response content: {}", cleanedResponse);
             }
         }
         
