@@ -40,6 +40,7 @@ const ResumeScorePanel = ({ resume, onResumeUpdate, onPreviewResume }) => {
   const [aiHistory, setAiHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyType, setHistoryType] = useState('all'); // 'all', 'analyze', 'rewrite'
+  const [applyingRewrite, setApplyingRewrite] = useState(false); // 防止重复提交
 
   useEffect(() => {
     performAIAnalysis();
@@ -120,6 +121,12 @@ const loadAiHistory = async (type = null) => {
 
   const applyRewrite = async () => {
     if (!rewriteResult) return;
+    if (applyingRewrite) {
+      console.log('正在应用优化中，请勿重复点击');
+      return;
+    }
+
+    setApplyingRewrite(true);
 
     try {
       console.log('应用优化，原始简历:', resume);
@@ -194,41 +201,148 @@ const loadAiHistory = async (type = null) => {
 
       // 3. 更新技能列表
       if (rewriteResult.skills && rewriteResult.skills.length > 0) {
-        console.log('更新技能列表，技能数量:', rewriteResult.skills.length);
-        
+        console.log('=== 开始更新技能列表 ===');
+        console.log('原始技能数量:', rewriteResult.skills.length);
+        console.log('原始技能列表:', JSON.stringify(rewriteResult.skills));
+
         // 先删除所有现有技能
         const existingSkills = resume.skills || [];
-        console.log('删除现有技能数量:', existingSkills.length);
+        console.log('当前简历中的技能数量:', existingSkills.length);
+
+        // 逐个删除现有技能
         for (const skill of existingSkills) {
+          console.log('删除现有技能:', skill.name, `(ID: ${skill.id})`);
           await resumeApi.deleteSkill(resume.id, skill.id);
         }
-        
-        // 去重技能名称
-        const uniqueSkills = [...new Set(rewriteResult.skills)];
+
+        // 去重技能名称（标准化处理：去除空格、统一大小写）
+        const normalizedSkills = rewriteResult.skills
+          .map(s => s?.toString().trim())
+          .filter(s => s && s.length > 0);
+
+        console.log('标准化后技能数量:', normalizedSkills.length);
+
+        // 使用 Map 来去重（忽略大小写）
+        const uniqueSkillsMap = new Map();
+        for (const skill of normalizedSkills) {
+          const lowerKey = skill.toLowerCase();
+          if (!uniqueSkillsMap.has(lowerKey)) {
+            uniqueSkillsMap.set(lowerKey, skill);
+          } else {
+            console.log('发现重复技能（忽略大小写）:', skill);
+          }
+        }
+        const uniqueSkills = Array.from(uniqueSkillsMap.values());
         console.log('去重后技能数量:', uniqueSkills.length);
-        
+        console.log('去重后技能列表:', JSON.stringify(uniqueSkills));
+
         // 添加新的技能
+        const addedSkillNames = new Set();
         let addedSkills = 0;
         for (const skillName of uniqueSkills) {
           // 跳过"待补充"类型的占位符
           if (!skillName.includes('待补充') && !skillName.includes('请列出')) {
-            console.log('添加技能:', skillName);
-            await resumeApi.addSkill(resume.id, {
-              name: skillName,
-              level: 3,
-              category: '技术'
-            });
-            addedSkills++;
+            const lowerName = skillName.toLowerCase();
+            // 再次检查是否已经添加过（防止大小写不同的重复）
+            if (!addedSkillNames.has(lowerName)) {
+              console.log('✅ 添加技能:', skillName);
+              await resumeApi.addSkill(resume.id, {
+                name: skillName,
+                level: 3,
+                category: '技术'
+              });
+              addedSkillNames.add(lowerName);
+              addedSkills++;
+            } else {
+              console.log('⏭️  跳过重复技能:', skillName);
+            }
           } else {
-            console.log('跳过占位符技能:', skillName);
+            console.log('⏭️  跳过占位符技能:', skillName);
           }
         }
+        console.log('=== 技能更新完成 ===');
         console.log('实际添加技能数量:', addedSkills);
       } else {
         console.log('没有技能需要更新');
       }
 
-      // 4. 刷新简历数据
+      // 4. 更新教育经历
+      if (rewriteResult.education && rewriteResult.education.length > 0) {
+        console.log('更新教育经历，数量:', rewriteResult.education.length);
+        const existingEdu = resume.education || [];
+        
+        for (const rewritten of rewriteResult.education) {
+          // 尝试找到匹配的教育经历（通过学校名或专业匹配）
+          const existing = existingEdu.find(
+            edu => edu.school === rewritten.school || edu.major === rewritten.major
+          );
+          
+          if (existing) {
+            console.log('更新现有教育经历:', existing.id);
+            await resumeApi.updateEducation(resume.id, existing.id, {
+              ...existing,
+              school: rewritten.school || existing.school,
+              degree: rewritten.degree || existing.degree,
+              major: rewritten.major || existing.major,
+              startDate: rewritten.startDate || existing.startDate,
+              endDate: rewritten.endDate || existing.endDate
+            });
+          } else {
+            console.log('添加新教育经历:', rewritten.school);
+            await resumeApi.addEducation(resume.id, {
+              school: rewritten.school || '学校',
+              degree: rewritten.degree || '本科',
+              major: rewritten.major || '专业',
+              startDate: rewritten.startDate,
+              endDate: rewritten.endDate
+            });
+          }
+        }
+      } else {
+        console.log('没有教育经历需要更新');
+      }
+
+      // 5. 更新项目经历
+      if (rewriteResult.projects && rewriteResult.projects.length > 0) {
+        console.log('更新项目经历，数量:', rewriteResult.projects.length);
+        const existingProjects = resume.projects || [];
+        
+        for (const rewritten of rewriteResult.projects) {
+          // 尝试找到匹配的项目（通过项目名称匹配）
+          const existing = existingProjects.find(
+            proj => proj.name === rewritten.name
+          );
+          
+          if (existing) {
+            console.log('更新现有项目:', existing.id);
+            await resumeApi.updateProject(resume.id, existing.id, {
+              ...existing,
+              name: rewritten.name || existing.name,
+              role: rewritten.role || existing.role,
+              description: rewritten.description || existing.description,
+              technologies: rewritten.technologies || existing.technologies,
+              achievements: rewritten.achievements || existing.achievements,
+              startDate: rewritten.startDate || existing.startDate,
+              endDate: rewritten.endDate || existing.endDate
+            });
+          } else {
+            console.log('添加新项目:', rewritten.name);
+            await resumeApi.addProject(resume.id, {
+              name: rewritten.name || '项目',
+              role: rewritten.role || '角色',
+              description: rewritten.description || '',
+              technologies: rewritten.technologies || [],
+              achievements: rewritten.achievements || [],
+              startDate: rewritten.startDate,
+              endDate: rewritten.endDate
+            });
+          }
+        }
+      } else {
+        console.log('没有项目经历需要更新');
+      }
+
+      // 6. 刷新简历数据
       if (onResumeUpdate) {
         console.log('刷新简历数据');
         const response = await resumeApi.getResume(resume.id);
@@ -251,6 +365,8 @@ const loadAiHistory = async (type = null) => {
     } catch (err) {
       console.error('应用优化失败:', err);
       alert('应用优化失败: ' + err.message);
+    } finally {
+      setApplyingRewrite(false);
     }
   };
 
@@ -480,19 +596,23 @@ const loadAiHistory = async (type = null) => {
             内容质量分析
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(sections).map(([key, value]) => (
-              <div key={key} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  {getSectionLabel(key)}
-                </p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                  {value.score}分
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
-                  {value.analysis}
-                </p>
-              </div>
-            ))}
+            {['content_quality', 'structure', 'keywords', 'achievements'].map((key) => {
+              const value = sections[key];
+              if (!value) return null;
+              return (
+                <div key={key} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {getSectionLabel(key)}
+                  </p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                    {value.score}分
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {value.analysis}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -589,49 +709,115 @@ const loadAiHistory = async (type = null) => {
               )}
 
               {/* 前后对比 */}
-              {rewriteResult.before_after_comparison && (
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-900 dark:text-white">
-                    优化对比
-                  </h4>
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 dark:text-white">
+                  优化对比
+                </h4>
 
-                  {/* 个人简介对比 */}
-                  {rewriteResult.before_after_comparison.summary_before && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">原个人简介</p>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          {rewriteResult.before_after_comparison.summary_before}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <p className="text-xs text-green-600 mb-2">优化后</p>
-                        <p className="text-sm text-gray-800 dark:text-gray-200">
-                          {rewriteResult.before_after_comparison.summary_after}
-                        </p>
+                {/* 个人简介对比 - 从当前简历获取原内容 */}
+                {rewriteResult.personal_info?.summary && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                        <History className="w-3 h-3" />
+                        原个人简介
+                      </p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        {resume.personal_info?.summary || '（无内容）'}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-xs text-green-600 mb-2 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        优化后
+                      </p>
+                      <p className="text-sm text-gray-800 dark:text-gray-200">
+                        {rewriteResult.personal_info.summary}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 工作经历对比 - 取第一段工作经历 */}
+                {rewriteResult.workExperiences?.length > 0 && resume.workExperiences?.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                        <History className="w-3 h-3" />
+                        原工作描述（{resume.workExperiences[0].company}）
+                      </p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        {resume.workExperiences[0].description || '（无描述）'}
+                      </p>
+                      {resume.workExperiences[0].achievements?.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {resume.workExperiences[0].achievements.map((achievement, idx) => (
+                            <li key={idx} className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-gray-400" />
+                              {achievement}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-xs text-green-600 mb-2 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        优化后（{rewriteResult.workExperiences[0].company}）
+                      </p>
+                      <p className="text-sm text-gray-800 dark:text-gray-200">
+                        {rewriteResult.workExperiences[0].description}
+                      </p>
+                      {rewriteResult.workExperiences[0].achievements?.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {rewriteResult.workExperiences[0].achievements.map((achievement, idx) => (
+                            <li key={idx} className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-green-500" />
+                              {achievement}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 技能对比 */}
+                {rewriteResult.skills?.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                        <History className="w-3 h-3" />
+                        原技能列表（{resume.skills?.length || 0}个）
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {resume.skills?.length > 0 ? (
+                          resume.skills.map((skill, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded">
+                              {skill.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-500">（无技能）</span>
+                        )}
                       </div>
                     </div>
-                  )}
-
-                  {/* 工作经历对比 */}
-                  {rewriteResult.before_after_comparison.experience_example_before && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">原工作描述</p>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          {rewriteResult.before_after_comparison.experience_example_before}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <p className="text-xs text-green-600 mb-2">优化后</p>
-                        <p className="text-sm text-gray-800 dark:text-gray-200">
-                          {rewriteResult.before_after_comparison.experience_example_after}
-                        </p>
+                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-xs text-green-600 mb-2 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        优化后（{rewriteResult.skills.length}个）
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {rewriteResult.skills.map((skill, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 text-xs rounded">
+                            {skill}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
 
               {/* 已解决的问题 */}
               {rewriteResult.issues_resolved?.length > 0 && (
@@ -703,14 +889,97 @@ const loadAiHistory = async (type = null) => {
                 </div>
               )}
 
+              {/* 教育经历优化预览 */}
+              {rewriteResult.education?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
+                    教育经历优化预览
+                  </h4>
+                  <div className="space-y-4">
+                    {rewriteResult.education.slice(0, 2).map((edu, idx) => (
+                      <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium text-gray-900 dark:text-white">{edu.school}</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="text-gray-600 dark:text-gray-400">{edu.major}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {edu.degree} · {edu.startDate} - {edu.endDate || '至今'}
+                        </p>
+                      </div>
+                    ))}
+                    {rewriteResult.education.length > 2 && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+                        还有 {rewriteResult.education.length - 2} 段教育经历已优化...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 项目经历优化预览 */}
+              {rewriteResult.projects?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
+                    项目经历优化预览
+                  </h4>
+                  <div className="space-y-4">
+                    {rewriteResult.projects.slice(0, 2).map((proj, idx) => (
+                      <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-medium text-gray-900 dark:text-white">{proj.name}</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="text-gray-600 dark:text-gray-400">{proj.role}</span>
+                        </div>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{proj.description}</p>
+                        {proj.technologies?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {proj.technologies.map((tech, tidx) => (
+                              <span key={tidx} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs rounded">
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {proj.achievements?.length > 0 && (
+                          <ul className="space-y-1">
+                            {proj.achievements.map((achievement, aidx) => (
+                              <li key={aidx} className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-blue-500" />
+                                {achievement}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                    {rewriteResult.projects.length > 2 && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+                        还有 {rewriteResult.projects.length - 2} 个项目已优化...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 操作按钮 */}
               <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={applyRewrite}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  disabled={applyingRewrite}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" />
-                  应用优化
+                  {applyingRewrite ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      正在应用...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      应用优化
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={() => setShowRewriteModal(false)}

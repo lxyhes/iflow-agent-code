@@ -39,8 +39,27 @@ public class ResumeAiServiceImpl implements ResumeAiService {
                                            .trim();
 
         try {
+            // 检查响应是否完整（JSON 是否被截断）
+            String completeResponse = cleanedResponse;
+            if (!cleanedResponse.trim().endsWith("}")) {
+                log.warn("AI response appears to be truncated, attempting to complete JSON...");
+                // 尝试找到最后一个完整的对象并关闭
+                int lastBrace = cleanedResponse.lastIndexOf("}");
+                int lastBracket = cleanedResponse.lastIndexOf("]");
+                int lastValidPos = Math.max(lastBrace, lastBracket);
+                if (lastValidPos > 0) {
+                    completeResponse = cleanedResponse.substring(0, lastValidPos + 1);
+                    // 补全可能缺少的闭合括号
+                    int openBraces = countChar(completeResponse, '{') - countChar(completeResponse, '}');
+                    int openBrackets = countChar(completeResponse, '[') - countChar(completeResponse, ']');
+                    for (int i = 0; i < openBraces; i++) completeResponse += "}";
+                    for (int i = 0; i < openBrackets; i++) completeResponse += "]";
+                    log.info("Attempted to repair truncated JSON");
+                }
+            }
+
             // 解析 JSON 响应
-            Map<String, Object> parsedResponse = objectMapper.readValue(cleanedResponse, Map.class);
+            Map<String, Object> parsedResponse = objectMapper.readValue(completeResponse, Map.class);
             log.info("Parsed response keys: {}", parsedResponse.keySet());
 
             // 提取 overall_score
@@ -73,6 +92,18 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         } catch (Exception e) {
             log.error("Failed to parse AI response as JSON: {}", e.getMessage());
             log.error("Response content: {}", cleanedResponse.substring(0, Math.min(500, cleanedResponse.length())));
+
+            // 尝试提取部分数据（如果可能）
+            Map<String, Object> partialResult = extractPartialData(cleanedResponse);
+            if (partialResult != null) {
+                log.info("Extracted partial data from AI response");
+                partialResult.put("analysis", aiResponse);
+                partialResult.put("error", true);
+                partialResult.put("error_message", "AI 返回数据不完整，显示部分结果");
+                partialResult.put("timestamp", System.currentTimeMillis());
+                saveAiHistory(resume.getId(), "analyze", aiResponse, partialResult);
+                return partialResult;
+            }
 
             // 返回默认结果
             Map<String, Object> result = new HashMap<>();
@@ -220,6 +251,203 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
             return result;
         }
+    }
+
+    /**
+     * 统计字符出现次数
+     */
+    private int countChar(String str, char target) {
+        int count = 0;
+        for (char c : str.toCharArray()) {
+            if (c == target) count++;
+        }
+        return count;
+    }
+
+    /**
+     * 从截断的响应中提取部分数据
+     */
+    private Map<String, Object> extractPartialData(String response) {
+        try {
+            Map<String, Object> result = new HashMap<>();
+            
+            // 尝试提取 overall_score
+            Integer score = extractScoreFromText(response, "overall_score");
+            if (score != null && score >= 0 && score <= 100) {
+                result.put("overall_score", score);
+            } else {
+                result.put("overall_score", 70);
+            }
+            
+            // 尝试提取 sections
+            Map<String, Object> sections = extractSectionsFromText(response);
+            if (!sections.isEmpty()) {
+                validateSectionScores(sections);
+                result.put("sections", sections);
+            } else {
+                result.put("sections", getDefaultSections());
+            }
+            
+            // 尝试提取 competitiveness
+            Map<String, Object> competitiveness = extractCompetitivenessFromText(response);
+            if (!competitiveness.isEmpty()) {
+                result.put("competitiveness", competitiveness);
+            } else {
+                result.put("competitiveness", getDefaultCompetitiveness());
+            }
+            
+            return result;
+        } catch (Exception e) {
+            log.warn("Failed to extract partial data: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 从文本中提取 overall_score
+     */
+    private Integer extractScoreFromText(String text, String fieldName) {
+        try {
+            String pattern = "\"" + fieldName + "\"\\s*:\\s*(\\d+)";
+            java.util.regex.Pattern r = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = r.matcher(text);
+            if (m.find()) {
+                return Integer.parseInt(m.group(1));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract score from text: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 从文本中提取 sections
+     */
+    private Map<String, Object> extractSectionsFromText(String text) {
+        Map<String, Object> sections = new HashMap<>();
+        String[] sectionKeys = {"content_quality", "structure", "keywords", "achievements"};
+        
+        for (String key : sectionKeys) {
+            try {
+                // 查找 section 的开始位置
+                String sectionPattern = "\"" + key + "\"\\s*:\\s*\\{";
+                java.util.regex.Pattern r = java.util.regex.Pattern.compile(sectionPattern);
+                java.util.regex.Matcher m = r.matcher(text);
+                
+                if (m.find()) {
+                    int start = m.end() - 1;
+                    // 找到匹配的结束括号
+                    int braceCount = 0;
+                    int end = start;
+                    for (int i = start; i < text.length() && i < start + 2000; i++) {
+                        char c = text.charAt(i);
+                        if (c == '{') braceCount++;
+                        else if (c == '}') {
+                            braceCount--;
+                            if (braceCount == 0) {
+                                end = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (end > start) {
+                        String sectionJson = text.substring(start, end);
+                        Map<String, Object> section = objectMapper.readValue(sectionJson, Map.class);
+                        sections.put(key, section);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to extract section {}: {}", key, e.getMessage());
+            }
+        }
+        
+        return sections;
+    }
+
+    /**
+     * 从文本中提取 competitiveness
+     */
+    private Map<String, Object> extractCompetitivenessFromText(String text) {
+        Map<String, Object> competitiveness = new HashMap<>();
+        
+        try {
+            // 尝试提取 industry_ranking
+            String rankingPattern = "\"industry_ranking\"\\s*:\\s*\"([^\"]+)\"";
+            java.util.regex.Pattern r = java.util.regex.Pattern.compile(rankingPattern);
+            java.util.regex.Matcher m = r.matcher(text);
+            if (m.find()) {
+                competitiveness.put("industry_ranking", m.group(1));
+            } else {
+                competitiveness.put("industry_ranking", "前50%");
+            }
+            
+            // 尝试提取 strengths
+            List<String> strengths = extractStringArrayFromText(text, "strengths");
+            if (!strengths.isEmpty()) {
+                competitiveness.put("strengths", strengths);
+            } else {
+                competitiveness.put("strengths", List.of("技术能力扎实", "项目经验丰富"));
+            }
+            
+            // 尝试提取 weaknesses
+            List<String> weaknesses = extractStringArrayFromText(text, "weaknesses");
+            if (!weaknesses.isEmpty()) {
+                competitiveness.put("weaknesses", weaknesses);
+            } else {
+                competitiveness.put("weaknesses", List.of("缺乏量化成果", "关键词覆盖不足"));
+            }
+            
+        } catch (Exception e) {
+            log.warn("Failed to extract competitiveness: {}", e.getMessage());
+            competitiveness.put("industry_ranking", "前50%");
+            competitiveness.put("strengths", List.of("技术能力扎实", "项目经验丰富"));
+            competitiveness.put("weaknesses", List.of("缺乏量化成果", "关键词覆盖不足"));
+        }
+        
+        return competitiveness;
+    }
+
+    /**
+     * 从文本中提取字符串数组
+     */
+    private List<String> extractStringArrayFromText(String text, String fieldName) {
+        List<String> result = new ArrayList<>();
+        try {
+            String pattern = "\"" + fieldName + "\"\\s*:\\s*\\[";
+            java.util.regex.Pattern r = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = r.matcher(text);
+            
+            if (m.find()) {
+                int start = m.end();
+                int bracketCount = 1;
+                int end = start;
+                for (int i = start; i < text.length() && i < start + 1000; i++) {
+                    char c = text.charAt(i);
+                    if (c == '[') bracketCount++;
+                    else if (c == ']') {
+                        bracketCount--;
+                        if (bracketCount == 0) {
+                            end = i;
+                            break;
+                        }
+                    }
+                }
+                
+                if (end > start) {
+                    String arrayContent = text.substring(start, end);
+                    // 提取带引号的字符串
+                    java.util.regex.Pattern stringPattern = java.util.regex.Pattern.compile("\"([^\"]+)\"");
+                    java.util.regex.Matcher stringMatcher = stringPattern.matcher(arrayContent);
+                    while (stringMatcher.find()) {
+                        result.add(stringMatcher.group(1));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract string array {}: {}", fieldName, e.getMessage());
+        }
+        return result;
     }
 
     private Integer extractIntValue(Map<String, Object> map, String key) {
@@ -402,23 +630,58 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         result.put("personal_info", personalInfo);
         
         // 优化后的工作经历
-        List<Map<String, Object>> workExp = (List<Map<String, Object>>) parsedResponse.get("work_experience");
+        List<Map<String, Object>> workExp = (List<Map<String, Object>>) parsedResponse.get("workExperiences");
+        if (workExp == null || workExp.isEmpty()) {
+            // 尝试旧字段名
+            workExp = (List<Map<String, Object>>) parsedResponse.get("work_experience");
+        }
         if (workExp != null && !workExp.isEmpty()) {
-            result.put("work_experience", workExp);
+            result.put("workExperiences", workExp);
         } else {
-            log.warn("No work_experience found in parsed response");
-            result.put("work_experience", List.of());
+            log.warn("No workExperiences found in parsed response");
+            result.put("workExperiences", List.of());
         }
         
-        // 优化后的技能
+        // 优化后的技能 - 去重处理
         List<String> skills = (List<String>) parsedResponse.get("skills");
         if (skills != null && !skills.isEmpty()) {
-            result.put("skills", skills);
+            // 使用 LinkedHashMap 保持顺序并去重（忽略大小写）
+            Map<String, String> uniqueSkillsMap = new LinkedHashMap<>();
+            for (String skill : skills) {
+                if (skill != null && !skill.trim().isEmpty()) {
+                    String trimmedSkill = skill.trim();
+                    String lowerKey = trimmedSkill.toLowerCase();
+                    if (!uniqueSkillsMap.containsKey(lowerKey)) {
+                        uniqueSkillsMap.put(lowerKey, trimmedSkill);
+                    }
+                }
+            }
+            List<String> uniqueSkills = new ArrayList<>(uniqueSkillsMap.values());
+            log.info("Skills deduplicated: {} -> {} items", skills.size(), uniqueSkills.size());
+            result.put("skills", uniqueSkills);
         } else {
             log.warn("No skills found in parsed response");
             result.put("skills", List.of());
         }
-        
+
+        // 优化后的教育经历
+        List<Map<String, Object>> education = (List<Map<String, Object>>) parsedResponse.get("education");
+        if (education != null && !education.isEmpty()) {
+            result.put("education", education);
+        } else {
+            log.warn("No education found in parsed response");
+            result.put("education", List.of());
+        }
+
+        // 优化后的项目经历
+        List<Map<String, Object>> projects = (List<Map<String, Object>>) parsedResponse.get("projects");
+        if (projects != null && !projects.isEmpty()) {
+            result.put("projects", projects);
+        } else {
+            log.warn("No projects found in parsed response");
+            result.put("projects", List.of());
+        }
+
         result.put("timestamp", System.currentTimeMillis());
         
         log.info("Final result keys: {}", result.keySet());
@@ -480,44 +743,43 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("  \"sections\": {\n");
         sb.append("    \"content_quality\": {\n");
         sb.append("      \"score\": 85,\n");
-        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("      \"analysis\": \"简短分析，控制在80字以内\"\n");
         sb.append("    },\n");
         sb.append("    \"structure\": {\n");
         sb.append("      \"score\": 90,\n");
-        sb.append("      \"analysis\": \"详细的优缺点分析，至少3点优点和2点缺点\"\n");
+        sb.append("      \"analysis\": \"简短分析，控制在80字以内\"\n");
         sb.append("    },\n");
         sb.append("    \"keywords\": {\n");
         sb.append("      \"score\": 80,\n");
-        sb.append("      \"analysis\": \"详细的优缺点分析，列出缺少的关键词\"\n");
+        sb.append("      \"analysis\": \"简短分析，控制在80字以内\"\n");
         sb.append("    },\n");
         sb.append("    \"achievements\": {\n");
         sb.append("      \"score\": 85,\n");
-        sb.append("      \"analysis\": \"详细的优缺点分析，量化成果分析\"\n");
+        sb.append("      \"analysis\": \"简短分析，控制在80字以内\"\n");
         sb.append("    }\n");
         sb.append("  },\n");
         sb.append("  \"competitiveness\": {\n");
         sb.append("    \"industry_ranking\": \"前30%\",\n");
-        sb.append("    \"ranking_explanation\": \"排名的详细解释，基于什么标准得出\"\n");
-        sb.append("    \"strengths\": [\"具体优势1（50字以内）\", \"具体优势2（50字以内）\", \"具体优势3（50字以内）\"],\n");
-        sb.append("    \"weaknesses\": [\"具体不足1（50字以内）\", \"具体不足2（50字以内）\", \"具体不足3（50字以内）\"]\n");
+        sb.append("    \"strengths\": [\"优势1\", \"优势2\"],\n");
+        sb.append("    \"weaknesses\": [\"不足1\", \"不足2\"]\n");
         sb.append("  },\n");
         sb.append("  \"suggestions\": [\n");
-        sb.append("    \"具体的改进建议1（100字以内）\",\n");
-        sb.append("    \"具体的改进建议2（100字以内）\",\n");
-        sb.append("    \"具体的改进建议3（100字以内）\"\n");
+        sb.append("    \"建议1\",\n");
+        sb.append("    \"建议2\"\n");
         sb.append("  ],\n");
         sb.append("  \"action_items\": [\n");
-        sb.append("    \"立即行动项1（30字以内）\",\n");
-        sb.append("    \"立即行动项2（30字以内）\"\n");
+        sb.append("    \"行动1\",\n");
+        sb.append("    \"行动2\"\n");
         sb.append("  ]\n");
         sb.append("}\n\n");
         
         sb.append("重要提示：\n");
         sb.append("- 必须返回纯JSON格式，不要包含markdown代码块标记（```json）\n");
+        sb.append("- 所有文本字段必须简洁，避免过长（analysis字段80字以内，其他字段50字以内）\n");
+        sb.append("- 严格限制总JSON长度在1500字符以内\n");
         sb.append("- overall_score 为 0-100 的整数\n");
         sb.append("- 每个 section 的 score 为 0-100 的整数\n");
-        sb.append("- analysis 字段必须详细、具体，不能空洞\n");
-        sb.append("- suggestions 必须是可执行的具体建议\n");
+        sb.append("- suggestions 最多3条，每条控制在50字以内\n");
         sb.append("- 基于20年HR经验，给出专业、实用的评价\n");
         
         return sb.toString();
@@ -722,6 +984,30 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("  3. 业务影响：用户增长、收入提升、成本降低\n");
         sb.append("  4. 团队贡献：代码质量、文档完善、知识分享\n");
         sb.append("- 如果简历中没有量化数据，根据职位提供合理的估算值（标注为示例）\n\n");
+
+        sb.append("【教育经历优化标准】\n");
+        sb.append("- 必须包含的字段：\n");
+        sb.append("  1. school: 学校名称\n");
+        sb.append("  2. degree: 学位（本科/硕士/博士等）\n");
+        sb.append("  3. major: 专业名称\n");
+        sb.append("  4. startDate: 开始时间（YYYY-MM格式）\n");
+        sb.append("  5. endDate: 结束时间（YYYY-MM格式）\n");
+        sb.append("- 如果原始简历有教育经历，保持原样或优化描述\n");
+        sb.append("- 如果原始简历没有教育经历，根据目标职位生成合理的教育背景模板\n\n");
+
+        sb.append("【项目经历优化标准】\n");
+        sb.append("- 必须包含的字段：\n");
+        sb.append("  1. name: 项目名称\n");
+        sb.append("  2. role: 担任角色\n");
+        sb.append("  3. description: 项目描述（使用STAR法则，突出技术难点和解决方案）\n");
+        sb.append("  4. technologies: [\"技术栈1\", \"技术栈2\"]（使用的技术栈数组）\n");
+        sb.append("  5. achievements: [\"量化成果1\", \"量化成果2\"]（项目成果，含具体数据）\n");
+        sb.append("  6. startDate: 开始时间（YYYY-MM格式）\n");
+        sb.append("  7. endDate: 结束时间（YYYY-MM格式）\n");
+        sb.append("- 每个项目必须包含2-4个量化成果\n");
+        sb.append("- 技术栈要具体明确\n");
+        sb.append("- 如果原始简历有项目经历，基于原有内容优化\n");
+        sb.append("- 如果原始简历没有项目经历，根据目标职位生成1-2个典型项目模板\n\n");
         
         sb.append("=== 重要提示 ===\n");
         sb.append("- 绝对不要说\"我需要更多信息\"或\"请提供更多详情\"\n");
@@ -745,6 +1031,26 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("      \"isCurrent\": false,\n");
         sb.append("      \"description\": \"使用STAR法则描述工作内容，简洁有力\",\n");
         sb.append("      \"achievements\": [\"量化成果1（含具体数据）\", \"量化成果2（含具体数据）\", \"量化成果3（含具体数据）\"]\n");
+        sb.append("    }\n");
+        sb.append("  ],\n");
+        sb.append("  \"education\": [\n");
+        sb.append("    {\n");
+        sb.append("      \"school\": \"学校名称\",\n");
+        sb.append("      \"degree\": \"学位\",\n");
+        sb.append("      \"major\": \"专业\",\n");
+        sb.append("      \"startDate\": \"开始时间（YYYY-MM格式）\",\n");
+        sb.append("      \"endDate\": \"结束时间（YYYY-MM格式）\"\n");
+        sb.append("    }\n");
+        sb.append("  ],\n");
+        sb.append("  \"projects\": [\n");
+        sb.append("    {\n");
+        sb.append("      \"name\": \"项目名称\",\n");
+        sb.append("      \"role\": \"担任角色\",\n");
+        sb.append("      \"description\": \"项目描述（突出技术难点和解决方案）\",\n");
+        sb.append("      \"technologies\": [\"技术栈1\", \"技术栈2\", \"技术栈3\"],\n");
+        sb.append("      \"achievements\": [\"量化成果1\", \"量化成果2\"],\n");
+        sb.append("      \"startDate\": \"开始时间（YYYY-MM格式）\",\n");
+        sb.append("      \"endDate\": \"结束时间（YYYY-MM格式）\"\n");
         sb.append("    }\n");
         sb.append("  ],\n");
         sb.append("  \"skills\": [\"核心技能1\", \"核心技能2\", \"核心技能3\", \"相关技能1\", \"相关技能2\"],\n");
