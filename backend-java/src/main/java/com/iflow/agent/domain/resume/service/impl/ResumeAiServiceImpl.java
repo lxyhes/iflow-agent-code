@@ -160,28 +160,169 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
         String prompt = buildLayoutCheckPrompt(resume);
         String aiResponse = tongyiQianwenService.generate(prompt);
+        log.info("AI response length: {}", aiResponse.length());
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("layout_score", extractScore(aiResponse, "排版评分"));
-        result.put("analysis", aiResponse);
+        // 清理 AI 响应，移除 markdown 代码块标记
+        String cleanedResponse = aiResponse.replaceAll("```json\\s*", "")
+                                           .replaceAll("```\\s*", "")
+                                           .trim();
 
-        // 排版检查维度
-        Map<String, Object> dimensions = new HashMap<>();
-        dimensions.put("visual_hierarchy", extractDimensionScore(aiResponse, "视觉层次"));
-        dimensions.put("format_consistency", extractDimensionScore(aiResponse, "格式一致性"));
-        dimensions.put("readability", extractDimensionScore(aiResponse, "可读性"));
-        dimensions.put("professional_appearance", extractDimensionScore(aiResponse, "专业外观"));
-        dimensions.put("white_space_usage", extractDimensionScore(aiResponse, "留白使用"));
-        result.put("dimensions", dimensions);
+        try {
+            // 检查响应是否完整
+            String completeResponse = cleanedResponse;
+            if (!cleanedResponse.trim().endsWith("}")) {
+                log.warn("Layout check AI response appears to be truncated, attempting to complete JSON...");
+                int lastBrace = cleanedResponse.lastIndexOf("}");
+                int lastBracket = cleanedResponse.lastIndexOf("]");
+                int lastValidPos = Math.max(lastBrace, lastBracket);
+                if (lastValidPos > 0) {
+                    completeResponse = cleanedResponse.substring(0, lastValidPos + 1);
+                    int openBraces = countChar(completeResponse, '{') - countChar(completeResponse, '}');
+                    int openBrackets = countChar(completeResponse, '[') - countChar(completeResponse, ']');
+                    for (int i = 0; i < openBraces; i++) completeResponse += "}";
+                    for (int i = 0; i < openBrackets; i++) completeResponse += "]";
+                }
+            }
 
-        // 具体问题
-        result.put("issues", extractLayoutIssues(aiResponse));
+            // 解析 JSON 响应
+            Map<String, Object> parsedResponse = objectMapper.readValue(completeResponse, Map.class);
+            log.info("Parsed layout check response keys: {}", parsedResponse.keySet());
 
-        // 排版建议
-        result.put("suggestions", extractLayoutSuggestions(aiResponse));
-        result.put("timestamp", System.currentTimeMillis());
+            // 提取 overall_score
+            Integer overallScore = extractIntValue(parsedResponse, "overall_score");
+            if (overallScore == null || overallScore < 0 || overallScore > 100) {
+                log.warn("layout_check overall_score invalid or not found in response: {}, using default value 75", overallScore);
+                overallScore = 75;
+            }
 
-        return result;
+            // 确定 layout_level
+            String layoutLevel = "一般";
+            if (overallScore >= 90) layoutLevel = "优秀";
+            else if (overallScore >= 80) layoutLevel = "专业";
+            else if (overallScore >= 70) layoutLevel = "良好";
+            else if (overallScore >= 60) layoutLevel = "一般";
+            else layoutLevel = "需改进";
+
+            // 构建前端期望的格式
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", overallScore);
+            result.put("layout_level", layoutLevel);
+            result.put("summary", parsedResponse.getOrDefault("summary", "基于AI的排版分析"));
+            result.put("error", false);
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 处理 categories - 从 dimensions 转换
+            List<Map<String, Object>> categories = new ArrayList<>();
+            Map<String, Object> dimensions = (Map<String, Object>) parsedResponse.getOrDefault("dimensions", new HashMap<>());
+
+            String[] categoryNames = {"视觉层次", "格式一致性", "可读性", "专业外观", "留白使用"};
+            String[] categoryKeys = {"visual_hierarchy", "format_consistency", "readability", "professional_appearance", "white_space_usage"};
+
+            for (int i = 0; i < categoryNames.length; i++) {
+                Map<String, Object> dim = (Map<String, Object>) dimensions.get(categoryKeys[i]);
+                if (dim != null) {
+                    Integer score = extractIntValue(dim, "score");
+                    if (score == null) score = 75;
+
+                    String status = "良好";
+                    if (score >= 90) status = "优秀";
+                    else if (score >= 80) status = "良好";
+                    else if (score >= 70) status = "一般";
+                    else status = "需改进";
+
+                    Map<String, Object> category = new HashMap<>();
+                    category.put("name", categoryNames[i]);
+                    category.put("score", score);
+                    category.put("status", status);
+                    category.put("comments", dim.getOrDefault("comment", "表现良好"));
+
+                    // 提取 issues 和 suggestions
+                    List<String> issues = (List<String>) dim.get("issues");
+                    List<String> suggestions = (List<String>) dim.get("suggestions");
+                    category.put("issues", issues != null ? issues : new ArrayList<>());
+                    category.put("suggestions", suggestions != null ? suggestions : new ArrayList<>());
+
+                    categories.add(category);
+                }
+            }
+            result.put("categories", categories);
+
+            // 处理 format_issues
+            List<Map<String, Object>> formatIssues = new ArrayList<>();
+            List<String> rawIssues = (List<String>) parsedResponse.getOrDefault("issues", new ArrayList<>());
+            for (String issue : rawIssues) {
+                Map<String, Object> issueObj = new HashMap<>();
+                issueObj.put("severity", "中");
+                issueObj.put("type", "格式问题");
+                issueObj.put("location", "整体");
+                issueObj.put("description", issue);
+                issueObj.put("fix_suggestion", "建议优化排版");
+                formatIssues.add(issueObj);
+            }
+            result.put("format_issues", formatIssues);
+
+            // 处理 design_suggestions
+            List<Map<String, Object>> designSuggestions = new ArrayList<>();
+            List<String> rawSuggestions = (List<String>) parsedResponse.getOrDefault("suggestions", new ArrayList<>());
+            for (String suggestion : rawSuggestions) {
+                Map<String, Object> suggestionObj = new HashMap<>();
+                suggestionObj.put("area", "排版优化");
+                suggestionObj.put("current", "当前状态");
+                suggestionObj.put("recommended", suggestion);
+                suggestionObj.put("benefit", "提升整体视觉效果");
+                designSuggestions.add(suggestionObj);
+            }
+            result.put("design_suggestions", designSuggestions);
+
+            // ATS兼容性（默认值）
+            Map<String, Object> atsCompatibility = new HashMap<>();
+            atsCompatibility.put("score", 75);
+            atsCompatibility.put("issues", List.of("确保关键词准确", "避免使用复杂格式"));
+            atsCompatibility.put("recommendations", List.of("使用标准字体", "避免使用表格和图片"));
+            result.put("ats_compatibility", atsCompatibility);
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "layout_check", aiResponse, result);
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("Failed to parse layout check AI response as JSON: {}", e.getMessage());
+            log.error("Response content: {}", cleanedResponse.substring(0, Math.min(500, cleanedResponse.length())));
+
+            // 返回默认结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("overall_score", 75);
+            result.put("layout_level", "良好");
+            result.put("summary", "基于默认的排版分析");
+            result.put("error", true);
+            result.put("error_message", "AI 返回数据不完整，已使用默认分析结果");
+            result.put("timestamp", System.currentTimeMillis());
+
+            // 默认 categories
+            List<Map<String, Object>> defaultCategories = List.of(
+                Map.of("name", "视觉层次", "score", 75, "status", "良好", "comments", "表现良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "格式一致性", "score", 75, "status", "良好", "comments", "表现良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "可读性", "score", 75, "status", "良好", "comments", "表现良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "专业外观", "score", 75, "status", "良好", "comments", "表现良好", "issues", List.of(), "suggestions", List.of()),
+                Map.of("name", "留白使用", "score", 75, "status", "良好", "comments", "表现良好", "issues", List.of(), "suggestions", List.of())
+            );
+            result.put("categories", defaultCategories);
+            result.put("format_issues", List.of());
+            result.put("design_suggestions", List.of());
+
+            Map<String, Object> atsCompatibility = Map.of(
+                "score", 75,
+                "issues", List.of("确保关键词准确", "避免使用复杂格式"),
+                "recommendations", List.of("使用标准字体", "避免使用表格和图片")
+            );
+            result.put("ats_compatibility", atsCompatibility);
+
+            // 保存历史记录
+            saveAiHistory(resume.getId(), "layout_check", aiResponse, result);
+
+            return result;
+        }
     }
 
     @Override
@@ -815,6 +956,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
 
     private String buildLayoutCheckPrompt(Resume resume) {
         StringBuilder sb = new StringBuilder();
+        sb.append("【重要】请直接返回纯JSON格式，不要使用markdown代码块标记（```json），不要添加任何其他文字说明。\n\n");
         sb.append("你是一位专业的简历排版设计师，请对以下简历进行排版和格式检查。\n\n");
         sb.append("=== 简历内容 ===\n");
         sb.append(buildResumeSummary(resume));
@@ -824,18 +966,41 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         sb.append("3. 可读性 - 行距、段距是否合适，易于阅读\n");
         sb.append("4. 专业外观 - 整体是否看起来专业\n");
         sb.append("5. 留白使用 - 页面留白是否合理\n\n");
-        sb.append("请返回JSON格式：\n");
+        sb.append("=== 评分标准 ===\n");
+        sb.append("- 90-100分：优秀（接近完美）\n");
+        sb.append("- 80-89分：专业（表现良好）\n");
+        sb.append("- 70-79分：良好（小幅优化即可）\n");
+        sb.append("- 60-69分：一般（需要重点优化）\n");
+        sb.append("- 0-59分：需改进（需要大幅修改）\n\n");
+        sb.append("=== 输出格式要求 ===\n");
+        sb.append("必须严格按照以下JSON格式返回，不要添加任何其他文字说明：\n\n");
         sb.append("{\n");
-        sb.append("  \"layout_score\": 82,\n");
+        sb.append("  \"overall_score\": <0-100的整数，基于五个维度的平均分>,\n");
+        sb.append("  \"summary\": \"排版检查的总体评价，2-3句话\",\n");
         sb.append("  \"dimensions\": {\n");
-        sb.append("    \"visual_hierarchy\": {\"score\": 85, \"comment\": \"...\"},\n");
-        sb.append("    \"format_consistency\": {\"score\": 80, \"comment\": \"...\"},\n");
-        sb.append("    \"readability\": {\"score\": 85, \"comment\": \"...\"},\n");
-        sb.append("    \"professional_appearance\": {\"score\": 80, \"comment\": \"...\"},\n");
-        sb.append("    \"white_space_usage\": {\"score\": 80, \"comment\": \"...\"}\n");
+        sb.append("    \"visual_hierarchy\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"comment\": \"视觉层次的评价说明\"\n");
+        sb.append("    },\n");
+        sb.append("    \"format_consistency\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"comment\": \"格式一致性的评价说明\"\n");
+        sb.append("    },\n");
+        sb.append("    \"readability\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"comment\": \"可读性的评价说明\"\n");
+        sb.append("    },\n");
+        sb.append("    \"professional_appearance\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"comment\": \"专业外观的评价说明\"\n");
+        sb.append("    },\n");
+        sb.append("    \"white_space_usage\": {\n");
+        sb.append("      \"score\": <0-100的整数>,\n");
+        sb.append("      \"comment\": \"留白使用的评价说明\"\n");
+        sb.append("    }\n");
         sb.append("  },\n");
-        sb.append("  \"issues\": [\"...\", \"...\"],\n");
-        sb.append("  \"suggestions\": [\"...\", \"...\"]\n");
+        sb.append("  \"issues\": [\"格式问题1\", \"格式问题2\", ...],\n");
+        sb.append("  \"suggestions\": [\"排版建议1\", \"排版建议2\", ...]\n");
         sb.append("}\n");
         return sb.toString();
     }
