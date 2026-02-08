@@ -173,9 +173,8 @@ public class ResumeController {
     public ResponseEntity<Map<String, Object>> deleteSkill(
             @PathVariable String id,
             @PathVariable Long skillId) {
-        resumeService.deleteSkill(skillId);
-        Resume resume = resumeService.getResume(id)
-                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
+        log.info("Deleting skill {} from resume {}", skillId, id);
+        Resume resume = resumeService.deleteSkill(id, skillId);
         return ResponseEntity.ok(Map.of("success", true, "data", resume));
     }
 

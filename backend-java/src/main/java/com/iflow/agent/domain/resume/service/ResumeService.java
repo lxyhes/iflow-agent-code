@@ -45,7 +45,7 @@ public interface ResumeService {
 
     Skill updateSkill(Long skillId, Skill skill);
 
-    void deleteSkill(Long skillId);
+    Resume deleteSkill(String resumeId, Long skillId);
 
     // ========== 项目经历 ==========
     Project addProject(String resumeId, Project project);

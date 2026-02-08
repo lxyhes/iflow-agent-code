@@ -1489,14 +1489,30 @@ const SkillsTab = ({ resume, onUpdate, targetPosition, onUpdateTargetPosition })
   };
 
   const handleDelete = async (id) => {
+    console.log('[SkillsTab] handleDelete called with ID:', id);
+    if (!window.confirm('确定要删除这个技能吗？')) {
+      console.log('[SkillsTab] Delete cancelled by user');
+      return;
+    }
+
     try {
+      console.log('[SkillsTab] Calling deleteSkill API with resumeId:', resume.id, 'skillId:', id);
       const response = await resumeApi.deleteSkill(resume.id, id);
+      console.log('[SkillsTab] Delete API response:', response);
+
       if (response.success) {
-        setSkills(response.data.skills || []);
+        console.log('[SkillsTab] Delete successful, updating skills. Response data:', response.data);
+        const updatedSkills = response.data?.skills || [];
+        console.log('[SkillsTab] Updated skills array:', updatedSkills);
+        setSkills(updatedSkills);
         onUpdate(response.data);
+      } else {
+        console.error('[SkillsTab] Delete failed:', response.error);
+        alert('删除失败：' + (response.error || '未知错误'));
       }
     } catch (err) {
-      console.error('删除失败:', err);
+      console.error('[SkillsTab] Delete error:', err);
+      alert('删除失败，请重试');
     }
   };
 
@@ -1645,11 +1661,13 @@ const SkillTag = ({ skill, onUpdate, onDelete }) => {
       <button
         onClick={(e) => {
           e.stopPropagation();
+          console.log('[SkillTag] Delete button clicked, skill ID:', skill.id, 'skill name:', skill.name);
           onDelete();
         }}
-        className="ml-1 p-0.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 rounded transition-all"
+        className="ml-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 rounded transition-all"
+        title="删除此技能"
       >
-        <X className="w-3 h-3" />
+        <X className="w-3.5 h-3.5" />
       </button>
     </div>
   );

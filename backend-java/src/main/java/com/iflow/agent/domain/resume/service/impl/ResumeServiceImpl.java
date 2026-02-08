@@ -2,8 +2,10 @@ package com.iflow.agent.domain.resume.service.impl;
 
 import com.iflow.agent.domain.resume.entity.*;
 import com.iflow.agent.domain.resume.repository.ResumeRepository;
+import com.iflow.agent.domain.resume.repository.SkillRepository;
 import com.iflow.agent.domain.resume.service.ResumeService;
 import com.iflow.agent.service.ai.TongyiQianwenService;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +23,9 @@ import java.util.stream.Collectors;
 public class ResumeServiceImpl implements ResumeService {
 
     private final ResumeRepository resumeRepository;
+    private final SkillRepository skillRepository;
     private final TongyiQianwenService tongyiQianwenService;
+    private final EntityManager entityManager;
 
     @Override
     public List<Resume> getResumes(String userId) {
@@ -188,8 +192,12 @@ public class ResumeServiceImpl implements ResumeService {
 
     @Override
     @Transactional
-    public void deleteSkill(Long skillId) {
-        log.info("Deleting skill: {}", skillId);
+    public Resume deleteSkill(String resumeId, Long skillId) {
+        log.info("Deleting skill: {} from resume: {}", skillId, resumeId);
+        skillRepository.deleteById(skillId);
+        // 刷新简历并重新获取，确保skills集合被更新
+        return getResume(resumeId)
+                .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + resumeId));
     }
 
     @Override
