@@ -195,7 +195,10 @@ public class ResumeServiceImpl implements ResumeService {
     public Resume deleteSkill(String resumeId, Long skillId) {
         log.info("Deleting skill: {} from resume: {}", skillId, resumeId);
         skillRepository.deleteById(skillId);
-        // 刷新简历并重新获取，确保skills集合被更新
+        // 刷新EntityManager以确保删除操作被同步到数据库
+        entityManager.flush();
+        entityManager.clear();
+        // 重新获取简历，确保skills集合被更新
         return getResume(resumeId)
                 .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + resumeId));
     }
