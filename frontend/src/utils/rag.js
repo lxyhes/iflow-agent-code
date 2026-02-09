@@ -11,7 +11,7 @@ const API_BASE = ''; // 使用相对路径，由 Vite 代理处理
  * @returns {Promise<Object>} 统计信息
  */
 export async function getRAGStats(projectPath) {
-  const response = await fetch(`${API_BASE}/api/rag/stats/${encodeURIComponent(projectPath)}`, {
+  const response = await fetch(`${API_BASE}/api/rag/stats?projectPath=${encodeURIComponent(projectPath)}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
