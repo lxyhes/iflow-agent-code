@@ -7,6 +7,7 @@ import com.iflow.agent.domain.interview.enums.InterviewPhase;
 import com.iflow.agent.domain.interview.enums.InterviewStatus;
 import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -20,19 +21,23 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class InterviewCoordinator {
 
     private final Map<String, AgentScopeInterviewerAgent> agents;
     private final Map<String, InterviewContext> contexts;
     private final InterviewSessionRepository sessionRepository;
+    private final com.iflow.agent.service.llm.LLMService llmService;
 
     public InterviewCoordinator(
             TechnicalInterviewer technicalInterviewer,
             HrInterviewer hrInterviewer,
             BehavioralInterviewer behavioralInterviewer,
             SystemDesignInterviewer systemDesignInterviewer,
-            InterviewSessionRepository sessionRepository) {
+            InterviewSessionRepository sessionRepository,
+            com.iflow.agent.service.llm.LLMService llmService) {
         this.sessionRepository = sessionRepository;
+        this.llmService = llmService;
         this.agents = new ConcurrentHashMap<>();
         this.contexts = new ConcurrentHashMap<>();
 
@@ -344,5 +349,92 @@ public class InterviewCoordinator {
                 .questionId(questionId)
                 .content("回答内容")
                 .build();
+    }
+
+    /**
+     * 生成问题（用于 WebSocket）
+     */
+    public String generateQuestion(String sessionId) {
+        InterviewSession session = getSession(sessionId);
+        InterviewContext context = getContext(sessionId);
+        
+        String currentAgentType = context.getCurrentAgentType();
+        if (currentAgentType == null) {
+            currentAgentType = context.getNextAgentType();
+            if (currentAgentType != null) {
+                context.setCurrentAgentType(currentAgentType);
+            }
+        }
+        
+        if (currentAgentType == null) {
+            throw new IllegalStateException("没有可用的面试官");
+        }
+
+        // 构建问题生成 prompt
+        String prompt = buildQuestionPrompt(session, currentAgentType);
+        
+        // 使用 LLM 生成问题
+        return llmService.generate(prompt).block();
+    }
+
+    /**
+     * 获取当前智能体类型
+     */
+    public String getCurrentAgentType(String sessionId) {
+        InterviewContext context = contexts.get(sessionId);
+        return context != null ? context.getCurrentAgentType() : null;
+    }
+
+    /**
+     * 构建问题生成的 prompt
+     */
+    private String buildQuestionPrompt(InterviewSession session, String agentType) {
+        String agentName = getAgentName(agentType);
+        String difficulty = getDifficulty(session.getCurrentRound());
+        
+        return String.format("""
+                你是一位专业的%s。请针对以下候选人信息，设计一个面试问题。
+
+                【候选人信息】
+                姓名：%s
+                目标职位：%s
+
+                【要求】
+                1. 问题难度：%s
+                2. 问题要能够考察候选人的专业能力
+                3. 问题要具体、可操作，避免过于抽象
+                4. 问题长度控制在 30-60 字
+
+                请直接输出问题，不要包含任何解释或引导语。
+                """, 
+                agentName, 
+                session.getCandidateName(), 
+                session.getPosition(),
+                difficulty
+        );
+    }
+
+    /**
+     * 获取智能体名称
+     */
+    private String getAgentName(String agentType) {
+        return switch (agentType) {
+            case "technical" -> "技术面试官";
+            case "system_design" -> "系统设计面试官";
+            case "behavioral" -> "行为面试官";
+            case "hr" -> "HR面试官";
+            default -> "面试官";
+        };
+    }
+
+    /**
+     * 获取问题难度
+     */
+    private String getDifficulty(int currentRound) {
+        return switch (currentRound) {
+            case 0, 1 -> "基础";
+            case 2, 3 -> "中等";
+            default -> "高级";
+        };
     }
 }

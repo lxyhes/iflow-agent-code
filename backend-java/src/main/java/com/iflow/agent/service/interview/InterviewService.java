@@ -67,4 +67,46 @@ public interface InterviewService {
      * 列表面试会话
      */
     List<Map<String, Object>> listSessions(String candidateId, String status, int limit);
+
+    // ========== WebSocket 方法 ==========
+
+    /**
+     * WebSocket 连接建立
+     */
+    void handleWebSocketConnected(String sessionId);
+
+    /**
+     * WebSocket 连接断开
+     */
+    void handleWebSocketDisconnected(String sessionId);
+
+    /**
+     * WebSocket 开始面试
+     */
+    void startInterviewWebSocket(String sessionId, boolean demoMode, int demoDelay);
+
+    /**
+     * WebSocket 提交回答
+     */
+    void submitAnswerWebSocket(String sessionId, String answer, Integer duration);
+
+    /**
+     * WebSocket 暂停面试
+     */
+    void pauseInterviewWebSocket(String sessionId);
+
+    /**
+     * WebSocket 恢复面试
+     */
+    void resumeInterviewWebSocket(String sessionId);
+
+    /**
+     * WebSocket 完成面试
+     */
+    void completeInterviewWebSocket(String sessionId);
+
+    /**
+     * 获取面试状态
+     */
+    Map<String, Object> getInterviewStatus(String sessionId);
 }

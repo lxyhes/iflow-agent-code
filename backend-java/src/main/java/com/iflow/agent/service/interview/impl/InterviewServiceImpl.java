@@ -352,4 +352,65 @@ public class InterviewServiceImpl implements InterviewService {
                 ))
                 .toList();
     }
+
+    @Override
+    public Map<String, Object> getInterviewStatus(String sessionId) {
+        log.info("Get interview status: sessionId={}", sessionId);
+        
+        InterviewSession session = getSession(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+        
+        return Map.of(
+                "session_id", sessionId,
+                "status", session.getStatus().name(),
+                "current_round", session.getCurrentRound(),
+                "total_rounds", session.getTotalRounds(),
+                "started_at", session.getStartedAt(),
+                "duration", session.getStartedAt() != null 
+                        ? java.time.Duration.between(session.getStartedAt(), LocalDateTime.now()).getSeconds() 
+                        : 0
+        );
+    }
+
+    // ========== WebSocket 方法实现 ==========
+
+    @Override
+    public void handleWebSocketConnected(String sessionId) {
+        log.info("WebSocket connected: sessionId={}", sessionId);
+    }
+
+    @Override
+    public void handleWebSocketDisconnected(String sessionId) {
+        log.info("WebSocket disconnected: sessionId={}", sessionId);
+    }
+
+    @Override
+    public void startInterviewWebSocket(String sessionId, boolean demoMode, int demoDelay) {
+        log.info("WebSocket start interview: sessionId={}, demoMode={}", sessionId, demoMode);
+        // 实现 WebSocket 开始面试逻辑
+    }
+
+    @Override
+    public void submitAnswerWebSocket(String sessionId, String answer, Integer duration) {
+        log.info("WebSocket submit answer: sessionId={}, length={}", sessionId, answer.length());
+        // 实现 WebSocket 提交回答逻辑
+    }
+
+    @Override
+    public void pauseInterviewWebSocket(String sessionId) {
+        log.info("WebSocket pause interview: sessionId={}", sessionId);
+        // 实现 WebSocket 暂停面试逻辑
+    }
+
+    @Override
+    public void resumeInterviewWebSocket(String sessionId) {
+        log.info("WebSocket resume interview: sessionId={}", sessionId);
+        // 实现 WebSocket 恢复面试逻辑
+    }
+
+    @Override
+    public void completeInterviewWebSocket(String sessionId) {
+        log.info("WebSocket complete interview: sessionId={}", sessionId);
+        // 实现 WebSocket 完成面试逻辑
+    }
 }
