@@ -55,6 +55,12 @@ public class ProjectManagementController {
             item.put("description", project.getDescription());
             item.put("createdAt", project.getCreatedAt() != null ? project.getCreatedAt().toString() : null);
             item.put("updatedAt", project.getUpdatedAt() != null ? project.getUpdatedAt().toString() : null);
+            
+            // 重要：添加空的 sessions 列表，防止前端显示骨架屏
+            item.put("sessions", new ArrayList<>());
+            item.put("cursorSessions", new ArrayList<>());
+            item.put("sessionMeta", Map.of("hasMore", false));
+            
             result.add(item);
         }
         
@@ -170,10 +176,12 @@ public class ProjectManagementController {
             ProjectSession session = sessions.get(i);
             Map<String, Object> item = new HashMap<>();
             item.put("id", session.getId());
-            item.put("title", session.getTitle());
+            item.put("summary", session.getTitle()); // 映射为 summary
+            item.put("title", session.getTitle());   // 保留 title
             item.put("model", session.getModel());
             item.put("createdAt", session.getCreatedAt() != null ? session.getCreatedAt().toString() : null);
             item.put("updatedAt", session.getUpdatedAt() != null ? session.getUpdatedAt().toString() : null);
+            item.put("lastActivity", session.getUpdatedAt() != null ? session.getUpdatedAt().toString() : null); // 映射为 lastActivity
             sessionList.add(item);
         }
         
