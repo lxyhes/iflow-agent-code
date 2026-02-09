@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal as TerminalIcon, Power, RotateCw, Play, Loader2, AlertCircle, Settings, Palette, Type, Eraser, Download, Check, Zap, Maximize2, Minimize2, Copy, Search, Command, ChevronRight, X, History, Star, Plus, FileText, Trash2, Save, Sparkles, ArrowRight, CornerDownLeft, ArrowUp, ArrowDown } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 
@@ -736,6 +737,17 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(webLinksAddon);
     terminal.current.loadAddon(searchAddon.current);
+
+    // Try to load WebGL addon for GPU acceleration
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(e => {
+        webglAddon.dispose();
+      });
+      terminal.current.loadAddon(webglAddon);
+    } catch (e) {
+      console.warn('WebGL addon failed to load, falling back to canvas renderer', e);
+    }
 
     terminal.current.open(terminalRef.current);
 
