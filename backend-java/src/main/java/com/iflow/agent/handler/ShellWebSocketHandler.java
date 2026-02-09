@@ -175,9 +175,8 @@ public class ShellWebSocketHandler extends TextWebSocketHandler {
             envs.put("LANG", "en_US.UTF-8");
 
             if (isWindows) {
-                // Windows: Use PowerShell or CMD with PTY
-                // Using cmd.exe as it is more standard for simple shell
-                cmd = new String[]{"cmd.exe"};
+                // Windows: Use PowerShell with NoLogo and Bypass policy for better compatibility
+                cmd = new String[]{"powershell.exe", "-NoLogo", "-ExecutionPolicy", "Bypass"};
             } else {
                 // macOS/Linux: Use bash or zsh
                 String shell = envs.getOrDefault("SHELL", "/bin/bash");
@@ -189,7 +188,7 @@ public class ShellWebSocketHandler extends TextWebSocketHandler {
                     .setDirectory(projectPath)
                     .setEnvironment(envs)
                     .setConsole(false)
-                    .setUseWinConPty(true); // Use ConPTY on Windows if available (Windows 10 1809+)
+                    .setUseWinConPty(true);
 
             PtyProcess process = ptyBuilder.start();
 
@@ -212,14 +211,31 @@ public class ShellWebSocketHandler extends TextWebSocketHandler {
 
             executorService.submit(() -> readOutput(terminalSession));
 
-            // No need for manual welcome message with PTY usually, as the shell will print prompt
-            // But we can add a small banner
+            // Inject Shims and send welcome message
             executorService.submit(() -> {
                 try {
-                    Thread.sleep(300);
-                    sendOutput(session, "\r\n\u001b[32m✓ Terminal Connected (PTY Enabled)\u001b[0m\r\n");
+                    Thread.sleep(500); // Wait for shell to be ready
+                    
+                    if (isWindows) {
+                        // 注入兼容层：模拟 Unix 常用指令
+                        // touch: 支持创建文件或更新时间戳
+                        // grep: 映射到 Select-String
+                        // which: 映射到 Get-Command
+                        // ll / la: 常见的快捷指令
+                        String shims = 
+                            "function touch { foreach($file in $args) { if(Test-Path $file) { (Get-Item $file).LastWriteTime = Get-Date } else { New-Item -ItemType File -Path $file } } }; " +
+                            "function grep { Select-String $args }; " +
+                            "function which { Get-Command $args | Select-Object -ExpandProperty Source }; " +
+                            "function ll { Get-ChildItem -Force | Format-Table Mode, LastWriteTime, Length, Name }; " +
+                            "function la { Get-ChildItem -Force }; " +
+                            "Clear-Host\r\n";
+                        terminalSession.write(shims);
+                        sendOutput(session, "\r\n\u001b[32m✓ Terminal Connected (PTY + PowerShell + Unix Shims)\u001b[0m\r\n");
+                    } else {
+                        sendOutput(session, "\r\n\u001b[32m✓ Terminal Connected (PTY)\u001b[0m\r\n");
+                    }
                 } catch (Exception e) {
-                    log.error("[Shell] Failed to send welcome message", e);
+                    log.error("[Shell] Failed to initialize shims", e);
                 }
             });
 
