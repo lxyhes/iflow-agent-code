@@ -211,17 +211,13 @@ public class ShellWebSocketHandler extends TextWebSocketHandler {
 
             executorService.submit(() -> readOutput(terminalSession));
 
-            // Inject Shims and send welcome message
+            // Inject Shims and handle initialCommand
             executorService.submit(() -> {
                 try {
                     Thread.sleep(500); // Wait for shell to be ready
                     
                     if (isWindows) {
                         // 注入兼容层：模拟 Unix 常用指令
-                        // touch: 支持创建文件或更新时间戳
-                        // grep: 映射到 Select-String
-                        // which: 映射到 Get-Command
-                        // ll / la: 常见的快捷指令
                         String shims = 
                             "function touch { foreach($file in $args) { if(Test-Path $file) { (Get-Item $file).LastWriteTime = Get-Date } else { New-Item -ItemType File -Path $file } } }; " +
                             "function grep { Select-String $args }; " +
@@ -234,8 +230,17 @@ public class ShellWebSocketHandler extends TextWebSocketHandler {
                     } else {
                         sendOutput(session, "\r\n\u001b[32m✓ Terminal Connected (PTY)\u001b[0m\r\n");
                     }
+
+                    // Execute initialCommand if provided
+                    if (data.has("initialCommand") && !data.get("initialCommand").isNull()) {
+                        String initialCommand = data.get("initialCommand").asText();
+                        if (!initialCommand.isEmpty()) {
+                            log.info("[Shell] Executing initial command for session {}: {}", session.getId(), initialCommand);
+                            terminalSession.write(initialCommand + "\r\n");
+                        }
+                    }
                 } catch (Exception e) {
-                    log.error("[Shell] Failed to initialize shims", e);
+                    log.error("[Shell] Failed to initialize shims or initialCommand", e);
                 }
             });
 

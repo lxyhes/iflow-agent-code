@@ -277,20 +277,19 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       2. If it requires multiple steps, join them with && or ;.
       3. Be safe and idiomatic.`;
 
-      // Call backend API
-      const response = await fetch('/api/query', {
+      // Call backend API (Fixed URL for Java Backend)
+      const response = await fetch('/api/iflow/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: prompt,
-          model: 'GLM-4.7', // Or use default
-          system_prompt: "You are a command line expert. Output only the raw command string."
+          message: prompt, // Changed 'prompt' to 'message' to match Java QueryRequest
+          model: 'glm-4'
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.response) {
+        if (data.response) {
             let cmd = data.response.trim();
             // Clean up any markdown code blocks if the LLM adds them despite instructions
             cmd = cmd.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
@@ -304,7 +303,6 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     } catch (error) {
       console.error("AI Command Generation failed:", error);
       // Fallback: Simple keyword matching simulation for demo/offline
-      // This ensures the feature "works" even if the backend LLM isn't connected
       let fallbackCmd = "";
       const lower = input.toLowerCase();
       if (lower.includes("port") || lower.includes("kill")) fallbackCmd = "netstat -ano | findstr :8080";
@@ -564,18 +562,25 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const clearTerminal = () => {
     if (terminal.current) {
       terminal.current.clear();
-      // Optionally send a clear command to the shell if needed, but xterm clear is usually visual
-      // terminal.current.write('\x1b[2J\x1b[H'); 
+      // Also send a clear command to the shell if connected
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          // On Windows PowerShell 'Clear-Host' is preferred, on bash 'clear'
+          // Since we injected shims, 'clear' should work on both
+          ws.current.send(JSON.stringify({ type: 'input', data: 'clear\r' }));
+      }
     }
   };
 
   const downloadOutput = () => {
     if (!terminal.current) return;
     
-    // Select all to get content (basic approach)
-    terminal.current.selectAll();
-    const content = terminal.current.getSelection();
-    terminal.current.clearSelection();
+    // Use xterm's buffer to get all content
+    let content = '';
+    const buffer = terminal.current.buffer.active;
+    for (let i = 0; i < buffer.length; i++) {
+        const line = buffer.getLine(i);
+        if (line) content += line.translateToString(true) + '\n';
+    }
 
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -593,20 +598,20 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     const selection = terminal.current.getSelection();
     if (selection) {
       navigator.clipboard.writeText(selection);
-    } else {
-      // If nothing selected, maybe copy the last few lines or just notify?
-      // For now, let's just focus on selection to avoid confusion
     }
   };
 
   const openLogViewer = () => {
     if (!terminal.current) return;
-    // Select all to capture content
-    terminal.current.selectAll();
-    const content = terminal.current.getSelection();
-    terminal.current.clearSelection();
     
-    // Fallback if empty (sometimes selection is tricky programmatically if not focused)
+    // Extract full content from buffer
+    let content = '';
+    const buffer = terminal.current.buffer.active;
+    for (let i = 0; i < buffer.length; i++) {
+        const line = buffer.getLine(i);
+        if (line) content += line.translateToString(true) + '\n';
+    }
+    
     setLogContent(content || 'No output captured or terminal is empty.');
     setShowLogViewer(true);
   };
@@ -985,34 +990,66 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 <button
                   onClick={() => setShowSettings(!showSettings)}
                   className={`p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-md transition-colors ${showSettings ? 'text-white bg-white/10' : ''}`}
-                  title="Theme Settings"
+                  title="Terminal Settings"
                 >
-                  <Palette className="w-4 h-4" />
+                  <Settings className="w-4 h-4" />
                 </button>
                 
-                {/* Theme Dropdown */}
+                {/* Theme & Font Dropdown */}
                 {showSettings && (
                   <>
                     <div 
                       className="fixed inset-0 z-40" 
                       onClick={() => setShowSettings(false)}
                     />
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden backdrop-blur-md">
-                      <div className="p-2 space-y-1">
-                        <div className="text-xs font-semibold text-zinc-500 px-2 py-1 uppercase tracking-wider">Theme</div>
-                        {Object.entries(THEMES).map(([key, value]) => (
-                          <button
-                            key={key}
-                            onClick={() => {
-                              changeTheme(key);
-                              setShowSettings(false);
-                            }}
-                            className={`w-full text-left px-2 py-1.5 rounded-lg text-sm flex items-center justify-between group ${currentTheme === key ? 'bg-primary/20 text-primary' : 'text-zinc-300 hover:bg-white/5'}`}
-                          >
-                            <span>{value.name}</span>
-                            {currentTheme === key && <Check className="w-3.5 h-3.5" />}
-                          </button>
-                        ))}
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-zinc-900 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden backdrop-blur-md">
+                      <div className="p-3 space-y-4">
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Theme</div>
+                          <div className="grid grid-cols-1 gap-1">
+                            {Object.entries(THEMES).map(([key, value]) => (
+                              <button
+                                key={key}
+                                onClick={() => changeTheme(key)}
+                                className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between group ${currentTheme === key ? 'bg-primary/20 text-primary' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
+                              >
+                                <span>{value.name}</span>
+                                {currentTheme === key && <Check className="w-3 h-3" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="h-px bg-white/5 mx-1" />
+
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Font Size</div>
+                          <div className="flex flex-wrap gap-1">
+                            {FONT_SIZES.map(size => (
+                              <button
+                                key={size}
+                                onClick={() => changeFontSize(size)}
+                                className={`flex-1 min-w-[40px] px-1 py-1 rounded text-[10px] font-mono border transition-all ${fontSize === size ? 'bg-primary border-primary text-primary-foreground' : 'bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10'}`}
+                              >
+                                {size}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div className="h-px bg-white/5 mx-1" />
+                        
+                        <button
+                          onClick={() => {
+                            setRecentCommands([]);
+                            localStorage.removeItem(STORAGE_KEYS.RECENT_COMMANDS);
+                            setShowSettings(false);
+                          }}
+                          className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Clear Recent History</span>
+                        </button>
                       </div>
                     </div>
                   </>
@@ -1223,7 +1260,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                                     </div>
                                     <div className="flex-1">
                                         <div className="text-sm font-medium text-zinc-200 group-hover:text-indigo-300 transition-colors">
-                                            {isGeneratingCommand ? 'Asking AI to generate command...' : `Ask AI to write command for "{searchQuery}"`}
+                                            {isGeneratingCommand ? 'Asking AI to generate command...' : `Ask AI to write command for "${searchQuery}"`}
                                         </div>
                                         <div className="text-xs text-zinc-500">
                                             Translates natural language to Shell commands
@@ -1461,7 +1498,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors ${!terminal.current?.hasSelection() ? 'opacity-50 cursor-not-allowed' : 'text-zinc-200'}`}
                disabled={!terminal.current?.hasSelection()}
              >
-               <Copy className="w-3.5 h-3.5" /> Copy
+               <Copy className="w-3.5 h-3.5" /> Copy Selected
              </button>
              <button 
                onClick={async () => {
@@ -1480,20 +1517,17 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                }}
                className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
              >
-               <FileText className="w-3.5 h-3.5" /> Paste
+               <CornerDownLeft className="w-3.5 h-3.5" /> Paste & Execute
              </button>
              <div className="h-px bg-white/10 my-1 mx-2"></div>
              <button 
                onClick={() => {
                  setShowTerminalSearch(true);
                  setContextMenu(null);
-                 setTimeout(() => {
-                   // Focus search input?
-                 }, 50);
                }}
                className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
              >
-               <Search className="w-3.5 h-3.5" /> Find...
+               <Search className="w-3.5 h-3.5" /> Find In Terminal
              </button>
              <button 
                onClick={() => {
@@ -1502,7 +1536,18 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                }}
                className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
              >
-               <Eraser className="w-3.5 h-3.5" /> Clear
+               <Eraser className="w-3.5 h-3.5" /> Clear Visuals
+             </button>
+             <button 
+               onClick={() => {
+                 if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    ws.current.send(JSON.stringify({ type: 'input', data: 'clear\r' }));
+                 }
+                 setContextMenu(null);
+               }}
+               className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
+             >
+               <Eraser className="w-3.5 h-3.5" /> Clear Scrollback (Full)
              </button>
              <div className="h-px bg-white/10 my-1 mx-2"></div>
              <button 
@@ -1512,7 +1557,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                }}
                className="w-full text-left px-3 py-1.5 text-xs text-red-400 flex items-center gap-2 hover:bg-red-500/10 transition-colors"
              >
-               <RotateCw className="w-3.5 h-3.5" /> Restart Shell
+               <RotateCw className="w-3.5 h-3.5" /> Restart Session
              </button>
           </div>
         )}
