@@ -23,10 +23,10 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now());
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
-  // IFlow 状态
-  const [iflowStatus, setIflowStatus] = useState('idle');
+  // AI 工作台状态
+  const [aiWorkbenchStatus, setAiWorkbenchStatus] = useState('idle');
   const [provider, setProvider] = useState(() => {
-    return localStorage.getItem('selected-provider') || 'iflow';
+    return localStorage.getItem('selected-provider') || 'ai-workbench';
   });
 
   // Token 预算
@@ -181,7 +181,7 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
     connectionState,
     lastHeartbeat,
     reconnectAttempts,
-    iflowStatus,
+    aiWorkbenchStatus,
     provider,
     tokenBudget,
     permissionMode,
@@ -211,7 +211,7 @@ export const useChatState = (selectedProject, selectedSession, messages) => {
     setConnectionState,
     setLastHeartbeat,
     setReconnectAttempts,
-    setIflowStatus,
+    setAiWorkbenchStatus,
     setProvider,
     setTokenBudget,
     setPermissionMode,

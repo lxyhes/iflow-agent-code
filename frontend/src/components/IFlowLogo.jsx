@@ -31,4 +31,4 @@ const IFlowLogo = ({ size = 32, className = '' }) => {
   );
 };
 
-export default IFlowLogo;
+export default AI 工作台Logo;

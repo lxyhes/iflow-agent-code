@@ -1,8 +1,8 @@
-# Gemini Context: iFlow Agent
+# Gemini Context: AI 工作台
 
 ## Project Overview
 
-**iFlow Agent** is an intelligent code assistant system designed to provide a comprehensive Web UI (Desktop & Mobile) for Claude Code and Cursor CLI. It features a responsive chat interface, integrated shell terminal, file browser, git explorer, and advanced AI capabilities like TaskMaster and automated code review.
+**AI 工作台** is an intelligent code assistant system designed to provide a comprehensive Web UI (Desktop & Mobile) for Claude Code and Cursor CLI. It features a responsive chat interface, integrated shell terminal, file browser, git explorer, and advanced AI capabilities like TaskMaster and automated code review.
 
 ### Architecture
 
@@ -10,7 +10,7 @@ The project adopts a microservices-like architecture with a React frontend and t
 
 1.  **Python Backend (Primary):**
     *   **Framework:** FastAPI + Uvicorn
-    *   **Role:** Handles core agent logic, file system operations, git integration, local AI processing (iFlow SDK), and RAG.
+    *   **Role:** Handles core agent logic, file system operations, git integration, local AI processing (AI 工作台 SDK), and RAG.
     *   **Database:** SQLite (`storage/`)
     *   **Location:** `backend/`
 

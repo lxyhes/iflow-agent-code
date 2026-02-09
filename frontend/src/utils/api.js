@@ -198,7 +198,7 @@ export const api = {
       body: JSON.stringify({ prompt, ...options }),
     }),
 
-  // Sync MCP servers from iFlow config
+  // Sync MCP servers from AI 工作台 config
   syncIFlowMcpServers: () =>
     authenticatedFetch('/api/iflow/sync-mcp-servers', {
       method: 'POST',

@@ -636,7 +636,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
     toast.success('已导出 JSON');
   };
 
-  // 导出为 iFlow Agent 格式
+  // 导出为 AI 工作台 格式
   const handleExportAgent = () => {
     setShowActionsMenu(false);
     const workflowData = {
@@ -668,14 +668,14 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
         confirmVariant: 'primary',
         onConfirm: () => {
           downloadIFlowFile(workflowData, selectedProject?.name || 'default', 'agent');
-          toast.success('已导出 iFlow Agent');
+          toast.success('已导出 AI 工作台');
         }
       });
       return;
     }
 
     downloadIFlowFile(workflowData, selectedProject?.name || 'default', 'agent');
-    toast.success('已导出 iFlow Agent');
+    toast.success('已导出 AI 工作台');
   };
 
   // 导出为 iFlow Command 格式
@@ -1352,7 +1352,7 @@ const WorkflowEditor = ({ projectName, selectedProject }) => {
                   className="w-full px-3 py-2.5 flex items-center gap-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <Download className="w-4 h-4 text-gray-700 dark:text-gray-200" />
-                  <span className="flex-1">导出 iFlow Agent</span>
+                  <span className="flex-1">导出 AI 工作台</span>
                 </button>
                 <button
                   onClick={handleExportCommand}

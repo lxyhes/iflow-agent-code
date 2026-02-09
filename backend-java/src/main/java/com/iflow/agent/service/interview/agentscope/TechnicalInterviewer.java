@@ -7,8 +7,7 @@ import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.repository.AnswerRepository;
 import com.iflow.agent.repository.EvaluationRepository;
 import com.iflow.agent.repository.QuestionRepository;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.memory.Memory;
+import com.iflow.agent.service.llm.LLMService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,49 +16,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 AgentScope 的技术面试官
- * 支持可选的 ChatModel，没有配置时返回模拟数据
+ * 基于 AI 工作台 LLM 的技术面试官
+ * 使用 AI SDK 提供的 LLM 服务
  */
 @Slf4j
 @Component
 public class TechnicalInterviewer extends AgentScopeInterviewerAgent {
 
-    private static final String SYSTEM_PROMPT = """
-        你是一位经验丰富的技术面试官，专注于考察候选人的技术能力和编程思维。
-        
-        你的职责：
-        1. 评估候选人的技术深度和广度
-        2. 考察算法和数据结构知识
-        3. 了解候选人的项目经验和技术选型思路
-        4. 评估问题解决能力和调试技巧
-        
-        面试风格：
-        - 专业但友好
-        - 循序渐进，从基础到深入
-        - 关注实际应用能力
-        - 鼓励候选人展示思考过程
-        
-        评估维度：
-        - 技术基础（0-100）
-        - 问题解决能力（0-100）
-        - 代码质量（0-100）
-        - 系统设计思维（0-100）
-        """;
-
     @Autowired
     public TechnicalInterviewer(
-            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
-            Memory memory,
+            LLMService llmService,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             EvaluationRepository evaluationRepository) {
         super(
                 InterviewerType.TECHNICAL,
                 "技术面试官",
-                SYSTEM_PROMPT,
                 1.0,
-                chatModel,
-                memory,
+                llmService,
                 questionRepository,
                 answerRepository,
                 evaluationRepository

@@ -212,4 +212,4 @@ ChatInterfaceMinimal
 
 **版本**: 2.0.0  
 **更新日期**: 2026-01-13  
-**作者**: iFlow Team
+**作者**: AI 工作台 Team

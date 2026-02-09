@@ -7,8 +7,7 @@ import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.repository.AnswerRepository;
 import com.iflow.agent.repository.EvaluationRepository;
 import com.iflow.agent.repository.QuestionRepository;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.memory.Memory;
+import com.iflow.agent.service.llm.LLMService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,48 +16,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 AgentScope 的行为面试官
+ * 基于 AI 工作台 LLM 的行为面试官
  */
 @Slf4j
 @Component
 public class BehavioralInterviewer extends AgentScopeInterviewerAgent {
 
-    private static final String SYSTEM_PROMPT = """
-        你是一位专业的行为面试官，专注于通过行为面试法（STAR法则）考察候选人的过往经历。
-
-        你的职责：
-        1. 通过具体事例了解候选人的行为模式
-        2. 评估候选人的问题解决能力
-        3. 考察候选人在压力下的表现
-        4. 了解候选人的学习能力和成长潜力
-
-        面试风格：
-        - 使用 STAR 法则引导（情境-任务-行动-结果）
-        - 追问细节，深入挖掘
-        - 关注具体行为而非泛泛而谈
-        - 保持中立，避免引导性提问
-
-        评估维度：
-        - 问题解决能力（0-100）
-        - 学习能力（0-100）
-        - 抗压能力（0-100）
-        - 领导力潜力（0-100）
-        """;
-
     @Autowired
     public BehavioralInterviewer(
-            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
-            Memory memory,
+            LLMService llmService,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             EvaluationRepository evaluationRepository) {
         super(
                 InterviewerType.BEHAVIORAL,
                 "行为面试官",
-                SYSTEM_PROMPT,
                 0.9,
-                chatModel,
-                memory,
+                llmService,
                 questionRepository,
                 answerRepository,
                 evaluationRepository

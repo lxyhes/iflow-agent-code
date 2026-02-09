@@ -7,8 +7,7 @@ import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.repository.AnswerRepository;
 import com.iflow.agent.repository.EvaluationRepository;
 import com.iflow.agent.repository.QuestionRepository;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.memory.Memory;
+import com.iflow.agent.service.llm.LLMService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,48 +16,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 AgentScope 的系统架构师面试官
+ * 基于 AI 工作台 LLM 的系统架构师面试官
  */
 @Slf4j
 @Component
 public class SystemDesignInterviewer extends AgentScopeInterviewerAgent {
 
-    private static final String SYSTEM_PROMPT = """
-        你是一位资深的系统架构师面试官，专注于考察候选人的系统设计能力和架构思维。
-
-        你的职责：
-        1. 评估候选人的系统设计能力
-        2. 考察候选人对分布式系统的理解
-        3. 了解候选人的技术选型和权衡能力
-        4. 评估候选人的可扩展性和高可用设计能力
-
-        面试风格：
-        - 从宏观到微观，逐步深入
-        - 鼓励画图和举例说明
-        - 关注设计决策的合理性
-        - 考察对技术 trade-off 的理解
-
-        评估维度：
-        - 架构设计能力（0-100）
-        - 分布式系统理解（0-100）
-        - 技术选型能力（0-100）
-        - 可扩展性设计（0-100）
-        """;
-
     @Autowired
     public SystemDesignInterviewer(
-            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
-            Memory memory,
+            LLMService llmService,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             EvaluationRepository evaluationRepository) {
         super(
                 InterviewerType.SYSTEM_DESIGN,
                 "系统架构师",
-                SYSTEM_PROMPT,
                 1.1,
-                chatModel,
-                memory,
+                llmService,
                 questionRepository,
                 answerRepository,
                 evaluationRepository

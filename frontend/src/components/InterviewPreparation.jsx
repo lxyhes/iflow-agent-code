@@ -3314,7 +3314,7 @@ ${conversation}
                   面试准备
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  iFlow Agent 项目面试指南
+                  AI 工作台 项目面试指南
                 </p>
               </div>
             </div>

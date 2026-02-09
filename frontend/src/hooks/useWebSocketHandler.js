@@ -43,8 +43,8 @@ export const useWebSocketHandler = (ws, currentSessionId, setChatMessages, setIs
       }
 
       switch (data.type || data.messageType) {
-        case 'iflow-response':
-          console.log('[useWebSocketHandler] Processing iflow-response');
+        case 'ai-workbench-response':
+          console.log('[useWebSocketHandler] Processing ai-workbench-response');
           const messageData = data.data?.message || data.data;
           if (!messageData) {
             console.log('[useWebSocketHandler] No messageData in response');
@@ -89,14 +89,14 @@ export const useWebSocketHandler = (ws, currentSessionId, setChatMessages, setIs
           }
           break;
           
-        case 'iflow-complete':
+        case 'ai-workbench-complete':
           console.log('[useWebSocketHandler] Flow completed');
           setIsLoading(false);
           setCanAbortSession(false);
           setTaskProgressInfo(100, 'completed', '任务完成');
           break;
           
-        case 'iflow-error':
+        case 'ai-workbench-error':
           console.log('[useWebSocketHandler] Flow error:', data.error);
           setIsLoading(false);
           setCanAbortSession(false);

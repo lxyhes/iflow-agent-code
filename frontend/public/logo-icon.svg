@@ -1,0 +1,28 @@
+<svg width="64" height="64" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ai-gradient-icon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="50%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+
+  <!-- 简化版六边形 -->
+  <path
+    d="M256 32L472 156V404L256 528L40 404V156L256 32Z"
+    fill="url(#ai-gradient-icon)"
+  />
+
+  <!-- AI 符号 -->
+  <text
+    x="256"
+    y="280"
+    font-size="160"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+  >
+    AI
+  </text>
+</svg>

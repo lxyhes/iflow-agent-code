@@ -64,11 +64,11 @@ public class AIConfigService {
     public List<Map<String, Object>> getAvailableProviders() {
         List<Map<String, Object>> providers = new ArrayList<>();
         
-        // iFlow
+        // AI 工作台
         providers.add(Map.of(
                 "id", "iflow",
-                "name", "iFlow",
-                "description", "iFlow SDK - 本地大模型服务",
+                "name", "AI 工作台",
+                "description", "AI SDK - 本地大模型服务",
                 "available", iFlowService.isConnected(),
                 "is_default", "iflow".equals(currentProvider.get()),
                 "features", List.of("chat", "stream", "sync")
@@ -156,7 +156,7 @@ public class AIConfigService {
                     } else {
                         return Map.of(
                                 "success", false,
-                                "message", "iFlow 未连接",
+                                "message", "AI 工作台 未连接",
                                 "latency_ms", System.currentTimeMillis() - startTime
                         );
                     }
@@ -258,7 +258,7 @@ public class AIConfigService {
 
     private String getProviderName(String provider) {
         return switch (provider) {
-            case "iflow" -> "iFlow";
+            case "iflow" -> "AI 工作台";
             case "dashscope" -> "阿里云 DashScope";
             case "openai" -> "OpenAI";
             default -> "Unknown";
@@ -267,7 +267,7 @@ public class AIConfigService {
 
     private String getProviderDescription(String provider) {
         return switch (provider) {
-            case "iflow" -> "iFlow SDK - 本地大模型服务";
+            case "iflow" -> "AI SDK - 本地大模型服务";
             case "dashscope" -> "阿里云大模型服务 - 通义千问";
             case "openai" -> "OpenAI GPT 模型";
             default -> "Unknown";

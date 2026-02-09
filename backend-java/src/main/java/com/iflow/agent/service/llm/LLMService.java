@@ -72,20 +72,37 @@ public class LLMService {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .retrieve()
-                .bodyToMono(JsonNode.class)
-                .map(response -> {
-                    JsonNode choices = response.get("choices");
-                    if (choices != null && choices.isArray() && choices.size() > 0) {
-                        JsonNode message = choices.get(0).get("message");
-                        if (message != null && message.has("content")) {
-                            return message.get("content").asText();
+                .bodyToMono(String.class)
+                .flatMap(responseBody -> {
+                    log.debug("LLM raw response: {}", responseBody);
+                    try {
+                        JsonNode response = objectMapper.readTree(responseBody);
+                        JsonNode choices = response.get("choices");
+                        if (choices != null && choices.isArray() && choices.size() > 0) {
+                            JsonNode message = choices.get(0).get("message");
+                            if (message != null && message.has("content")) {
+                                return Mono.just(message.get("content").asText());
+                            }
                         }
+                        log.warn("LLM response missing expected fields: {}", responseBody);
+                        return Mono.just("");
+                    } catch (Exception e) {
+                        log.error("Failed to parse LLM response: {}", responseBody, e);
+                        return Mono.just("");
                     }
-                    return "";
                 })
                 .onErrorResume(e -> {
-                    log.error("LLM request failed: {}", e.getMessage());
-                    return Mono.just("Error: " + e.getMessage());
+                    // 只在真正的错误时返回错误消息
+                    // 如果是 JSON 解析错误，记录警告但不返回错误
+                    String errorMsg = e.getMessage();
+                    if (errorMsg != null && errorMsg.contains("200 OK")) {
+                        log.warn("LLM response parsing issue: {}", errorMsg);
+                        // 尝试返回原始响应
+                        return Mono.just("");
+                    } else {
+                        log.error("LLM request failed: {}", errorMsg, e);
+                        return Mono.just("Error: " + errorMsg);
+                    }
                 });
     }
 

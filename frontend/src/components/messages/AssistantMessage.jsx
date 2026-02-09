@@ -5,7 +5,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime, formatTime } from '../../utils/timeFormat';
-import IFlowLogo from '../IFlowLogo.jsx';
+import AILogo from '../AILogo.jsx';
 import CursorLogo from '../CursorLogo.jsx';
 import MarkdownRenderer from '../markdown/MarkdownRenderer';
 import ThinkingBlock from '../markdown/ThinkingBlock';
@@ -173,7 +173,7 @@ const AssistantMessage = ({
             ) : message.type === 'plan' ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
             ) : (
-              provider === 'cursor' ? <CursorLogo className="w-5 h-5" /> : <IFlowLogo className="w-5 h-5" />
+              provider === 'cursor' ? <CursorLogo className="w-5 h-5" /> : <AILogo className="w-5 h-5" />
             )}
           </div>
         )}
@@ -184,7 +184,7 @@ const AssistantMessage = ({
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool Usage' : message.type === 'plan' ? 'Plan' : (provider === 'cursor' ? 'Cursor' : 'IFlow')}
+              {message.type === 'error' ? 'Error' : message.type === 'tool' ? 'Tool Usage' : message.type === 'plan' ? 'Plan' : (provider === 'cursor' ? 'Cursor' : 'AI 工作台')}
             </span>
             <span 
               className="text-xs text-gray-400 dark:text-gray-500 font-medium cursor-help"

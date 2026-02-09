@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 
 import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, FileText, Key } from 'lucide-react';
 import { cn } from '../lib/utils';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 import CursorLogo from './CursorLogo.jsx';
 import TaskIndicator from './TaskIndicator';
 import ProjectCreationWizard from './ProjectCreationWizard';
@@ -601,11 +601,11 @@ function Sidebar({
                   <MessageSquare className="w-4 h-4 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-foreground">IFlow UI</h1>
+                  <h1 className="text-lg font-bold text-foreground">AI 工作台</h1>
                   <div className="flex items-center gap-1.5">
                     <div className={`w-1.5 h-1.5 rounded-full ${iflowStatus.healthy ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
                     <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-tight">
-                      {iflowStatus.healthy ? `CLI v${iflowStatus.version}` : 'CLI Disconnected'}
+                      {iflowStatus.healthy ? `CLI v${iflowStatus.version}` : 'CLI 未连接'}
                     </p>
                   </div>
                 </div>
@@ -616,11 +616,11 @@ function Sidebar({
                   <MessageSquare className="w-4 h-4 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-foreground">IFlow UI</h1>
+                  <h1 className="text-lg font-bold text-foreground">AI 工作台</h1>
                   <div className="flex items-center gap-1.5">
                     <div className={`w-1.5 h-1.5 rounded-full ${iflowStatus.healthy ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-red-500 animate-pulse'}`} />
                     <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-tight">
-                      {iflowStatus.healthy ? `CLI v${iflowStatus.version}` : 'CLI Disconnected'}
+                      {iflowStatus.healthy ? `CLI v${iflowStatus.version}` : 'CLI 未连接'}
                     </p>
                   </div>
                 </div>
@@ -662,7 +662,7 @@ function Sidebar({
                     <MessageSquare className="w-4 h-4 text-primary-foreground" />
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-foreground">IFlow UI</h1>
+                    <h1 className="text-lg font-semibold text-foreground">AI 工作台</h1>
                     <p className="text-sm text-muted-foreground">Projects</p>
                   </div>
                 </a>
@@ -672,7 +672,7 @@ function Sidebar({
                     <MessageSquare className="w-4 h-4 text-primary-foreground" />
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-foreground">IFlow UI</h1>
+                    <h1 className="text-lg font-semibold text-foreground">AI 工作台</h1>
                     <p className="text-sm text-muted-foreground">Projects</p>
                   </div>
                 </div>
@@ -770,7 +770,7 @@ function Sidebar({
                 </div>
                 <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
                 <p className="text-sm text-muted-foreground">
-                  Fetching your IFlow projects and sessions
+                  Fetching your AI 工作台 projects and sessions
                 </p>
               </div>
             ) : projects.length === 0 ? (
@@ -780,7 +780,7 @@ function Sidebar({
                 </div>
                 <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Run IFlow CLI in a project directory to get started
+                  Run AI CLI in a project directory to get started
                 </p>
                 <Button
                   variant="default"
@@ -1294,7 +1294,7 @@ function Sidebar({
                                         {isCursorSession ? (
                                           <CursorLogo className="w-3 h-3" />
                                         ) : (
-                                          <IFlowLogo className="w-3 h-3" />
+                                          <AILogo className="w-3 h-3" />
                                         )}
                                       </div>
                                       <div className="min-w-0 flex-1">
@@ -1316,7 +1316,7 @@ function Sidebar({
                                             {isCursorSession ? (
                                               <CursorLogo className="w-3 h-3" />
                                             ) : (
-                                              <IFlowLogo className="w-3 h-3" />
+                                              <AILogo className="w-3 h-3" />
                                             )}
                                           </span>
                                         </div>
@@ -1353,7 +1353,7 @@ function Sidebar({
                                       {isCursorSession ? (
                                         <CursorLogo className="w-3 h-3 mt-0.5 flex-shrink-0" />
                                       ) : (
-                                        <IFlowLogo className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                                        <AILogo className="w-3 h-3 mt-0.5 flex-shrink-0" />
                                       )}
                                       <div className="min-w-0 flex-1">
                                         <div className="text-xs font-medium truncate text-foreground">
@@ -1374,7 +1374,7 @@ function Sidebar({
                                             {isCursorSession ? (
                                               <CursorLogo className="w-3 h-3" />
                                             ) : (
-                                              <IFlowLogo className="w-3 h-3" />
+                                              <AILogo className="w-3 h-3" />
                                             )}
                                           </span>
                                         </div>

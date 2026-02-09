@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 
-const CACHE_KEY = 'iflow_agent_version_check';
+const CACHE_KEY = 'ai_workbench_version_check';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
 export const useVersionCheck = (owner, repo) => {
@@ -27,8 +27,8 @@ export const useVersionCheck = (owner, repo) => {
                setUpdateAvailable(version !== latest);
                
                let title = data.name || data.tag_name;
-               // Rebrand: Replace "Claude Code UI" with "IFlow Agent"
-               title = title.replace(/Claude Code UI/g, 'IFlow Agent');
+               // Rebrand: Replace "Claude Code UI" with "AI 工作台"
+               title = title.replace(/Claude Code UI/g, 'AI 工作台');
 
                setReleaseInfo({
                  title: title,

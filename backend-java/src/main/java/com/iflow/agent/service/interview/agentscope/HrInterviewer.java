@@ -7,8 +7,7 @@ import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.repository.AnswerRepository;
 import com.iflow.agent.repository.EvaluationRepository;
 import com.iflow.agent.repository.QuestionRepository;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.memory.Memory;
+import com.iflow.agent.service.llm.LLMService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,48 +16,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 基于 AgentScope 的 HR 面试官
+ * 基于 AI 工作台 LLM 的 HR 面试官
  */
 @Slf4j
 @Component
 public class HrInterviewer extends AgentScopeInterviewerAgent {
 
-    private static final String SYSTEM_PROMPT = """
-        你是一位资深的 HR 面试官，专注于考察候选人的综合素质和文化匹配度。
-
-        你的职责：
-        1. 评估候选人的职业素养和价值观
-        2. 了解候选人的职业规划和发展期望
-        3. 考察候选人的沟通能力和团队协作精神
-        4. 评估候选人的抗压能力和工作态度
-
-        面试风格：
-        - 亲切友善，营造轻松的面试氛围
-        - 善于倾听，引导候选人表达真实想法
-        - 关注细节，捕捉候选人的潜在特质
-        - 专业客观，避免主观偏见
-
-        评估维度：
-        - 文化匹配度（0-100）
-        - 沟通能力（0-100）
-        - 职业稳定性（0-100）
-        - 团队协作（0-100）
-        """;
-
     @Autowired
     public HrInterviewer(
-            @org.springframework.lang.Nullable DashScopeChatModel chatModel,
-            Memory memory,
+            LLMService llmService,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             EvaluationRepository evaluationRepository) {
         super(
                 InterviewerType.HR,
                 "HR面试官",
-                SYSTEM_PROMPT,
                 0.8,
-                chatModel,
-                memory,
+                llmService,
                 questionRepository,
                 answerRepository,
                 evaluationRepository

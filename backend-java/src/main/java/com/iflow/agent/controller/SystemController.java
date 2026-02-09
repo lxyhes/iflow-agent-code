@@ -62,7 +62,7 @@ public class SystemController {
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "data", Map.of(
-                        "name", "IFlow Agent Backend",
+                        "name", "AI 工作台后端",
                         "version", "1.0.0",
                         "java_version", System.getProperty("java.version"),
                         "os_name", System.getProperty("os.name"),

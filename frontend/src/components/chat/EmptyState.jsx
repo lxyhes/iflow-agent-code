@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import IFlowLogo from '../IFlowLogo.jsx';
+import AILogo from '../AILogo.jsx';
 import CursorLogo from '../CursorLogo.jsx';
 import WorkflowTemplateCards from '../workflow/WorkflowTemplateCards';
 
@@ -17,11 +17,11 @@ const EmptyState = ({ provider, selectedProject }) => {
             {provider === 'cursor' ? (
               <CursorLogo className="h-12 w-12 text-blue-600" />
             ) : (
-              <IFlowLogo className="h-12 w-12 text-blue-600" />
+              <AILogo className="h-12 w-12 text-blue-600" />
             )}
           </div>
           <h2 className="text-2xl font-bold mb-2">
-            {provider === 'cursor' ? 'Cursor Agent' : 'IFlow Agent'}
+            {provider === 'cursor' ? 'Cursor Agent' : 'AI 工作台'}
           </h2>
           <p className="text-gray-500">选择一个模板，或直接开始对话</p>
         </div>

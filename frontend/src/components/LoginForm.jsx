@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 import { CheckCircle2, Loader2, ExternalLink, ShieldCheck } from 'lucide-react';
 
 const LoginForm = () => {
@@ -39,7 +39,7 @@ const LoginForm = () => {
     setStatus('connecting');
     setPolling(true);
 
-    // Open iFlow platform for auth
+    // Open AI 工作台 platform for auth
     window.open('https://platform.iflow.cn/', '_blank');
 
     // Fallback: If after 30 seconds still not connected, show a hint
@@ -61,16 +61,16 @@ const LoginForm = () => {
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-10 border border-gray-100 dark:border-gray-700 text-center">
           <div className="mx-auto h-20 w-20 flex items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-500/30 mb-8">
-            <IFlowLogo className="h-12 w-12 text-white" />
+            <AILogo className="h-12 w-12 text-white" />
           </div>
 
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            {status === 'success' ? 'Ready to Code' : 'Initialize IFlow'}
+            {status === 'success' ? 'Ready to Code' : 'Initialize AI 工作台'}
           </h2>
           <p className="text-gray-500 dark:text-gray-400 mb-10">
             {status === 'connecting' ? 'Please complete login in the new window...' :
               status === 'success' ? 'Environment verified and synced!' :
-                'Connect your local machine to the IFlow platform to enable Agent capabilities.'}
+                'Connect your local machine to the AI 工作台 platform to enable Agent capabilities.'}
           </p>
 
           {status === 'idle' && (
@@ -80,7 +80,7 @@ const LoginForm = () => {
                 className="w-full flex justify-center items-center gap-3 py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98]"
               >
                 <ExternalLink className="w-5 h-5" />
-                Connect with IFlow
+                Connect with AI 工作台
               </button>
 
               <button
@@ -102,7 +102,7 @@ const LoginForm = () => {
                 </div>
               </div>
               <p className="text-sm text-blue-600 font-bold animate-pulse">Detecting Local Engine...</p>
-              <p className="text-xs text-gray-400 mt-2">Make sure IFlow CLI is installed.</p>
+              <p className="text-xs text-gray-400 mt-2">Make sure AI CLI is installed.</p>
             </div>
           )}
 

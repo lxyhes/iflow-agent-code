@@ -8,7 +8,7 @@ import MarkdownRenderer from './markdown/MarkdownRenderer';
 import { formatUsageLimitText } from '../utils/textProcessors';
 
 const UsageLimitBanner = ({ text }) => {
-  if (!text || !text.includes('IFlow AI usage limit reached')) {
+  if (!text || !text.includes('AI 工作台 AI usage limit reached')) {
     return null;
   }
 

@@ -4,8 +4,8 @@ import lombok.Data;
 import org.springframework.stereotype.Component;
 
 /**
- * iFlow 后端配置
- * 用于控制使用 SDK 还是 subprocess 方式调用 iFlow
+ * AI 工作台后端配置
+ * 用于控制使用 SDK 还是 subprocess 方式调用 AI 工作台
  */
 @Data
 @Component

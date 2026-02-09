@@ -57,11 +57,11 @@ export function unescapeWithMathProtection(text) {
   return processedText;
 }
 
-// Format "IFlow AI usage limit reached|<epoch>" into a local time string
+// Format "AI 工作台 AI usage limit reached|<epoch>" into a local time string
 export function formatUsageLimitText(text) {
   try {
     if (typeof text !== 'string') return text;
-    return text.replace(/IFlow AI usage limit reached\|(\d{10,13})/g, (match, ts) => {
+    return text.replace(/AI 工作台 AI usage limit reached\|(\d{10,13})/g, (match, ts) => {
       let timestampMs = parseInt(ts, 10);
       if (!Number.isFinite(timestampMs)) return match;
       if (timestampMs < 1e12) timestampMs *= 1000; // seconds → ms
@@ -93,7 +93,7 @@ export function formatUsageLimitText(text) {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const dateReadable = `${reset.getDate()} ${months[reset.getMonth()]} ${reset.getFullYear()}`;
 
-      return `IFlow usage limit reached. Your limit will reset at **${timeStr} ${tzHuman}** - ${dateReadable}`;
+      return `AI 工作台 usage limit reached. Your limit will reset at **${timeStr} ${tzHuman}** - ${dateReadable}`;
     });
   } catch {
     return text;

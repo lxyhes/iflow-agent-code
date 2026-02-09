@@ -52,10 +52,10 @@ export function exportToIFlowCommand(workflow, projectName) {
 }
 
 /**
- * 将工作流转换为 iFlow Agent 格式
+ * 将工作流转换为 AI 工作台 格式
  * @param {Object} workflow - 工作流对象
  * @param {string} projectName - 项目名称
- * @returns {Object} iFlow Agent 配置
+ * @returns {Object} AI 工作台 配置
  */
 export function exportToIFlowAgent(workflow, projectName) {
   const { nodes, edges, name } = workflow;
@@ -63,7 +63,7 @@ export function exportToIFlowAgent(workflow, projectName) {
   // 构建步骤序列
   const steps = buildStepsSequence(nodes, edges);
 
-  // 构建 iFlow Agent 配置
+  // 构建 AI 工作台 配置
   const agentConfig = {
     name: name,
     description: `Generated from workflow: ${name}`,

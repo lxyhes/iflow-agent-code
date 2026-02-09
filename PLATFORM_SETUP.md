@@ -1,6 +1,6 @@
 # 跨平台启动指南
 
-本文档说明如何在 Windows、macOS 和 Linux 上启动 iFlow Agent 项目。
+本文档说明如何在 Windows、macOS 和 Linux 上启动 AI 工作台 项目。
 
 ## 目录
 
@@ -20,7 +20,7 @@
 
 ### 可选软件
 
-- **iFlow CLI**: 0.2.24+（用于 AI 功能）
+- **AI CLI**: 0.2.24+（用于 AI 功能）
 - **Claude Code CLI**: 可选
 - **Cursor CLI**: 可选
 
@@ -69,7 +69,7 @@ chmod +x start.sh stop_all.sh
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| iFlow CLI | 8090 | AI 命令行接口 |
+| AI CLI | 8090 | AI 命令行接口 |
 | Python 后端 | 8000 | FastAPI 后端服务 |
 | Node.js 服务器 | 3001 | 认证/设置服务 |
 | 前端 | 5173 | React 开发服务器 |
@@ -88,7 +88,7 @@ chmod +x start.sh stop_all.sh
 - 后端日志: `%TEMP%\backend.log`
 - 前端日志: `%TEMP%\frontend.log`
 - Node.js 服务器日志: `%TEMP%\node_server.log`
-- iFlow CLI 日志: `%TEMP%\iflow.log`
+- AI CLI 日志: `%TEMP%\iflow.log`
 
 使用记事本或其他文本编辑器查看日志文件。
 
@@ -106,13 +106,13 @@ tail -f /tmp/frontend.log
 # 查看 Node.js 服务器日志
 tail -f /tmp/node_server.log
 
-# 查看 iFlow CLI 日志
+# 查看 AI CLI 日志
 tail -f /tmp/iflow.log
 ```
 
 ## 手动启动（高级用户）
 
-### 启动 iFlow CLI
+### 启动 AI CLI
 
 ```bash
 iflow --experimental-acp --port 8090

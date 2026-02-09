@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * iFlow 后端配置控制器
+ * AI 工作台后端配置控制器
  * 用于动态切换 SDK 和 Subprocess 模式
  */
 @Slf4j
@@ -61,7 +61,7 @@ public class IFlowBackendController {
 
     /**
      * 切换模型（SDK 模式下）
-     * 需要重启 iFlow CLI 进程
+     * 需要重启 AI 工作台 CLI 进程
      */
     @PostMapping("/model")
     public ResponseEntity<Map<String, Object>> switchModel(@RequestBody ModelSwitchRequest request) {
@@ -81,15 +81,15 @@ public class IFlowBackendController {
                 ));
             }
 
-            log.info("Switching iFlow model to: {}", model);
+            log.info("Switching AI 工作台 model to: {}", model);
 
-            // 重启 iFlow CLI 进程
+            // 重启 AI 工作台 CLI 进程
             processManager.restartIFlowProcess(model);
 
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "model", model,
-                "message", "iFlow CLI 进程已重启，模型已切换为: " + model + "。"
+                "message", "AI 工作台 CLI 进程已重启，模型已切换为: " + model + "。"
             ));
         } catch (Exception e) {
             log.error("Failed to switch model", e);
@@ -101,7 +101,7 @@ public class IFlowBackendController {
     }
 
     /**
-     * 检查 iFlow 进程状态
+     * 检查 AI 工作台进程状态
      */
     @GetMapping("/process/status")
     public ResponseEntity<Map<String, Object>> getProcessStatus() {
@@ -110,7 +110,7 @@ public class IFlowBackendController {
             return ResponseEntity.ok(Map.of(
                 "running", running,
                 "mode", backendConfig.getBackendMode(),
-                "message", running ? "iFlow 进程运行中" : "iFlow 进程未运行"
+                "message", running ? "AI 工作台进程运行中" : "AI 工作台进程未运行"
             ));
         } catch (Exception e) {
             log.error("Failed to check process status", e);

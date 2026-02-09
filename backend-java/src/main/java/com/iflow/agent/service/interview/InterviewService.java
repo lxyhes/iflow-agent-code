@@ -68,6 +68,11 @@ public interface InterviewService {
      */
     List<Map<String, Object>> listSessions(String candidateId, String status, int limit);
 
+    /**
+     * 删除面试会话
+     */
+    boolean deleteSession(String sessionId);
+
     // ========== WebSocket 方法 ==========
 
     /**

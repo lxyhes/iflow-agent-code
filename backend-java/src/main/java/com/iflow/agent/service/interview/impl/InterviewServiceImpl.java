@@ -7,6 +7,7 @@ import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
 import com.iflow.agent.dto.interview.*;
 import com.iflow.agent.service.interview.InterviewService;
 import com.iflow.agent.service.interview.agentscope.InterviewCoordinator;
+import com.iflow.agent.service.interview.agentscope.InterviewContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,9 +27,17 @@ public class InterviewServiceImpl implements InterviewService {
 
     private final InterviewSessionRepository sessionRepository;
     private final InterviewCoordinator interviewCoordinator;
+    private final org.springframework.context.ApplicationContext applicationContext;
 
     // 内存中缓存活跃的会话
     private final Map<String, InterviewSession> activeSessions = new ConcurrentHashMap<>();
+
+    /**
+     * 获取 InterviewWebSocketHandler（延迟加载以避免循环依赖）
+     */
+    private com.iflow.agent.handler.InterviewWebSocketHandler getWebSocketHandler() {
+        return applicationContext.getBean(com.iflow.agent.handler.InterviewWebSocketHandler.class);
+    }
 
     @Override
     @Transactional
@@ -372,45 +381,265 @@ public class InterviewServiceImpl implements InterviewService {
         );
     }
 
+    @Override
+    @Transactional
+    public boolean deleteSession(String sessionId) {
+        log.info("Deleting interview session: {}", sessionId);
+        
+        try {
+            // 从内存缓存中移除
+            activeSessions.remove(sessionId);
+            
+            // 从数据库中删除
+            if (sessionRepository.existsById(sessionId)) {
+                sessionRepository.deleteById(sessionId);
+                log.info("Successfully deleted session: {}", sessionId);
+                return true;
+            } else {
+                log.warn("Session not found for deletion: {}", sessionId);
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Failed to delete session: {}", sessionId, e);
+            return false;
+        }
+    }
+
     // ========== WebSocket 方法实现 ==========
 
     @Override
     public void handleWebSocketConnected(String sessionId) {
         log.info("WebSocket connected: sessionId={}", sessionId);
+        // 获取会话状态并通知
+        try {
+            InterviewSession session = getSession(sessionId).orElse(null);
+            if (session != null) {
+                // 如果会话已存在，恢复其状态
+                InterviewContext context = interviewCoordinator.getContext(sessionId);
+                if (context != null) {
+                    log.info("Restored interview context for session: {}", sessionId);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to restore session context: {}", sessionId, e);
+        }
     }
 
     @Override
     public void handleWebSocketDisconnected(String sessionId) {
         log.info("WebSocket disconnected: sessionId={}", sessionId);
+        // 保持会话状态，不自动清理，允许重新连接
     }
 
     @Override
     public void startInterviewWebSocket(String sessionId, boolean demoMode, int demoDelay) {
         log.info("WebSocket start interview: sessionId={}, demoMode={}", sessionId, demoMode);
-        // 实现 WebSocket 开始面试逻辑
+
+        try {
+            // 确保会话存在
+            InterviewSession session = getSession(sessionId)
+                    .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+
+            // 如果会话还未开始，先启动
+            if (session.getStatus() == InterviewStatus.PENDING) {
+                startInterview(sessionId);
+            }
+
+            // 生成第一个问题
+            String currentAgentType = interviewCoordinator.getCurrentAgentType(sessionId);
+            if (currentAgentType == null) {
+                currentAgentType = "technical"; // 默认从技术面试官开始
+            }
+
+            String question = interviewCoordinator.generateQuestion(sessionId);
+            
+            // 通过 WebSocket 发送问题
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendMessage(sessionId, Map.of(
+                        "type", "question",
+                        "agent_type", currentAgentType,
+                        "content", question,
+                        "round", session.getCurrentRound()
+                ));
+            }
+
+            log.info("Interview started and first question sent: sessionId={}", sessionId);
+
+        } catch (Exception e) {
+            log.error("Failed to start interview via WebSocket: sessionId={}", sessionId, e);
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendError(sessionId, "启动面试失败: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void submitAnswerWebSocket(String sessionId, String answer, Integer duration) {
         log.info("WebSocket submit answer: sessionId={}, length={}", sessionId, answer.length());
-        // 实现 WebSocket 提交回答逻辑
+
+        try {
+            InterviewSession session = getSession(sessionId)
+                    .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+
+            if (session.getStatus() != InterviewStatus.IN_PROGRESS) {
+                com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+                if (handler != null) {
+                    handler.sendError(sessionId, "面试未在进行中");
+                }
+                return;
+            }
+
+            // 获取当前问题 ID（从上下文中）
+            InterviewContext context = interviewCoordinator.getContext(sessionId);
+            String currentQuestionId = context != null ? context.getCurrentQuestionId() : null;
+
+            if (currentQuestionId == null) {
+                log.warn("No current question found for session: {}", sessionId);
+                return;
+            }
+
+            // 提交回答并获取评估
+            Map<String, Object> result = interviewCoordinator.submitAnswer(
+                    sessionId,
+                    currentQuestionId,
+                    answer
+            );
+
+            // 发送评估结果
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendMessage(sessionId, Map.of(
+                        "type", "evaluation",
+                        "data", result
+                ));
+            }
+
+            // 检查是否需要切换到下一个面试官
+            Boolean shouldSwitch = (Boolean) result.get("shouldSwitchAgent");
+            if (shouldSwitch != null && shouldSwitch) {
+                String nextAgent = interviewCoordinator.switchToNextAgent(sessionId);
+                
+                if (nextAgent == null) {
+                    // 面试结束
+                    completeInterviewWebSocket(sessionId);
+                } else {
+                    // 生成下一个问题
+                    String nextQuestion = interviewCoordinator.generateQuestion(sessionId);
+                    
+                    if (handler != null) {
+                        handler.sendMessage(sessionId, Map.of(
+                                "type", "agent_switched",
+                                "current_agent", nextAgent,
+                                "next_question", nextQuestion
+                        ));
+                    }
+                }
+            } else {
+                // 检查是否有追问
+                Object followUp = result.get("followUp");
+                if (followUp != null && followUp instanceof Map) {
+                    Map<String, Object> followUpQuestion = (Map<String, Object>) followUp;
+                    if (handler != null) {
+                        handler.sendMessage(sessionId, Map.of(
+                                "type", "follow_up_question",
+                                "content", followUpQuestion.get("content")
+                        ));
+                    }
+                }
+            }
+
+            log.info("Answer processed successfully: sessionId={}", sessionId);
+
+        } catch (Exception e) {
+            log.error("Failed to submit answer via WebSocket: sessionId={}", sessionId, e);
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendError(sessionId, "提交回答失败: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void pauseInterviewWebSocket(String sessionId) {
         log.info("WebSocket pause interview: sessionId={}", sessionId);
-        // 实现 WebSocket 暂停面试逻辑
+
+        try {
+            InterviewResponse response = pauseInterview(sessionId);
+            
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendMessage(sessionId, Map.of(
+                        "type", "paused",
+                        "status", response.getStatus(),
+                        "message", response.getMessage()
+                ));
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to pause interview via WebSocket: sessionId={}", sessionId, e);
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendError(sessionId, "暂停面试失败: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void resumeInterviewWebSocket(String sessionId) {
         log.info("WebSocket resume interview: sessionId={}", sessionId);
-        // 实现 WebSocket 恢复面试逻辑
+
+        try {
+            InterviewResponse response = resumeInterview(sessionId);
+            
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendMessage(sessionId, Map.of(
+                        "type", "resumed",
+                        "status", response.getStatus(),
+                        "message", response.getMessage()
+                ));
+            }
+
+        } catch (Exception e) {
+            log.error("Failed to resume interview via WebSocket: sessionId={}", sessionId, e);
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendError(sessionId, "恢复面试失败: " + e.getMessage());
+            }
+        }
     }
 
     @Override
     public void completeInterviewWebSocket(String sessionId) {
         log.info("WebSocket complete interview: sessionId={}", sessionId);
-        // 实现 WebSocket 完成面试逻辑
+
+        try {
+            // 生成面试报告
+            Map<String, Object> report = interviewCoordinator.generateReport(sessionId);
+            
+            // 完成面试会话
+            InterviewResponse response = completeInterview(sessionId);
+            
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendMessage(sessionId, Map.of(
+                        "type", "completed",
+                        "status", response.getStatus(),
+                        "message", response.getMessage(),
+                        "report", report
+                ));
+            }
+
+            log.info("Interview completed via WebSocket: sessionId={}", sessionId);
+
+        } catch (Exception e) {
+            log.error("Failed to complete interview via WebSocket: sessionId={}", sessionId, e);
+            com.iflow.agent.handler.InterviewWebSocketHandler handler = getWebSocketHandler();
+            if (handler != null) {
+                handler.sendError(sessionId, "完成面试失败: " + e.getMessage());
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Check, User, Mail, GitBranch, Loader2 } from 'lucide-react';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 import { authenticatedFetch } from '../utils/api';
 
 const Onboarding = ({ onComplete }) => {
@@ -12,7 +12,7 @@ const Onboarding = ({ onComplete }) => {
 
   const steps = [
     { title: 'Git Identity', description: 'Configure commit info', icon: User },
-    { title: 'IFlow Agent', description: 'Engine configuration', icon: () => <IFlowLogo size={24} /> }
+    { title: 'AI 工作台', description: 'Engine configuration', icon: () => <AILogo size={24} /> }
   ];
 
   const handleNext = async () => {
@@ -90,10 +90,10 @@ const Onboarding = ({ onComplete }) => {
           ) : (
             <div className="space-y-6 text-center animate-in fade-in slide-in-from-right-4 duration-500">
               <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                <IFlowLogo size={40} />
+                <AILogo size={40} />
               </div>
-              <h2 className="text-2xl font-bold">IFlow Agent Ready</h2>
-              <p className="text-gray-500">Your local IFlow engine is connected and ready to code.</p>
+              <h2 className="text-2xl font-bold">AI 工作台 Ready</h2>
+              <p className="text-gray-500">Your local AI 工作台 engine is connected and ready to code.</p>
               <div className="p-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg text-sm border border-green-200 dark:border-green-800">
                 Connection established successfully!
               </div>

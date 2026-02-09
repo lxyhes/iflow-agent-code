@@ -65,9 +65,9 @@
     ```
 
 ## 4. 技术栈
-*   **Backend**: Python, FastAPI, LLM Service (IFlowProvider)
+*   **Backend**: Python, FastAPI, LLM Service (AI 工作台Provider)
 *   **Frontend**: React, Tailwind CSS, Lucide Icons
-*   **AI**: IFlow SDK (Mocked or Real)
+*   **AI**: AI SDK (Mocked or Real)
 
 ## 5. 验收标准对应实现
 1.  **需求匹配准确率**: 通过 LLM 的语义理解能力保证，优于简单的关键词匹配。

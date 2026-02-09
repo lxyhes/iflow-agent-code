@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 
 const models = [
   { id: 'GLM-4.7', label: 'GLM-4.7 (推荐)', icon: '✨' },
-  { id: 'iFlow-ROME-30BA3B', label: 'iFlow-ROME-30BA3B (预览版)', icon: '🔬' },
+  { id: 'AI 工作台-ROME-30BA3B', label: 'AI 工作台-ROME-30BA3B (预览版)', icon: '🔬' },
   { id: 'DeepSeek-V3.2', label: 'DeepSeek-V3.2', icon: '🐋' },
   { id: 'Qwen3-Coder-Plus', label: 'Qwen3-Coder-Plus', icon: '🤖' },
   { id: 'Kimi-K2-Thinking', label: 'Kimi-K2-Thinking', icon: '🧠' },
@@ -84,7 +84,7 @@ const IFlowModelSelector = () => {
     setCurrentModel(modelId);
     localStorage.setItem('iflow-model', modelId);
     // Dispatch custom event so ChatInterface can update immediately
-    window.dispatchEvent(new CustomEvent('iflow-model-changed', { detail: { model: modelId } }));
+    window.dispatchEvent(new CustomEvent('ai-model-changed', { detail: { model: modelId } }));
     setShowDropdown(false);
     
     // Check backend mode first
@@ -101,7 +101,7 @@ const IFlowModelSelector = () => {
 
     // Notify backend to switch model
     if (needRestart) {
-      // SDK 模式：需要重启 iFlow 进程
+      // SDK 模式：需要重启 AI 工作台 进程
       fetch('/api/iflow/backend/model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ const IFlowModelSelector = () => {
       })
       .then(response => response.json())
       .then(data => {
-        console.log(`[Model] Switched to ${modelId} (with iFlow process restart)`);
+        console.log(`[Model] Switched to ${modelId} (with AI 工作台 process restart)`);
         console.log('[Model]', data.message);
       })
       .catch(error => {
@@ -139,7 +139,7 @@ const IFlowModelSelector = () => {
         ref={buttonRef}
         onClick={() => setShowDropdown(!showDropdown)}
         className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-colors shadow-sm"
-        title="Select IFlow Model"
+        title="Select AI 工作台 Model"
       >
         <span role="img" aria-label="icon">{currentModelInfo.icon}</span>
         <span className="hidden sm:inline font-bold">{currentModelInfo.label}</span>

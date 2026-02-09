@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * iFlow SDK 配置类
- * 自动管理 iFlow 进程，无需手动配置
+ * AI SDK 配置类
+ * 自动管理 AI 工作台进程，无需手动配置
  */
 @Slf4j
 @Configuration
@@ -31,7 +31,7 @@ public class IFlowConfig {
     private String permissionMode;
 
     /**
-     * 配置 iFlow 客户端选项
+     * 配置 AI 工作台客户端选项
      */
     @Bean
     public IFlowOptions iFlowOptions() {
@@ -46,7 +46,7 @@ public class IFlowConfig {
     }
 
     /**
-     * 创建 iFlow 客户端
+     * 创建 AI 工作台客户端
      * 注意：客户端需要手动管理生命周期（connect 和 close）
      */
     @Bean

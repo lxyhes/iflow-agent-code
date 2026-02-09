@@ -54,6 +54,13 @@
             <groupId>org.jetbrains.pty4j</groupId>
             <artifactId>pty4j</artifactId>
             <version>0.12.25</version>
+            <exclusions>
+                <!-- purejavacomm is Windows-only and not in Maven Central -->
+                <exclusion>
+                    <groupId>org.jetbrains.pty4j</groupId>
+                    <artifactId>purejavacomm</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         
         <!-- JNA (Required for Pty4J) -->
@@ -72,6 +79,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Dotenv - 自动加载 .env 文件 -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
         </dependency>
 
         <dependency>

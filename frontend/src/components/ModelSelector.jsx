@@ -34,8 +34,8 @@ const ModelSelector = ({
       fallbackIcon: '✨'
     },
     { 
-      id: 'iFlow-ROME-30BA3B', 
-      name: 'iFlow-ROME-30BA3B', 
+      id: 'AI-Model-30BA3B', 
+      name: 'AI-Model-30BA3B', 
       description: '预览版', 
       icon: '/icons/iflow.svg',
       fallbackIcon: '🔬'

@@ -8,20 +8,19 @@ import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.repository.AnswerRepository;
 import com.iflow.agent.repository.EvaluationRepository;
 import com.iflow.agent.repository.QuestionRepository;
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.memory.Memory;
-import io.agentscope.core.message.Msg;
+import com.iflow.agent.service.llm.LLMService;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
 /**
- * 基于 AgentScope 的面试官智能体基类
- * 支持可选的 ChatModel，没有配置时返回模拟数据
+ * 基于 AI 工作台 LLM 的面试官智能体基类
+ * 使用 AI SDK 提供的 LLM 服务，无需 AgentScope DashScope
  */
 @Slf4j
 public abstract class AgentScopeInterviewerAgent {
@@ -38,8 +37,7 @@ public abstract class AgentScopeInterviewerAgent {
     @Getter
     protected InterviewPhase currentPhase;
 
-    protected final ReActAgent agent;
-    protected final Memory memory;
+    protected final LLMService llmService;
     protected final QuestionRepository questionRepository;
     protected final AnswerRepository answerRepository;
     protected final EvaluationRepository evaluationRepository;
@@ -47,16 +45,14 @@ public abstract class AgentScopeInterviewerAgent {
     // 会话级别的状态管理
     protected final Map<String, InterviewSessionState> sessionStates;
     
-    // 是否启用了 AI（有 ChatModel）
+    // 是否启用了 AI
     protected final boolean aiEnabled;
 
     public AgentScopeInterviewerAgent(
             InterviewerType type,
             String name,
-            String systemPrompt,
             double weight,
-            DashScopeChatModel chatModel,
-            Memory memory,
+            LLMService llmService,
             QuestionRepository questionRepository,
             AnswerRepository answerRepository,
             EvaluationRepository evaluationRepository) {
@@ -64,25 +60,20 @@ public abstract class AgentScopeInterviewerAgent {
         this.type = type;
         this.name = name;
         this.weight = weight;
-        this.memory = memory;
+        this.llmService = llmService;
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.evaluationRepository = evaluationRepository;
         this.currentPhase = InterviewPhase.WARM_UP;
         this.sessionStates = new ConcurrentHashMap<>();
-        this.aiEnabled = chatModel != null;
-
-        if (aiEnabled) {
-            // 创建 ReAct 智能体
-            this.agent = ReActAgent.builder()
-                    .name(name)
-                    .sysPrompt(systemPrompt)
-                    .model(chatModel)
-                    .memory(memory)
-                    .build();
+        
+        // 检查 LLM 服务是否可用
+        this.aiEnabled = llmService != null;
+        
+        if (!aiEnabled) {
+            log.warn("[{}] LLMService not available, using mock mode", name);
         } else {
-            log.warn("[{}] ChatModel not available, using mock mode", name);
-            this.agent = null;
+            log.info("[{}] LLMService initialized successfully", name);
         }
     }
 
@@ -99,12 +90,26 @@ public abstract class AgentScopeInterviewerAgent {
             // 构建提示词
             String prompt = buildQuestionPrompt(candidateProfile, state);
 
-            // 使用 ReAct 智能体生成问题
-            Msg response = agent.call(Msg.builder()
-                    .textContent(prompt)
-                    .build()).block();
-
-            content = response != null ? response.getTextContent() : getMockQuestion();
+            // 使用 AI 工作台 LLM 生成问题
+            try {
+                content = llmService.generate(prompt)
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+                
+                if (content == null || content.trim().isEmpty()) {
+                    log.warn("[{}] LLM returned empty response, using mock question", name);
+                    content = getMockQuestion();
+                } else {
+                    // 清理响应，移除可能的格式化字符
+                    content = content.trim()
+                            .replaceAll("^['\"]|['\"]$", "")
+                            .replaceAll("^```.*\\n", "")
+                            .replaceAll("\\n```$", "");
+                }
+            } catch (Exception e) {
+                log.error("[{}] Failed to generate question with LLM", name, e);
+                content = getMockQuestion();
+            }
         } else {
             content = getMockQuestion();
             log.info("[{}] Using mock question: {}", name, content);
@@ -147,12 +152,26 @@ public abstract class AgentScopeInterviewerAgent {
             // 构建评估提示词
             String prompt = buildEvaluationPrompt(question, answerContent);
 
-            // 使用智能体进行评估
-            Msg response = agent.call(Msg.builder()
-                    .textContent(prompt)
-                    .build()).block();
-
-            evaluationText = response != null ? response.getTextContent() : "";
+            // 使用 AI 工作台 LLM 进行评估
+            try {
+                evaluationText = llmService.generate(prompt)
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+                
+                if (evaluationText == null || evaluationText.trim().isEmpty()) {
+                    log.warn("[{}] LLM returned empty evaluation, using mock", name);
+                    evaluationText = getMockEvaluation();
+                } else {
+                    // 清理响应
+                    evaluationText = evaluationText.trim()
+                            .replaceAll("^```json\\n|```$", "")
+                            .replaceAll("^```.*\\n", "")
+                            .replaceAll("\\n```$", "");
+                }
+            } catch (Exception e) {
+                log.error("[{}] Failed to evaluate answer with LLM", name, e);
+                evaluationText = getMockEvaluation();
+            }
         } else {
             evaluationText = getMockEvaluation();
             log.info("[{}] Using mock evaluation", name);
@@ -186,11 +205,23 @@ public abstract class AgentScopeInterviewerAgent {
                 只输出追问问题本身，不要有多余内容。
                 """, question.getContent(), answer.getContent(), evaluation.getScore(), evaluation.getFeedback());
 
-            Msg response = agent.call(Msg.builder()
-                    .textContent(prompt)
-                    .build()).block();
-
-            content = response != null ? response.getTextContent() : "";
+            try {
+                content = llmService.generate(prompt)
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+                
+                if (content == null || content.trim().isEmpty()) {
+                    content = "能详细说说你在项目中遇到的最大挑战是什么吗？";
+                } else {
+                    content = content.trim()
+                            .replaceAll("^['\"]|['\"]$", "")
+                            .replaceAll("^```.*\\n", "")
+                            .replaceAll("\\n```$", "");
+                }
+            } catch (Exception e) {
+                log.error("[{}] Failed to generate follow-up question", name, e);
+                content = "能详细说说你在项目中遇到的最大挑战是什么吗？";
+            }
         } else {
             content = "能详细说说你在项目中遇到的最大挑战是什么吗？";
         }
@@ -291,13 +322,6 @@ public abstract class AgentScopeInterviewerAgent {
     protected abstract String getCategory();
 
     protected abstract int calculateDifficulty(InterviewSessionState state);
-
-    /**
-     * 注册工具 - 子类可选择性覆盖
-     */
-    protected void registerTools() {
-        // 默认空实现，子类可选择性覆盖
-    }
 
     // ============ 模拟数据方法 ============
     

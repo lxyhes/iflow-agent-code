@@ -789,17 +789,17 @@ This document outlines the requirements for building an AI-powered task manageme
                   </div>
                   <div className="flex-1">
                     <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
-                      💡 Pro Tip: Ask IFlow Code Directly!
+                      💡 Pro Tip: Ask AI 工作台 Directly!
                     </h4>
                     <p className="text-sm text-purple-800 dark:text-purple-200 mb-3">
-                      You can simply ask IFlow Code in the chat to parse your PRD and generate tasks.
+                      You can simply ask AI 工作台 in the chat to parse your PRD and generate tasks.
                       The AI assistant will automatically save your PRD and create detailed tasks with implementation details.
                     </p>
 
                     <div className="bg-white dark:bg-gray-800 rounded border border-purple-200 dark:border-purple-700 p-3 mb-3">
                       <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">💬 Example:</p>
                       <p className="text-xs text-gray-900 dark:text-white font-mono">
-                        "I've just initialized a new project with IFlow Task Master. I have a PRD at .taskmaster/docs/{fileName.endsWith('.txt') || fileName.endsWith('.md') ? fileName : `${fileName}.txt`}. Can you help me parse it and set up the initial tasks?"
+                        "I've just initialized a new project with AI 工作台 Task Master. I have a PRD at .taskmaster/docs/{fileName.endsWith('.txt') || fileName.endsWith('.md') ? fileName : `${fileName}.txt`}. Can you help me parse it and set up the initial tasks?"
                       </p>
                     </div>
 
@@ -831,7 +831,7 @@ This document outlines the requirements for building an AI-powered task manageme
                   onClick={() => setShowGenerateModal(false)}
                   className="w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
-                  Got it, I'll ask IFlow Code directly
+                  Got it, I'll ask AI 工作台 directly
                 </button>
               </div>
             </div>

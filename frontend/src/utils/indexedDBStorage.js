@@ -7,7 +7,7 @@
 
 import { openDB } from 'idb';
 
-const DB_NAME = 'IFlowChatDB';
+const DB_NAME = 'AI 工作台ChatDB';
 const DB_VERSION = 2; // Increment version to force database recreation
 const STORES = {
   MESSAGES: 'messages',

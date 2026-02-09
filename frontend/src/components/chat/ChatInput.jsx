@@ -209,7 +209,7 @@ const ChatInput = ({
             onPaste={handlePaste}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
-            placeholder={`Ask ${provider === 'cursor' ? 'Cursor' : 'IFlow'} anything... 输入 @ 引用文件`}
+            placeholder={`Ask ${provider === 'cursor' ? 'Cursor' : 'AI 工作台'} anything... 输入 @ 引用文件`}
             disabled={isLoading}
             className="block w-full px-4 py-3 bg-transparent focus:outline-none text-gray-900 dark:text-gray-100 disabled:opacity-50 resize-none min-h-[60px] max-h-[400px] placeholder-gray-400 dark:placeholder-gray-500"
           />

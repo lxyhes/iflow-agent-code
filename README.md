@@ -1,4 +1,4 @@
-# iFlow Agent
+# AI 工作台
 
 > 智能代码助手系统，为 Claude Code 和 Cursor CLI 提供桌面和移动端 Web UI
 
@@ -76,7 +76,7 @@ launch_all_fixed.bat
 
 这将自动：
 1. 清理现有进程（端口 8090, 8000, 3001, 5173）
-2. 启动 iFlow CLI（端口 8090）
+2. 启动 AI 工作台 CLI（端口 8090）
 3. 启动 Python 后端（端口 8000，热重载）
 4. 启动 Node.js 服务器（端口 3001）
 5. 启动前端开发服务器（端口 5173）
@@ -95,7 +95,7 @@ stop_all.bat
 
 #### 方式二：手动启动
 
-**1. 启动 iFlow CLI:**
+**1. 启动 AI 工作台 CLI:**
 ```bash
 iflow --experimental-acp --port 8090
 ```

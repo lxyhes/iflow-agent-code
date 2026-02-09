@@ -14,7 +14,7 @@ const LoadingIndicator = ({ isLoading, provider = 'iflow' }) => {
   return (
     <div className="py-4 flex items-center justify-center">
       <TypingIndicator 
-        agent={provider === 'cursor' ? 'Cursor' : 'IFlow'}
+        agent={provider === 'cursor' ? 'Cursor' : 'AI 工作台'}
       />
     </div>
   );

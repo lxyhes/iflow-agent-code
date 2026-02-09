@@ -591,5 +591,5 @@ npm run preview
 ---
 
 **创建时间**：2026-01-23
-**维护者**：iFlow Agent Team
+**维护者**：AI 工作台 Team
 **版本**：1.0.0

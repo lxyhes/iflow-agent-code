@@ -52,9 +52,9 @@ public class ProjectInitializer implements CommandLineRunner {
             
             WorkspaceProject project = WorkspaceProject.builder()
                     .name("iflow-agent-code")
-                    .displayName("IFlow Agent Code")
+                    .displayName("AI 工作台代码")
                     .path(agentCodePath)
-                    .description("IFlow Agent Project")
+                    .description("AI 工作台项目")
                     .createdBy("system")
                     .build();
             

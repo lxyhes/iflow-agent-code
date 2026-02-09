@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 
 const SetupForm = () => {
   const [username, setUsername] = useState('');
@@ -48,9 +48,9 @@ const SetupForm = () => {
           {/* Logo and Title */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
-              <IFlowLogo size={64} />
+              <AILogo size={64} />
             </div>
-            <h1 className="text-3xl font-extrabold text-foreground mb-2">Welcome to IFlow UI</h1>
+            <h1 className="text-3xl font-extrabold text-foreground mb-2">欢迎使用 AI 工作台</h1>
             <p className="text-muted-foreground mt-2">
               Set up your account to get started
             </p>

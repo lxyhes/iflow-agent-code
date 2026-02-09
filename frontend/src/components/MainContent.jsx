@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import ChatInterface from './ChatInterfaceMinimal';
 import ErrorBoundary from './ErrorBoundary';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 import CursorLogo from './CursorLogo';
 import TaskList from './TaskList';
 import Tooltip from './Tooltip';
@@ -257,7 +257,7 @@ function MainContent({
                     }}
                 />
               </div>
-              <h2 className="text-xl font-semibold mb-2">Loading IFlow UI</h2>
+              <h2 className="text-xl font-semibold mb-2">Loading AI 工作台</h2>
               <p>Setting up your workspace...</p>
             </div>
           </div>
@@ -333,7 +333,7 @@ function MainContent({
                       {selectedSession.__provider === 'cursor' ? (
                           <CursorLogo className="w-4 h-4" />
                       ) : (
-                          <IFlowLogo className="w-4 h-4" />
+                          <AILogo className="w-4 h-4" />
                       )}
                     </div>
                 )}

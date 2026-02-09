@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * iFlow 服务封装类
+ * AI 工作台服务封装类
  * 提供同步和异步的 AI 对话能力
  */
 @Slf4j
@@ -31,7 +31,7 @@ public class IFlowService {
      * @return AI 响应文本
      */
     public String querySync(String message) {
-        log.debug("iFlow sync query: {}", message);
+        log.debug("AI 工作台同步查询: {}", message);
         try {
             List<cn.iflow.sdk.types.messages.Message> response = IFlowQuery.querySync(message);
             StringBuilder result = new StringBuilder();
@@ -45,7 +45,7 @@ public class IFlowService {
             }
             return result.toString();
         } catch (Exception e) {
-            log.error("iFlow query failed", e);
+            log.error("AI 工作台查询失败", e);
             return "Error: " + e.getMessage();
         }
     }
@@ -58,7 +58,7 @@ public class IFlowService {
      * @return Flux 消息流
      */
     public Flux<String> queryStream(String message, String model) {
-        log.debug("iFlow stream query with backend mode: {}, model: {}", backendConfig.getBackendMode(), model);
+        log.debug("AI 工作台流式查询 with backend mode: {}, model: {}", backendConfig.getBackendMode(), model);
 
         // 根据配置选择实现方式
         if (backendConfig.isSdkMode()) {
@@ -70,10 +70,10 @@ public class IFlowService {
 
     /**
      * 使用 SDK 进行流式查询
-     * 注意: SDK 不支持模型切换，模型由 iFlow CLI 启动时决定
+     * 注意: SDK 不支持模型切换，模型由 AI 工作台 CLI 启动时决定
      */
     private Flux<String> queryStreamViaSDK(String message) {
-        log.debug("iFlow SDK stream query: {}", message);
+        log.debug("AI SDK stream query: {}", message);
 
         return Flux.create(sink -> {
             long startTime = System.currentTimeMillis();
@@ -116,9 +116,9 @@ public class IFlowService {
      * 支持通过 --model 参数切换模型
      */
     private Flux<String> queryStreamViaSubprocess(String message, String model) {
-        log.debug("iFlow Subprocess stream query with model {}: {}", model, message);
+        log.debug("AI 工作台 Subprocess stream query with model {}: {}", model, message);
 
-        // 使用 subprocess 调用 iFlow CLI，传递 --model 参数
+        // 使用 subprocess 调用 AI 工作台 CLI，传递 --model 参数
         String actualModel = model != null ? model : "GLM-4.7";
         
         // 构建命令
@@ -128,7 +128,7 @@ public class IFlowService {
         String command = String.format("%s -p \"%s\" --model \"%s\" --temperature 0.7 -y",
             iflowPath, escapedMessage, actualModel);
         
-        log.info("Running iFlow CLI with model {}: {}", actualModel, command);
+        log.info("Running AI 工作台 CLI with model {}: {}", actualModel, command);
         
         return Flux.create(sink -> {
             try {
@@ -190,42 +190,42 @@ public class IFlowService {
                 
                 int exitCode = process.waitFor();
                 if (exitCode != 0) {
-                    log.error("iFlow CLI exited with code: {}", exitCode);
-                    sink.error(new RuntimeException("iFlow CLI failed with exit code: " + exitCode));
+                    log.error("AI 工作台 CLI exited with code: {}", exitCode);
+                    sink.error(new RuntimeException("AI 工作台 CLI failed with exit code: " + exitCode));
                 } else {
-                    log.info("iFlow CLI completed successfully");
+                    log.info("AI 工作台 CLI completed successfully");
                     sink.complete();
                 }
                 
             } catch (Exception e) {
-                log.error("Error running iFlow CLI", e);
+                log.error("Error running AI 工作台 CLI", e);
                 sink.error(e);
             }
         });
     }
 
     /**
-     * 检查 iFlow 连接状态
+     * 检查 AI 工作台 连接状态
      */
     public boolean isConnected() {
         try {
             iFlowClient.connect().block();
             return true;
         } catch (Exception e) {
-            log.warn("iFlow not connected: {}", e.getMessage());
+            log.warn("AI 工作台 not connected: {}", e.getMessage());
             return false;
         }
     }
 
     /**
-     * 关闭 iFlow 客户端
+     * 关闭 AI 工作台 客户端
      */
     public void close() {
         try {
             iFlowClient.close();
-            log.info("iFlow client closed");
+            log.info("AI 工作台 client closed");
         } catch (Exception e) {
-            log.error("Error closing iFlow client", e);
+            log.error("Error closing AI 工作台 client", e);
         }
     }
 }

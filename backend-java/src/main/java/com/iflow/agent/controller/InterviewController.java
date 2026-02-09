@@ -146,6 +146,20 @@ public class InterviewController {
     }
 
     /**
+     * 删除面试会话
+     */
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<Map<String, Object>> deleteSession(@PathVariable String sessionId) {
+        log.info("删除面试会话: {}", sessionId);
+        boolean success = interviewService.deleteSession(sessionId);
+        return ResponseEntity.ok(Map.of(
+                "success", success,
+                "session_id", sessionId,
+                "message", success ? "会话已删除" : "删除失败"
+        ));
+    }
+
+    /**
      * 列表面试会话
      */
     @GetMapping("/sessions")

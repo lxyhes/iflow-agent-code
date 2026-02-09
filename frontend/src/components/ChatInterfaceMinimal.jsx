@@ -15,7 +15,7 @@
  * - 使用防抖/节流优化高频操作
  * 
  * @version 2.0.0 - 极致优化版
- * @author iFlow Team
+ * @author AI 工作台 Team
  */
 
 import React, { memo, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -28,7 +28,7 @@ import CommandMenu from './CommandMenu';
 import NextTaskBanner from './NextTaskBanner.jsx';
 import AutoFixPanel from './AutoFixPanel';
 import ContextVisualizer from './ContextVisualizer';
-import IFlowLogo from './IFlowLogo.jsx';
+import AILogo from './AILogo.jsx';
 import CursorLogo from './CursorLogo.jsx';
 import { api, authenticatedFetch } from '../utils/api';
 import { retrieveRAG } from '../utils/rag';
@@ -934,6 +934,6 @@ export default memo(ChatInterfaceMinimal, arePropsEqual);
  * ✅ 易于扩展的架构
  * 
  * @version 2.0.0
- * @author iFlow Team
+ * @author AI 工作台 Team
  * @date 2026-01-13
  */

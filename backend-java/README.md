@@ -1,6 +1,6 @@
-# IFlow Agent Backend (Java) + 阿里云 AI + AgentScope
+# AI 工作台 Backend (Java) + 阿里云 AI + AgentScope
 
-这是 IFlow Agent 项目的 Java 版本后端，使用 Spring Boot 3.2 开发，深度集成了阿里云 AI 服务和 **AgentScope Java** 多智能体框架。
+这是 AI 工作台 项目的 Java 版本后端，使用 Spring Boot 3.2 开发，深度集成了阿里云 AI 服务和 **AgentScope Java** 多智能体框架。
 
 ## ✨ 核心技术栈
 

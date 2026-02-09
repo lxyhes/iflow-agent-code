@@ -7,8 +7,8 @@ import com.iflow.agent.domain.interview.enums.InterviewPhase;
 import com.iflow.agent.domain.interview.enums.InterviewStatus;
 import com.iflow.agent.domain.interview.enums.InterviewerType;
 import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class InterviewCoordinator {
 
     private final Map<String, AgentScopeInterviewerAgent> agents;
@@ -29,6 +28,7 @@ public class InterviewCoordinator {
     private final InterviewSessionRepository sessionRepository;
     private final com.iflow.agent.service.llm.LLMService llmService;
 
+    @Autowired
     public InterviewCoordinator(
             TechnicalInterviewer technicalInterviewer,
             HrInterviewer hrInterviewer,
@@ -47,7 +47,7 @@ public class InterviewCoordinator {
         registerAgent(behavioralInterviewer);
         registerAgent(systemDesignInterviewer);
 
-        log.info("面试协调器初始化完成，已注册 {} 个面试官智能体", agents.size());
+        log.info("面试协调器初始化完成，已注册 {} 个面试官智能体（使用 AI 工作台 LLM）", agents.size());
     }
 
     /**
@@ -317,7 +317,7 @@ public class InterviewCoordinator {
                 .orElseThrow(() -> new IllegalArgumentException("面试会话不存在: " + sessionId));
     }
 
-    private InterviewContext getContext(String sessionId) {
+    public InterviewContext getContext(String sessionId) {
         InterviewContext context = contexts.get(sessionId);
         if (context == null) {
             throw new IllegalStateException("面试上下文不存在: " + sessionId);

@@ -13,8 +13,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * iFlow AI 接口控制器
- * 提供基于 iFlow SDK 的 AI 对话能力
+ * AI 工作台 AI 接口控制器
+ * 提供基于 AI SDK 的 AI 对话能力
  */
 @Slf4j
 @RestController
@@ -29,7 +29,7 @@ public class IFlowController {
      */
     @PostMapping("/query")
     public ResponseEntity<Map<String, String>> query(@RequestBody QueryRequest request) {
-        log.debug("iFlow query request: {}", request.getMessage());
+        log.debug("AI 工作台查询请求: {}", request.getMessage());
         String response = iFlowService.querySync(request.getMessage());
         return ResponseEntity.ok(Map.of("response", response));
     }
@@ -39,7 +39,7 @@ public class IFlowController {
      */
     @PostMapping(value = "/query/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> queryStream(@RequestBody QueryRequest request) {
-        log.debug("iFlow stream query request: {}", request.getMessage());
+        log.debug("AI 工作台流式查询 request: {}", request.getMessage());
         String model = request.getModel() != null ? request.getModel() : "glm-4";
         return iFlowService.queryStream(request.getMessage(), model)
                 .map(chunk -> "data: " + chunk + "\n\n");
@@ -50,7 +50,7 @@ public class IFlowController {
      */
     @PostMapping("/chat")
     public Flux<String> chat(@RequestBody QueryRequest request) {
-        log.debug("iFlow chat request: {}", request.getMessage());
+        log.debug("AI 工作台聊天请求: {}", request.getMessage());
         return iFlowService.queryStream(request.getMessage(), request.getModel());
     }
 
@@ -62,7 +62,7 @@ public class IFlowController {
         boolean connected = iFlowService.isConnected();
         return ResponseEntity.ok(Map.of(
                 "status", connected ? "connected" : "disconnected",
-                "service", "iFlow",
+                "service", "AI 工作台",
                 "timestamp", System.currentTimeMillis()
         ));
     }

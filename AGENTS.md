@@ -1,8 +1,8 @@
-# iFlow Agent 项目文档
+# AI 工作台 项目文档
 
 ## 项目概述
 
-iFlow Agent 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI 提供桌面和移动端 Web UI。该系统允许用户从任何设备（桌面或移动端）查看和管理活跃项目及会话，实现跨平台的 AI 辅助开发体验。
+AI 工作台 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI 提供桌面和移动端 Web UI。该系统允许用户从任何设备（桌面或移动端）查看和管理活跃项目及会话，实现跨平台的 AI 辅助开发体验。
 
 ### 核心功能
 
@@ -26,7 +26,7 @@ iFlow Agent 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI �
 
 ### 后端（Python）
 - **框架**: FastAPI + Uvicorn
-- **AI 集成**: iFlow SDK（支持 GLM-4.7 等模型）
+- **AI 集成**: AI 工作台 SDK（支持 GLM-4.7 等模型）
 - **数据库**: SQLite（better-sqlite3）
 - **认证**: JWT + bcrypt
 - **文件处理**: aiofiles, python-multipart
@@ -60,8 +60,8 @@ iFlow Agent 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI �
 #### AI 与智能服务
 - `agent.py` - AI 代理核心
 - `llm.py` - 大语言模型接口
-- `iflow_client.py` - iFlow 客户端
-- `iflow_sdk_client.py` - iFlow SDK 客户端
+- `iflow_client.py` - AI 工作台 客户端
+- `iflow_sdk_client.py` - AI 工作台 SDK 客户端
 - `prompt_optimizer.py` - Prompt 优化器
 - `prompt_manager_service.py` - Prompt 管理服务
 
@@ -413,8 +413,8 @@ npm test
 - `GET /api/auth/status` - 获取认证状态
 - `GET /api/config` - 获取全局配置
 - `POST /api/config` - 更新全局配置
-- `GET /api/iflow/mcp-servers` - 获取 iFlow MCP 服务器配置
-- `POST /api/iflow/sync-mcp-servers` - 同步 iFlow MCP 服务器
+- `GET /api/iflow/mcp-servers` - 获取 AI 工作台 MCP 服务器配置
+- `POST /api/iflow/sync-mcp-servers` - 同步 AI 工作台 MCP 服务器
 
 ### 项目管理
 - `GET /api/projects` - 获取项目列表
@@ -491,7 +491,7 @@ npm test
     "mode": "yolo",              # 运行模式
     "model": "GLM-4.7",          # AI 模型
     "mcp_servers": [],           # MCP 服务器列表
-    "iflow_path": "iflow",       # iFlow CLI 路径
+    "iflow_path": "iflow",       # AI 工作台 CLI 路径
     "rag_mode": "tfidf"          # RAG 模式（"chromadb" 或 "tfidf"）
 }
 ```
@@ -541,8 +541,8 @@ npm test
 - `DiffViewer.jsx` - 差异查看器
 - `Settings.jsx` - 设置页面
 - `AIPersonaSelector.jsx` - AI Persona 选择器
-- `IFlowModelSelector.jsx` - iFlow 模型选择器
-- `IFlowModeSelector.jsx` - iFlow 模式选择器
+- `IFlowModelSelector.jsx` - AI 工作台 模型选择器
+- `IFlowModeSelector.jsx` - AI 工作台 模式选择器
 
 ## 实施计划
 
@@ -666,5 +666,5 @@ MIT License - 详见 LICENSE 文件
 ---
 
 **最后更新**: 2026-01-19
-**维护者**: iFlow Agent Team
+**维护者**: AI 工作台 Team
 **版本**: 1.12.0

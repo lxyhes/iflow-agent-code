@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
 
-const TypingIndicator = memo(({ agent = "IFlow", agentInfo }) => {
+const TypingIndicator = memo(({ agent = "AI 工作台", agentInfo }) => {
   const agentColors = {
-    'IFlow': { bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', glow: 'bg-blue-400', text: 'text-blue-600' },
+    'AI 工作台': { bg: 'bg-gradient-to-br from-blue-500 to-indigo-600', glow: 'bg-blue-400', text: 'text-blue-600' },
     'Cursor': { bg: 'bg-gradient-to-br from-gray-600 to-gray-800', glow: 'bg-gray-500', text: 'text-gray-700' },
     'TaskMaster': { bg: 'bg-gradient-to-br from-green-500 to-emerald-600', glow: 'bg-green-400', text: 'text-green-600' },
     'CodeReviewer': { bg: 'bg-gradient-to-br from-purple-500 to-violet-600', glow: 'bg-purple-400', text: 'text-purple-600' },
@@ -65,9 +65,9 @@ const TypingIndicator = memo(({ agent = "IFlow", agentInfo }) => {
 
 TypingIndicator.displayName = 'TypingIndicator';
 
-const CompactTypingIndicator = memo(({ agent = "IFlow" }) => {
+const CompactTypingIndicator = memo(({ agent = "AI 工作台" }) => {
   const colors = {
-    'IFlow': 'bg-blue-500',
+    'AI 工作台': 'bg-blue-500',
     'Cursor': 'bg-gray-700',
     'TaskMaster': 'bg-green-500',
     'default': 'bg-indigo-500'

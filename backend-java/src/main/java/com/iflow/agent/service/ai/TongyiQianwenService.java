@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * AI 服务 - 优先使用 iFlow SDK，可选使用 Spring AI
+ * AI 服务 - 优先使用 AI 工作台 SDK，可选使用 Spring AI
  * 当没有配置 API key 时，返回模拟数据
  */
 @Slf4j
@@ -39,7 +39,7 @@ public class TongyiQianwenService {
         this.iFlowService = iFlowService;
         
         if (chatModel == null) {
-            log.warn("ChatModel not available - AI features will use iFlow SDK only");
+            log.warn("ChatModel not available - AI features will use AI SDK only");
         }
         if (embeddingModel == null) {
             log.warn("EmbeddingModel not available - embedding features disabled");
@@ -50,12 +50,12 @@ public class TongyiQianwenService {
     private static final String DEFAULT_MODEL = "GLM-4.7";
 
     /**
-     * 简单的文本生成 - 优先使用 iFlow
+     * 简单的文本生成 - 优先使用 AI 工作台
      */
     public String generate(String prompt) {
         log.debug("Generating text with prompt: {}", prompt.substring(0, Math.min(100, prompt.length())));
 
-        // 优先使用 iFlow
+        // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
             // 使用流式查询并收集完整响应，避免同步查询的截断问题
             StringBuilder result = new StringBuilder();
@@ -71,7 +71,7 @@ public class TongyiQianwenService {
             return response.getResult().getOutput().getText();
         }
 
-        return "Error: No AI service available. Please configure iFlow or Spring AI.";
+        return "Error: No AI service available. Please configure AI 工作台 or Spring AI.";
     }
 
     /**
@@ -80,7 +80,7 @@ public class TongyiQianwenService {
     public String generateWithSystem(String systemPrompt, String userPrompt) {
         log.debug("Generating with system prompt");
 
-        // 优先使用 iFlow
+        // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
             String combinedPrompt = systemPrompt + "\n\n" + userPrompt;
             return iFlowService.querySync(combinedPrompt);
@@ -104,7 +104,7 @@ public class TongyiQianwenService {
     public String chat(List<Map<String, String>> messages) {
         log.debug("Chat with {} messages", messages.size());
 
-        // 优先使用 iFlow（只使用最后一条消息）
+        // 优先使用 AI 工作台（只使用最后一条消息）
         if (iFlowService.isConnected() && !messages.isEmpty()) {
             String lastMessage = messages.get(messages.size() - 1).getOrDefault("content", "");
             return iFlowService.querySync(lastMessage);
@@ -131,12 +131,12 @@ public class TongyiQianwenService {
     }
 
     /**
-     * 流式生成 - 优先使用 iFlow
+     * 流式生成 - 优先使用 AI 工作台
      */
     public Flux<String> generateStream(String prompt) {
         log.debug("Streaming generation with prompt: {}", prompt.substring(0, Math.min(100, prompt.length())));
 
-        // 优先使用 iFlow
+        // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
             return iFlowService.queryStream(prompt, DEFAULT_MODEL);
         }
@@ -159,7 +159,7 @@ public class TongyiQianwenService {
     public Flux<String> chatStream(List<Map<String, String>> messages) {
         log.debug("Streaming chat with {} messages", messages.size());
 
-        // 优先使用 iFlow
+        // 优先使用 AI 工作台
         if (iFlowService.isConnected() && !messages.isEmpty()) {
             String lastMessage = messages.get(messages.size() - 1).getOrDefault("content", "");
             return iFlowService.queryStream(lastMessage, DEFAULT_MODEL);
@@ -222,12 +222,12 @@ public class TongyiQianwenService {
     }
 
     /**
-     * 使用特定模型生成 - 支持 iFlow 和 Spring AI
+     * 使用特定模型生成 - 支持 AI 工作台 和 Spring AI
      */
     public String generateWithModel(String prompt, String model, Double temperature) {
         log.debug("Generating with model: {}, temperature: {}", model, temperature);
         
-        // 优先使用 iFlow（流式收集完整响应）
+        // 优先使用 AI 工作台（流式收集完整响应）
         if (iFlowService.isConnected()) {
             StringBuilder result = new StringBuilder();
             iFlowService.queryStream(prompt, model != null ? model : DEFAULT_MODEL)

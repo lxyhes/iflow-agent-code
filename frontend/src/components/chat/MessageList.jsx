@@ -134,7 +134,7 @@ const MessageList = memo(({
         <>
           {sortedMessages.map((message, index) => {
             // 检查是否为配额限制消息
-            if (message.content && message.content.includes('IFlow AI usage limit reached')) {
+            if (message.content && message.content.includes('AI 工作台 AI usage limit reached')) {
               return <UsageLimitBanner key={index} text={message.content} />;
             }
 

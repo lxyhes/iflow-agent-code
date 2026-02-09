@@ -1,6 +1,6 @@
 /**
- * IFlowBackendSettings.jsx - iFlow 后端设置组件
- * 允许用户选择使用 SDK 还是 subprocess 方式调用 iFlow
+ * AI 工作台BackendSettings.jsx - AI 工作台 后端设置组件
+ * 允许用户选择使用 SDK 还是 subprocess 方式调用 AI 工作台
  */
 
 import React, { useState, useEffect } from 'react';
@@ -20,7 +20,7 @@ const IFlowBackendSettings = () => {
   const availableModels = [
     { id: 'glm-4', name: 'GLM-4', description: '基础模型' },
     { id: 'glm-4.7', name: 'GLM-4.7', description: '推荐模型' },
-    { id: 'iFlow-ROME-30BA3B', name: 'iFlow-ROME-30BA3B', description: '高性能模型' },
+    { id: 'AI 工作台-ROME-30BA3B', name: 'AI 工作台-ROME-30BA3B', description: '高性能模型' },
     { id: 'glm-4-flash', name: 'GLM-4-Flash', description: '快速响应模型' }
   ];
 
@@ -29,7 +29,7 @@ const IFlowBackendSettings = () => {
       id: 'sdk',
       name: 'SDK 模式',
       icon: Server,
-      description: '使用 iFlow Java SDK 进行通信',
+      description: '使用 AI 工作台 Java SDK 进行通信',
       advantages: [
         '类型安全',
         '更好的错误处理',
@@ -39,14 +39,14 @@ const IFlowBackendSettings = () => {
       disadvantages: [
         '不支持动态模型切换',
         '需要 SDK 依赖',
-        '切换模型需要重启 iFlow 进程'
+        '切换模型需要重启 AI 工作台 进程'
       ]
     },
     {
       id: 'subprocess',
       name: 'Subprocess 模式',
       icon: Terminal,
-      description: '通过命令行调用 iFlow CLI',
+      description: '通过命令行调用 AI CLI',
       advantages: [
         '支持动态模型切换',
         '灵活的参数配置',
@@ -187,10 +187,10 @@ const IFlowBackendSettings = () => {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-          iFlow 后端模式
+          AI 工作台 后端模式
         </h3>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          选择 iFlow 后端的通信方式。SDK 模式更稳定但不支持动态模型切换，Subprocess 模式支持模型切换但有额外的进程开销。
+          选择 AI 工作台 后端的通信方式。SDK 模式更稳定但不支持动态模型切换，Subprocess 模式支持模型切换但有额外的进程开销。
         </p>
       </div>
 
@@ -210,7 +210,7 @@ const IFlowBackendSettings = () => {
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                   {backendMode === 'sdk' 
-                    ? 'SDK 模式需要重启 iFlow 进程来切换模型'
+                    ? 'SDK 模式需要重启 AI 工作台 进程来切换模型'
                     : 'Subprocess 模式支持动态模型切换，无需重启'}
                 </p>
                 {processStatus.loading ? (
@@ -219,7 +219,7 @@ const IFlowBackendSettings = () => {
                   </p>
                 ) : (
                   <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                    iFlow 进程状态: {processStatus.running ? '✓ 运行中' : '✗ 未运行'}
+                    AI 工作台 进程状态: {processStatus.running ? '✓ 运行中' : '✗ 未运行'}
                   </p>
                 )}
               </>

@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { X, Plus, Settings as SettingsIcon, Shield, AlertTriangle, Moon, Sun, Server, Edit3, Trash2, Globe, Terminal, Zap, FolderOpen, LogIn, Key, GitBranch, Check, Package, GitPullRequest, Users, MessageSquare } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import IFlowLogo from './IFlowLogo';
+import AILogo from './AILogo';
 import CursorLogo from './CursorLogo';
 import CredentialsSettings from './CredentialsSettings';
 import GitSettings from './GitSettings';
@@ -360,7 +360,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
     }
   };
 
-  // 从 iFlow 配置同步 MCP 服务器
+  // 从 AI 工作台 配置同步 MCP 服务器
   const syncFromIFlow = async () => {
     try {
       const response = await authenticatedFetch('/api/iflow/sync-mcp-servers', {
@@ -370,14 +370,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       const data = await response.json();
 
       if (data.success) {
-        console.log(`从 iFlow 同步了 ${data.servers_count} 个 MCP 服务器`);
+        console.log(`从 AI 工作台 同步了 ${data.servers_count} 个 MCP 服务器`);
         await fetchMcpServers(); // 刷新列表
         return { success: true, count: data.servers_count };
       } else {
         throw new Error(data.error || '同步失败');
       }
     } catch (error) {
-      console.error('Error syncing from iFlow:', error);
+      console.error('Error syncing from AI 工作台:', error);
       throw error;
     }
   };
@@ -961,7 +961,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   }`}
               >
                 <Server className="w-4 h-4 inline mr-2" />
-                iFlow 后端
+                AI 工作台 后端
               </button>
             </div>
           </div>
@@ -1387,8 +1387,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                         }`}
                     >
                       <div className="flex items-center gap-2">
-                        <IFlowLogo className="w-4 h-4" />
-                        <span>IFlow</span>
+                        <AILogo className="w-4 h-4" />
+                        <span>AI 工作台</span>
                       </div>
                     </button>
                     <button
@@ -1406,7 +1406,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   </div>
                 </div>
 
-                {/* IFlow Content */}
+                {/* AI 工作台 Content */}
                 {toolsProvider === 'claude' && (
                   <div className="space-y-6 md:space-y-8">
 
@@ -1505,12 +1505,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="font-medium text-blue-900 dark:text-blue-100">
-                                IFlow CLI Login
+                                AI CLI Login
                               </div>
                               <div className="text-sm text-blue-700 dark:text-blue-300">
                                 {claudeAuthStatus.authenticated
                                   ? 'Re-authenticate or switch accounts'
-                                  : 'Sign in to your IFlow account to enable AI features'}
+                                  : 'Sign in to your AI 工作台 account to enable AI features'}
                               </div>
                             </div>
                             <Button
@@ -1691,7 +1691,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm text-muted-foreground">
-                          Model Context Protocol servers provide additional tools and data sources to IFlow
+                          Model Context Protocol servers provide additional tools and data sources to AI 工作台
                         </p>
                       </div>
 
@@ -1708,7 +1708,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           onClick={async () => {
                             try {
                               const result = await syncFromIFlow();
-                              alert(`成功从 iFlow 同步了 ${result.count} 个 MCP 服务器`);
+                              alert(`成功从 AI 工作台 同步了 ${result.count} 个 MCP 服务器`);
                             } catch (error) {
                               alert(`同步失败: ${error.message}`);
                             }
@@ -1717,7 +1717,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                           size="sm"
                         >
                           <Server className="w-4 h-4 mr-2" />
-                          Sync from iFlow
+                          Sync from AI 工作台
                         </Button>
                       </div>
 
@@ -2789,7 +2789,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
               </div>
             )}
 
-            {/* iFlow Backend Tab */}
+            {/* AI 工作台 Backend Tab */}
             {activeTab === 'iflow-backend' && (
               <div className="space-y-6 md:space-y-8">
                 <IFlowBackendSettings />
