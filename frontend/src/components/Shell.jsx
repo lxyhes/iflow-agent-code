@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { Terminal as TerminalIcon, Power, RotateCw, Play, Loader2, AlertCircle, Settings, Palette, Type, Eraser, Download, Check, Zap, Maximize2, Minimize2, Copy, Search, Command, ChevronRight, X, History, Star, Plus, FileText, Trash2, Save, Sparkles, ArrowRight, CornerDownLeft } from 'lucide-react';
+import { SearchAddon } from '@xterm/addon-search';
+import { Terminal as TerminalIcon, Power, RotateCw, Play, Loader2, AlertCircle, Settings, Palette, Type, Eraser, Download, Check, Zap, Maximize2, Minimize2, Copy, Search, Command, ChevronRight, X, History, Star, Plus, FileText, Trash2, Save, Sparkles, ArrowRight, CornerDownLeft, ArrowUp, ArrowDown } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 
 const xtermStyles = `
@@ -183,6 +184,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
+  const searchAddon = useRef(null);
   const ws = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -199,6 +201,14 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
   const [logContent, setLogContent] = useState('');
   const [connectionWarning, setConnectionWarning] = useState(null);
   const searchInputRef = useRef(null);
+
+  // Terminal Search State
+  const [showTerminalSearch, setShowTerminalSearch] = useState(false);
+  const [terminalSearchTerm, setTerminalSearchTerm] = useState('');
+  const [searchMatchCount, setSearchMatchCount] = useState({ current: 0, total: 0 }); // Placeholder for future match count if addon supports it
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState(null); // { x: 0, y: 0 }
   
   // Persistent State
   const [customCommands, setCustomCommands] = useState([]);
@@ -339,36 +349,46 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     if (isConnecting || isConnected) return;
 
     try {
-      const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';
-      let wsUrl;
-
-      if (isPlatform) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        wsUrl = `${protocol}//${window.location.host}/shell`;
-      } else {
-        // 本地开发模式：通过 Vite 代理连接 (会转发到 3001)
-        const token = localStorage.getItem('auth-token') || 'mock-token';
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const cols = terminal.current ? terminal.current.cols : 80;
-        const rows = terminal.current ? terminal.current.rows : 24;
-        wsUrl = `${protocol}//${window.location.host}/shell?token=${encodeURIComponent(token)}&cols=${cols}&rows=${rows}`;
-      }
+      // 通过 Vite 代理连接到 Java 后端 WebSocket
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/shell`;
 
       console.log('[Shell] Connecting to:', wsUrl);
+      console.log('[Shell] Project path:', selectedProjectRef.current?.fullPath || selectedProjectRef.current?.path);
+
+      // 检查项目路径是否有效
+      const projectPath = selectedProjectRef.current?.fullPath || selectedProjectRef.current?.path;
+      if (!projectPath) {
+        console.error('[Shell] No project path provided');
+        setIsConnecting(false);
+        return;
+      }
+
       ws.current = new WebSocket(wsUrl);
 
+      // 设置连接超时
+      const connectionTimeout = setTimeout(() => {
+        if (ws.current && ws.current.readyState === WebSocket.CONNECTING) {
+          console.error('[Shell] Connection timeout');
+          ws.current.close();
+          setIsConnecting(false);
+          setConnectionWarning("Connection timeout. Please check if the backend is running.");
+        }
+      }, 10000); // 10 秒超时
+
       ws.current.onopen = () => {
-        console.log('[Shell] WebSocket connected');
+        clearTimeout(connectionTimeout);
+        console.log('[Shell] WebSocket connected successfully');
         setIsConnected(true);
         setIsConnecting(false);
 
-        // Send init message immediately, though backend already has dims
+        // Send init message immediately
         if (fitAddon.current && terminal.current) {
             fitAddon.current.fit();
 
-            ws.current.send(JSON.stringify({
+            const initMessage = {
               type: 'init',
-              projectPath: selectedProjectRef.current.fullPath || selectedProjectRef.current.path,
+              projectPath: projectPath,
               sessionId: isPlainShellRef.current ? null : selectedSessionRef.current?.id,
               hasSession: isPlainShellRef.current ? false : !!selectedSessionRef.current,
               provider: isPlainShellRef.current ? 'plain-shell' : (selectedSessionRef.current?.__provider || 'claude'),
@@ -376,13 +396,27 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
               rows: terminal.current.rows,
               initialCommand: initialCommandRef.current,
               isPlainShell: isPlainShellRef.current
-            }));
+            };
+
+            try {
+              ws.current.send(JSON.stringify(initMessage));
+              console.log('[Shell] Init message sent successfully');
+            } catch (error) {
+              console.error('[Shell] Failed to send init message:', error);
+            }
         }
       };
 
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          // 处理心跳消息
+          if (data.type === 'heartbeat') {
+            console.log('[Shell] Heartbeat received from backend');
+            // 可以在这里更新最后心跳时间，用于检测连接是否活跃
+            return;
+          }
 
           if (data.type === 'output') {
             let output = data.data;
@@ -439,22 +473,35 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
       };
 
       ws.current.onclose = (event) => {
+        console.log('[Shell] WebSocket closed:', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
         setIsConnected(false);
         setIsConnecting(false);
 
         if (terminal.current) {
           terminal.current.clear();
           terminal.current.write('\x1b[2J\x1b[H');
+          // 显示连接断开消息
+          terminal.current.write('\r\n\x1b[31m--- Connection Closed ---\x1b[0m\r\n');
+          terminal.current.write(`Code: ${event.code}, Reason: ${event.reason || 'Unknown'}\r\n`);
+          terminal.current.write('\r\nClick "Connect Terminal" to reconnect.\r\n');
         }
       };
 
       ws.current.onerror = (error) => {
+        console.error('[Shell] WebSocket error:', error);
         setIsConnected(false);
         setIsConnecting(false);
+        setConnectionWarning("Connection error. Please check if the backend is running.");
       };
     } catch (error) {
+      console.error('[Shell] Failed to create WebSocket:', error);
       setIsConnected(false);
       setIsConnecting(false);
+      setConnectionWarning("Failed to establish connection. Please try again.");
     }
   }, [isConnecting, isConnected]);
 
@@ -675,9 +722,20 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
 
     fitAddon.current = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
+    searchAddon.current = new SearchAddon({
+      decorations: {
+        matchBackground: '#eab308',
+        matchBorder: 'transparent',
+        matchOverviewRuler: '#eab308',
+        activeMatchBackground: '#facc15',
+        activeMatchBorder: '#ffffff',
+        activeMatchColorOverviewRuler: '#facc15'
+      }
+    });
 
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(webLinksAddon);
+    terminal.current.loadAddon(searchAddon.current);
 
     terminal.current.open(terminalRef.current);
 
@@ -689,17 +747,34 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     }, 100);
 
     terminal.current.attachCustomKeyEventHandler((event) => {
+      // Handle Ctrl+F for search
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        if (event.type === 'keydown') {
+           setShowTerminalSearch(true);
+           // Prevent browser find
+           event.preventDefault(); 
+           return false;
+        }
+      }
+      
+      // Handle Ctrl+C (Copy)
       if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
+        // Let browser handle copy
         return false;
       }
+      
+      // Handle Ctrl+V (Paste) - let browser handle it usually, but we might want to intercept if needed
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
         return false;
       }
+      
       return true;
     });
 
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        // 直接发送到后端
+        // xterm.js 会自动处理显示，我们不需要手动回显
         ws.current.send(JSON.stringify({
           type: 'input',
           data: data
@@ -795,7 +870,14 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     <div 
       className={`h-full flex flex-col bg-zinc-950 w-full terminal-container relative overflow-hidden transition-all duration-300 ${isMaximized ? 'fixed inset-0 z-50' : ''}`}
       tabIndex="0"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY });
+      }}
       onClick={(e) => {
+        // Close context menu on click anywhere
+        if (contextMenu) setContextMenu(null);
+        
         // Only focus terminal if clicking the container itself or non-input elements
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
           terminal.current?.focus();
@@ -1290,6 +1372,136 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
                 <span>Tip: Use browser search (<kbd className="bg-white/10 px-1 rounded">Ctrl+F</kbd>) to find text in logs.</span>
                 <span>{logContent.length} chars captured</span>
              </div>
+          </div>
+        )}
+
+        {/* Terminal Find/Search Bar */}
+        {showTerminalSearch && (
+          <div className="absolute top-2 right-4 z-40 bg-zinc-900 border border-white/10 shadow-xl rounded-lg flex items-center p-1 gap-1 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-1 pl-2 pr-1 bg-zinc-950/50 rounded border border-white/5">
+              <Search className="w-3.5 h-3.5 text-zinc-400" />
+              <input 
+                autoFocus
+                type="text" 
+                placeholder="Find..."
+                className="w-32 bg-transparent border-none text-xs text-white focus:outline-none py-1 placeholder:text-zinc-600"
+                value={terminalSearchTerm}
+                onChange={(e) => {
+                   setTerminalSearchTerm(e.target.value);
+                   searchAddon.current?.findNext(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (e.shiftKey) searchAddon.current?.findPrevious(terminalSearchTerm);
+                    else searchAddon.current?.findNext(terminalSearchTerm);
+                  }
+                  if (e.key === 'Escape') {
+                    setShowTerminalSearch(false);
+                    terminal.current?.focus();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex items-center">
+              <button 
+                onClick={() => searchAddon.current?.findPrevious(terminalSearchTerm)}
+                className="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white"
+                title="Previous (Shift+Enter)"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={() => searchAddon.current?.findNext(terminalSearchTerm)}
+                className="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white"
+                title="Next (Enter)"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+              <div className="w-px h-3 bg-white/10 mx-1"></div>
+              <button 
+                onClick={() => {
+                   setShowTerminalSearch(false);
+                   setTerminalSearchTerm('');
+                   terminal.current?.focus();
+                }}
+                className="p-1 hover:bg-red-500/20 rounded text-zinc-400 hover:text-red-400"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Context Menu */}
+        {contextMenu && (
+          <div 
+            className="fixed z-50 bg-zinc-900 border border-white/10 rounded-lg shadow-2xl py-1 min-w-[160px] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+             <button 
+               onClick={() => {
+                 if (terminal.current?.hasSelection()) {
+                    navigator.clipboard.writeText(terminal.current.getSelection());
+                    setContextMenu(null);
+                 }
+               }}
+               className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors ${!terminal.current?.hasSelection() ? 'opacity-50 cursor-not-allowed' : 'text-zinc-200'}`}
+               disabled={!terminal.current?.hasSelection()}
+             >
+               <Copy className="w-3.5 h-3.5" /> Copy
+             </button>
+             <button 
+               onClick={async () => {
+                 try {
+                   const text = await navigator.clipboard.readText();
+                   if (text) {
+                     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                        ws.current.send(JSON.stringify({ type: 'input', data: text }));
+                     }
+                   }
+                 } catch (err) {
+                   console.error('Failed to read clipboard', err);
+                 }
+                 setContextMenu(null);
+                 terminal.current?.focus();
+               }}
+               className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
+             >
+               <FileText className="w-3.5 h-3.5" /> Paste
+             </button>
+             <div className="h-px bg-white/10 my-1 mx-2"></div>
+             <button 
+               onClick={() => {
+                 setShowTerminalSearch(true);
+                 setContextMenu(null);
+                 setTimeout(() => {
+                   // Focus search input?
+                 }, 50);
+               }}
+               className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
+             >
+               <Search className="w-3.5 h-3.5" /> Find...
+             </button>
+             <button 
+               onClick={() => {
+                 clearTerminal();
+                 setContextMenu(null);
+               }}
+               className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 flex items-center gap-2 hover:bg-primary/10 hover:text-primary transition-colors"
+             >
+               <Eraser className="w-3.5 h-3.5" /> Clear
+             </button>
+             <div className="h-px bg-white/10 my-1 mx-2"></div>
+             <button 
+               onClick={() => {
+                 restartShell();
+                 setContextMenu(null);
+               }}
+               className="w-full text-left px-3 py-1.5 text-xs text-red-400 flex items-center gap-2 hover:bg-red-500/10 transition-colors"
+             >
+               <RotateCw className="w-3.5 h-3.5" /> Restart Shell
+             </button>
           </div>
         )}
       </div>

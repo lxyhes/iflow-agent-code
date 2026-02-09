@@ -42,6 +42,7 @@ public class SecurityConfig {
                 // 允许匿名访问所有 API
                 .requestMatchers("/api/**").permitAll()
                 .requestMatchers("/stream").permitAll()  // 允许流式聊天端点
+                .requestMatchers("/shell").permitAll()   // 允许 WebSocket shell 端点
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
