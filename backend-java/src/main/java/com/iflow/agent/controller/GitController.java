@@ -385,7 +385,7 @@ public class GitController {
     private List<String> executeGitCommand(String projectPath, String... args) throws Exception {
         List<String> command = new ArrayList<>();
         // 使用 git 命令的完整路径
-        command.add("/usr/bin/git");
+        command.add("git");
         command.addAll(List.of(args));
 
         log.info("Executing git command in {}: {}", projectPath, String.join(" ", args));

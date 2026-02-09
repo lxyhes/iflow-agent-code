@@ -224,6 +224,36 @@ public class ProjectManagementController {
     }
 
     /**
+     * 更新会话 (重命名)
+     */
+    @PutMapping("/{projectName}/sessions/{sessionId}")
+    public ResponseEntity<Map<String, Object>> updateSession(
+            @PathVariable String projectName,
+            @PathVariable String sessionId,
+            @RequestBody Map<String, String> request) {
+        String summary = request.get("summary");
+        log.info("更新会话: {}, summary={}", sessionId, summary);
+        
+        ProjectSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+        
+        if (summary != null) {
+            session.setTitle(summary);
+        }
+        
+        sessionRepository.save(session);
+        
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "session", Map.of(
+                        "id", session.getId(),
+                        "title", session.getTitle(),
+                        "summary", session.getTitle()
+                )
+        ));
+    }
+
+    /**
      * 删除会话
      */
     @DeleteMapping("/{projectName}/sessions/{sessionId}")
