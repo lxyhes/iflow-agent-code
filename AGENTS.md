@@ -24,16 +24,18 @@ AI 工作台 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI 
 
 ## 技术栈
 
-### 后端（Python）
-- **框架**: FastAPI + Uvicorn
+### 后端（Java/Spring Boot）
+- **框架**: Spring Boot 3.2.0
 - **AI 集成**: AI 工作台 SDK（支持 GLM-4.7 等模型）
-- **数据库**: SQLite（better-sqlite3）
+- **数据库**: SQLite
 - **认证**: JWT + bcrypt
-- **文件处理**: aiofiles, python-multipart
+- **响应式编程**: Project Reactor（Mono, Flux）
+- **文件处理**: Java NIO
 - **其他依赖**:
-  - pydantic（数据验证）
-  - requests（HTTP 客户端）
-  - uvicorn（ASGI 服务器）
+  - Lombok（简化代码）
+  - Jackson（JSON 处理）
+  - WebSocket（实时通信）
+  - PTY4J（终端支持）
 
 ### 前端（JavaScript/React）
 - **框架**: React 18 + Vite
@@ -55,80 +57,31 @@ AI 工作台 是一个智能代码助手系统，为 Claude Code 和 Cursor CLI 
 
 ### 核心服务模块
 
-后端包含以下核心服务模块（位于 `backend/core/`）：
+后端包含以下核心服务模块（位于 `backend-java/src/main/java/com/iflow/agent/`）：
 
 #### AI 与智能服务
-- `agent.py` - AI 代理核心
-- `llm.py` - 大语言模型接口
-- `iflow_client.py` - AI 工作台 客户端
-- `iflow_sdk_client.py` - AI 工作台 SDK 客户端
-- `prompt_optimizer.py` - Prompt 优化器
-- `prompt_manager_service.py` - Prompt 管理服务
+- `service/ai/UnifiedAIService.java` - **统一 AI 服务层**（所有 AI 调用必须通过此服务）
+- `service/ai/IFlowService.java` - AI 工作台 服务封装
+- `service/llm/IFlowLLMService.java` - iFlow LLM 服务
+- `service/llm/AIProviderService.java` - AI 提供商服务
 
 #### 代码分析与审查
-- `code_analyzer.py` - 代码分析器
-- `code_review_service.py` - 代码审查服务
-- `code_style_analyzer.py` - 代码风格分析器
-- `code_completion_service.py` - 代码补全服务
-- `code_dependency_analyzer.py` - 代码依赖分析器
-- `refactor_suggester.py` - 重构建议器
-- `test_generator.py` - 测试生成器
-- `error_analyzer.py` - 错误分析器
-- `auto_fixer.py` - 自动修复服务
+- `service/ai/CodeReviewService.java` - 代码审查服务
+- `service/ai/CodeStyleAnalyzer.java` - 代码风格分析器
+- `service/ai/CodeCompletionService.java` - 代码补全服务
+- `service/ai/CodeDependencyAnalyzer.java` - 代码依赖分析器
 
 #### 项目与文件管理
-- `project_manager.py` - 项目管理器
-- `project_developer_agent.py` - 项目开发代理
-- `project_template_service.py` - 项目模板服务
-- `project_templates.py` - 项目模板定义
-- `file_service.py` - 文件系统服务
-- `dependency_analyzer.py` - 依赖分析器
-- `feature_locator_service.py` - 功能定位服务
+- `service/ProjectManager.java` - 项目管理器
+- `service/FileService.java` - 文件系统服务
+- `service/DependencyAnalyzer.java` - 依赖分析器
 
 #### Git 与版本控制
-- `git_service.py` - Git 操作服务
-
-#### 文档与内容
-- `doc_generator.py` - 文档生成器
-- `document_classifier.py` - 文档分类器
-- `document_summarizer.py` - 文档摘要器
-- `document_version_manager.py` - 文档版本管理器
-- `smart_chunker.py` - 智能分块器
+- `service/GitService.java` - Git 操作服务
 
 #### 任务与工作流
-- `task_master_service.py` - 任务管理服务
-- `smart_requirement_service.py` - 智能需求分析服务
-- `cicd_generator.py` - CI/CD 配置生成器
-- `solution_generator_service.py` - 解决方案生成服务
-- `business_flow_summarizer.py` - 业务流程摘要器
-- `business_memory_service.py` - 业务记忆服务
-- `command_shortcut_service.py` - 命令快捷键服务
-
-#### RAG 与检索
-- `rag_service.py` - RAG（检索增强生成）服务
-- `context_graph_service.py` - 上下文图服务
-- `snippet_service.py` - 代码片段服务
-
-#### 系统与工具
-- `shell_service.py` - Shell 会话服务
-- `async_command.py` - 异步命令执行
-- `sandbox_service.py` - 沙箱服务
-- `health_analyzer.py` - 健康分析器
-- `performance_monitor.py` - 性能监控
-- `report_generator.py` - 报告生成器
-- `report_generator_enhanced.py` - 增强报告生成器
-- `gamification_service.py` - 游戏化服务
-- `auto_heal_service.py` - 自动修复服务
-
-#### 安全与验证
-- `path_validator.py` - 路径验证器（安全防护）
-- `security.py` - 安全工具
-- `exceptions.py` - 自定义异常
-
-#### 其他
-- `schema.py` - 数据模型定义
-- `registry.py` - 注册表
-- `retry.py` - 重试机制
+- `service/ai/TaskMasterService.java` - 任务管理服务
+- `service/ai/SmartRequirementService.java` - 智能需求分析服务
 
 ## 项目结构
 
@@ -272,13 +225,13 @@ python3 log_viewer.py
 
 ### 代码风格
 
-#### Python（后端）
-- 遵循 PEP 8 规范
-- 使用类型提示（Type Hints）
-- 函数和类使用文档字符串
-- 异常处理使用自定义异常类（`backend/core/exceptions.py`）
-- 路径操作必须通过 `PathValidator` 验证（安全防护）
-- 新的 API 端点应放在 `backend/app/routers/` 中
+#### Java（后端）
+- 遵循 Google Java Style Guide
+- 使用 Lombok 简化代码（`@Data`, `@RequiredArgsConstructor`, `@Slf4j`）
+- 使用 Spring Boot 注解（`@Service`, `@Controller`, `@RestController`）
+- 异常处理使用自定义异常类（`config/exceptions/`）
+- 响应式编程使用 Project Reactor（`Mono`, `Flux`）
+- **重要：所有 AI 调用必须通过 `UnifiedAIService` 进行**
 
 #### JavaScript/React（前端）
 - 使用 ESLint 进行代码检查
@@ -382,17 +335,9 @@ python3 log_viewer.py
 
 #### 后端测试
 ```bash
-cd backend
-python3 -m pytest tests/
+cd backend-java
+mvn test
 ```
-
-测试文件位于 `backend/tests/`，包括：
-- `test_auto_heal_service.py` - 自动修复服务测试
-- `test_gamification_service.py` - 游戏化服务测试
-- `test_path_validator.py` - 路径验证器测试
-- `test_smart_requirement.py` - 智能需求分析测试
-- `test_file_content_endpoint.py` - 文件内容端点测试
-- `test_new_features.py` - 新功能测试
 
 #### 前端测试
 ```bash
@@ -402,12 +347,34 @@ npm test
 
 ### Git 工作流
 
-- 使用分支进行功能开发
-- 提交信息遵循 Conventional Commits 规范
-- 主分支：`main`
-- 提交前运行代码检查和测试
+1. 创建功能分支: `git checkout -b feature/amazing-feature`
+2. 提交更改: `git commit -m "feat: add amazing feature"`
+3. 推送到远程: `git push origin feature/amazing-feature`
+4. 创建 Pull Request
+
+提交信息遵循 Conventional Commits：
+- `feat:` 新功能
+- `fix:` 修复 bug
+- `docs:` 文档更新
+- `style:` 代码格式
+- `refactor:` 重构
+- `test:` 测试
+- `chore:` 构建/工具
 
 ## 核心 API 端点
+
+### AI 相关接口
+- `GET /stream` - 流式聊天接口（SSE），通过 `IFlowService` 实现
+- `GET /health` - AI 服务健康检查
+- `GET /models` - 获取支持的 AI 模型列表
+- `GET /personas` - 获取支持的 AI 人格类型
+- `GET /modes` - 获取支持的执行模式
+- `POST /api/interview-ai/master-answer` - 生成面试高分回答
+- `POST /api/interview-ai/star-analysis` - STAR 法则分析
+- `POST /api/interview-ai/salary-negotiation` - 薪资谈判模拟
+- `POST /api/interview-ai/deep-dive` - 深度追问生成
+- `POST /api/interview-ai/pressure-interview` - 压力面试模拟
+- `POST /api/interview-ai/interview-review` - 面试复盘分析
 
 ### 认证与配置
 - `GET /api/auth/status` - 获取认证状态
@@ -429,11 +396,6 @@ npm test
 - `GET /api/projects/{project_name}/sessions/{session_id}/messages` - 获取会话消息
 - `PUT /api/projects/{project_name}/sessions/{session_id}` - 更新会话摘要
 - `GET /api/projects/{project_name}/sessions/{session_id}/token-usage` - 获取 token 使用情况
-
-### AI 聊天
-- `GET /stream` - 流式聊天接口（SSE）
-- `POST /api/review` - 代码审查
-- `POST /api/solutions` - 生成解决方案
 
 ### Git 操作
 - `GET /api/git/status` - 获取 Git 状态
@@ -485,26 +447,42 @@ npm test
 
 ## 配置说明
 
-### 全局配置（`global_config`）
-```python
-{
-    "mode": "yolo",              # 运行模式
-    "model": "GLM-4.7",          # AI 模型
-    "mcp_servers": [],           # MCP 服务器列表
-    "iflow_path": "iflow",       # AI 工作台 CLI 路径
-    "rag_mode": "tfidf"          # RAG 模式（"chromadb" 或 "tfidf"）
-}
+### 全局配置（`application.yml`）
+```yaml
+iflow:
+  enabled: true
+  sdk:
+    # WebSocket URL，默认本地 8090 端口
+    url: ws://localhost:8090/acp
+    # 是否自动启动 iFlow 进程
+    auto-start: true
+    # 超时时间（秒）
+    timeout-seconds: 120
+    # 权限模式
+    permission-mode: AUTO
+
+llm:
+  # 默认使用 iFlow
+  provider: iflow
+  api-key: ${IFLOW_API_KEY:}
+  base-url: ${IFLOW_API_BASE_URL:https://api.iflow.cn/v1}
+  default-model: glm-4
+  default-temperature: 0.7
 ```
 
 ### 环境变量
-- `PYTHONPATH` - Python 模块路径
+- `IFLOW_API_KEY` - AI 工作台 API 密钥
+- `IFLOW_API_BASE_URL` - AI 工作台 API 基础 URL
+- `IFLOW_PATH` - AI 工作台 CLI 路径（可选）
 - `PORT` - 前端端口（默认 5173）
-- `BACKEND_PORT` - 后端端口（默认 8000）
+- `BACKEND_PORT` - 后端端口（默认 8080）
 
 ### Vite 代理配置
 前端通过 Vite 代理将 API 请求路由到正确后端：
 - `/api/auth`, `/api/settings`, `/api/user` → Node.js 服务器（3001）
-- `/api/*`（其他）→ Python FastAPI（8000）
+- `/api/*`（其他）→ Java Spring Boot（8080）
+- `/stream` → Java Spring Boot（8080）
+- `/shell` → Java Spring Boot WebSocket（8080）
 - `/stream` → Python FastAPI（8000）
 - `/shell` → Python FastAPI WebSocket（8000）
 
@@ -598,23 +576,67 @@ chmod -R 755 /Users/hb/Downloads/iflow-agent/iflow-agent-code
 ```
 
 ### 5. 后端启动失败
-- 检查 Python 版本是否为 3.10+
-- 确认 `PYTHONPATH` 已正确设置
-- 查看后端日志：`tail -f /tmp/backend.log`
+- 检查 Java 版本是否为 17+
+- 确认 Maven 依赖已正确安装
+- 查看后端日志：`tail -f backend-java/logs/application.log`
+- 检查 iFlow CLI 是否正确安装：`iflow --version`
 
 ### 6. 前端启动失败
 - 检查 Node.js 版本是否为 v20+
 - 删除 `node_modules` 和 `package-lock.json` 后重新安装
-- 查看前端日志：`tail -f /tmp/frontend.log`
+- 查看前端日志：`tail -f logs/frontend.log`
+
+### 7. AI 调用失败
+- 检查 iFlow CLI 是否正确安装和配置
+- 确认 iFlow CLI 是否在运行：`iflow --experimental-acp --port 8090`
+- 检查 `application.yml` 中的 iFlow 配置
+- 查看后端日志中的 AI 相关错误信息
 
 ## 扩展开发
 
 ### 添加新的后端服务
 
-1. 在 `backend/core/` 创建新服务文件
+1. 在 `backend-java/src/main/java/com/iflow/agent/service/` 创建新服务文件
 2. 实现服务类和方法
-3. 在 `backend/app/routers/` 创建新路由文件（推荐）或在 `backend/server.py` 中注册（遗留）
-4. 在 `backend/tests/` 添加测试
+3. 在 `backend-java/src/main/java/com/iflow/agent/controller/` 创建新控制器文件
+4. 如果涉及 AI 调用，**必须通过 `UnifiedAIService` 进行**
+
+### 添加需要 AI 功能的服务
+
+**重要：所有 AI 调用都必须通过 `UnifiedAIService`**
+
+```java
+@Service
+@RequiredArgsConstructor
+public class YourNewService {
+    
+    private final UnifiedAIService unifiedAIService;
+    
+    /**
+     * 示例：使用 AI 生成内容
+     */
+    public Mono<String> generateContent(String input) {
+        String prompt = buildPrompt(input);
+        return unifiedAIService.chatWithPrompt(
+            "你是一个专业的助手",
+            prompt,
+            "GLM-4.7"
+        );
+    }
+    
+    /**
+     * 示例：使用 AI 流式生成
+     */
+    public Flux<String> streamGenerateContent(String input) {
+        String prompt = buildPrompt(input);
+        return unifiedAIService.streamChat(
+            prompt,
+            null, null, null, "GLM-4.7", "partner", "default"
+        )
+        .map(event -> (String) event.get("content"));
+    }
+}
+```
 
 ### 添加新的前端组件
 
@@ -625,17 +647,17 @@ chmod -R 755 /Users/hb/Downloads/iflow-agent/iflow-agent-code
 
 ### 集成新的 AI 模型
 
-1. 在 `backend/core/agent.py` 中添加模型配置
-2. 在 `backend/core/llm.py` 中实现模型接口
-3. 更新 `global_config` 添加模型选项
+1. 在 `backend-java/src/main/resources/application.yml` 中配置模型
+2. 在 `IFlowService` 中添加模型支持
+3. 更新 `UnifiedAIService.getSupportedModels()` 添加新模型
 4. 在前端设置页面添加模型选择器
 
-### 添加新的 API 路由（新架构）
+### 添加新的 API 路由
 
-1. 在 `backend/app/routers/` 创建新路由文件
+1. 在 `backend-java/src/main/java/com/iflow/agent/controller/` 创建新控制器文件
 2. 定义路由和端点
-3. 在 `backend/app/main.py` 中注册路由
-4. 添加认证（如需要）
+3. 使用 `@RestController` 和 `@RequestMapping` 注解
+4. 添加请求日志和异常处理
 
 ## 贡献指南
 
@@ -665,6 +687,6 @@ MIT License - 详见 LICENSE 文件
 
 ---
 
-**最后更新**: 2026-01-19
-**维护者**: AI 工作台 Team
-**版本**: 1.12.0
+**最后更新**: 2026年2月10日
+**维护者**: iFlow Agent Team
+**版本**: 2.0.0

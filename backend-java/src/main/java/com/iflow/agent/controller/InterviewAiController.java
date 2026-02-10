@@ -2,7 +2,7 @@ package com.iflow.agent.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.iflow.agent.service.llm.IFlowLLMService;
+import com.iflow.agent.service.ai.UnifiedAIService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * AI 面试辅助 API - 使用 iFlow LLM 服务
+ * AI 面试辅助 API - 使用统一 AI 服务
  */
 @Slf4j
 @RestController
@@ -21,7 +21,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class InterviewAiController {
 
-    private final IFlowLLMService iflowLLMService;
+    private final UnifiedAIService unifiedAIService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -40,9 +40,11 @@ public class InterviewAiController {
         try {
             String prompt = buildMasterAnswerPrompt(question, company, position, questionType);
 
-            String answer = iflowLLMService.generate(prompt)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String answer = unifiedAIService.chatWithPrompt(
+                "你是一位资深的面试辅导专家，正在帮助候选人准备面试。", 
+                prompt, 
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             if (answer == null || answer.trim().isEmpty()) {
                 log.warn("LLM returned empty response, using fallback");
@@ -111,9 +113,11 @@ public class InterviewAiController {
                 }
                 """, story);
 
-            String response = iflowLLMService.generate(prompt)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String response = unifiedAIService.chatWithPrompt(
+                "你是STAR法则分析专家，负责评估面试故事的完整性和质量。",
+                prompt,
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             if (response == null || response.trim().isEmpty()) {
                 return getFallbackSTARAnalysis();
@@ -148,37 +152,52 @@ public class InterviewAiController {
 
         try {
             String prompt = String.format("""
-                请为以下情况生成薪资谈判策略：
+                你正在和HR谈薪资，对方问你期望多少。
 
+                【背景】
                 公司：%s
                 职位：%s
-                目标薪资：%s
-                工作经验：%s 年
+                你的期望：%s
+                工作经验：%s年
 
-                请生成完整的谈判策略，包括：
-                1. 开场白
-                2. 锚定价格
-                3. 理由说明
-                4. 备选方案
+                【回答要求】
+                请给出一个自然的回答，像真实的薪资谈判场景：
 
-                请直接输出策略内容，不要有多余解释。
+                1. 语气要自信但不咄咄逼人
+                2. 用口语表达，比如"其实吧"、"说实话"
+                3. 不要说"第一、第二、第三"
+                4. 不要用"综上所述"、"总而言之"
+                5. 可以说一些具体的理由，比如"我之前...所以..."
+                6. 长度控制在150-300字
+                7. 不要用过于正式的商务用语
+
+                【示例风格】
+                不要这样："首先，我认为我的价值体现在...其次，市场薪资水平是...最后..."
+                要这样："其实我也做过一些调研，目前市场上类似岗位的薪资大概是...我自己有X年的经验，之前做过..."
+
+                请直接给出回答，像真的在跟HR说话一样。
                 """, company, position, targetSalary, experienceYears);
 
-            String response = iflowLLMService.generate(prompt)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String response = unifiedAIService.chatWithPrompt(
+                "你是薪资谈判专家，帮助候选人制定谈判策略。",
+                prompt,
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             if (response == null || response.trim().isEmpty()) {
                 return getFallbackSalaryStrategy();
             }
 
+            // 解析 AI 响应，提取策略内容
+            String negotiationContent = response.trim();
+
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "strategy", Map.of(
-                            "opening", "Based on my research and experience...",
-                            "anchor", "I'm looking for a range of X to Y",
-                            "justification", "My skills in A, B, and C bring value...",
-                            "fallback", "If the base is fixed, can we discuss benefits?"
+                            "opening", negotiationContent,
+                            "anchor", negotiationContent,
+                            "justification", negotiationContent,
+                            "fallback", negotiationContent
                     ),
                     "tips", List.of(
                             "Research market rates beforehand",
@@ -206,26 +225,36 @@ public class InterviewAiController {
 
         try {
             String prompt = String.format("""
-                基于以下信息生成 4 个深度追问问题，帮助候选人展示更深层的理解和经验：
+                你是技术面试官，想进一步挖掘候选人的深度。
 
+                【背景】
                 原问题：%s
                 候选人回答：%s
-                深度等级：%d（1-5，数字越大越深入）
+                想要追问的深度：%d（1-5，越大越深入）
 
-                要求：
-                1. 问题要有挑战性，符合深度等级 %d
-                2. 问题要能考察候选人解决问题的思路
-                3. 问题要能体现候选人的深度思考
-                4. 每个问题都要具体、可操作
-                5. 问题要用中文
+                【要求】
+                请生成4个自然的追问问题，像真实的面试场景：
 
-                请以 JSON 数组格式输出问题列表：
+                1. 语气要自然，像技术讨论
+                2. 可以用"那"、"嗯"、"如果"等过渡词
+                3. 问题要具体，不要太空泛
+                4. 不要用"请问"、"请问您"这种正式用语
+                5. 每个问题30-60字
+                6. 要符合深度等级%d的要求
+
+                【示例风格】
+                不要这样："请问您对XXX的理解是什么？"
+                要这样："那如果并发量再大点，你这个方案还能撑住吗？"
+
+                请以JSON数组格式输出4个问题：
                 ["问题1", "问题2", "问题3", "问题4"]
                 """, question, answer, depth, depth);
 
-            String response = iflowLLMService.generate(prompt)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String response = unifiedAIService.chatWithPrompt(
+                "你是面试专家，负责生成深度追问问题，深入挖掘候选人的知识和经验。",
+                prompt,
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             List<String> questions;
             if (response == null || response.trim().isEmpty()) {
@@ -263,55 +292,77 @@ public class InterviewAiController {
 
         try {
             String prompt;
+            String systemPrompt;
             
             if ("stress".equals(pressureType)) {
                 // 高压模式：直接质疑
+                systemPrompt = "你是压力面试官，语气要直接、犀利。";
                 prompt = String.format("""
-                    候选人回答：%s
+                    候选人刚才说了：%s
 
-                    作为压力面试官，请生成一个具有挑战性的质疑或追问，测试候选人的抗压能力。
+                    作为压力面试官，你感觉这个回答有点问题，需要质疑一下。
 
-                    要求：
-                    1. 直接质疑候选人的回答
-                    2. 提出尖锐的问题
-                    3. 施加心理压力
-                    4. 用中文
+                    【要求】
+                    1. 语气要直接、犀利，像真实的压力面试
+                    2. 用口语，比如"等等"、"不对"、"你确定吗"
+                    3. 直接质疑，不要铺垫
+                    4. 可以有点不耐烦的语气
+                    5. 长度控制在50-100字
 
-                    请直接输出面试官的问题。
+                    【示例风格】
+                    不要这样："请问您能否进一步解释..."
+                    要这样："等等，你说的这个我不太认同。如果遇到XXX情况，你的方案还能用吗？"
+
+                    请直接输出问题。
                     """, candidateAnswer);
             } else if ("challenge".equals(pressureType)) {
                 // 挑战模式：提出挑战性问题
+                systemPrompt = "你是技术面试官，喜欢问有深度的问题。";
                 prompt = String.format("""
-                    候选人回答：%s
+                    候选人刚才说了：%s
 
-                    作为面试官，请生成一个具有挑战性的问题，深入挖掘候选人的知识和经验。
+                    作为技术面试官，你觉得这个回答还可以，但想再深入挖一下。
 
-                    要求：
-                    1. 提出有深度的问题
-                    2. 考察候选人的思考过程
-                    3. 用中文
+                    【要求】
+                    1. 语气要自然，像同事间的技术讨论
+                    2. 可以用"嗯"、"好的"等过渡词
+                    3. 问题要有深度，但不要太刁钻
+                    4. 可以说"那如果...你会怎么处理"
+                    5. 长度控制在50-100字
 
-                    请直接输出面试官的问题。
+                    【示例风格】
+                    不要这样："请问您的技术方案考虑了哪些因素？"
+                    要这样："嗯，这样理解没问题。那如果数据量再大10倍，你这个方案还能hold住吗？"
+
+                    请直接输出问题。
                     """, candidateAnswer);
             } else {
                 // 逻辑模式：考察逻辑思维
+                systemPrompt = "你是逻辑清晰的面试官，喜欢问思维类问题。";
                 prompt = String.format("""
-                    候选人回答：%s
+                    候选人刚才说了：%s
 
-                    作为面试官，请生成一个逻辑性问题，考察候选人的思维清晰度。
+                    作为面试官，你想考察一下候选人的逻辑思维能力。
 
-                    要求：
-                    1. 问题要有逻辑性
-                    2. 考察候选人的推理能力
-                    3. 用中文
+                    【要求】
+                    1. 语气要平实，像正常的面试交流
+                    2. 问题要考察思考过程，不要问死记硬背的
+                    3. 可以用"那你觉得"、"你怎么看"这样的表达
+                    4. 长度控制在50-100字
 
-                    请直接输出面试官的问题。
+                    【示例风格】
+                    不要这样："请问您的逻辑思维如何体现？"
+                    要这样："那你觉得这个问题的本质是什么？如果让你从零开始设计，你会怎么做？"
+
+                    请直接输出问题。
                     """, candidateAnswer);
             }
 
-            String response = iflowLLMService.generate(prompt)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String response = unifiedAIService.chatWithPrompt(
+                systemPrompt,
+                prompt,
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             if (response == null || response.trim().isEmpty()) {
                 return getFallbackPressureResponse();
@@ -369,9 +420,11 @@ public class InterviewAiController {
                 请以 JSON 格式输出评估结果。
                 """));
 
-            String response = iflowLLMService.generate(prompt.toString())
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String response = unifiedAIService.chatWithPrompt(
+                "你是面试复盘专家，负责全面评估面试表现并提供改进建议。",
+                prompt.toString(),
+                "GLM-4.7"
+            ).block(Duration.ofSeconds(30));
 
             if (response == null || response.trim().isEmpty()) {
                 return getFallbackInterviewReview();
@@ -424,24 +477,30 @@ public class InterviewAiController {
 
     private String buildMasterAnswerPrompt(String question, String company, String position, String questionType) {
         return String.format("""
-            你是一位资深的面试辅导专家，正在帮助候选人准备面试。
+            你是一位经验丰富的面试官，现在要示范如何回答这个问题。
 
-            【面试信息】
-            公司：%s
-            职位：%s
-            问题类型：%s
-            面试问题：%s
+            【面试场景】
+            你正在面试%s的%s职位
+            面试官问了：%s
 
-            【要求】
-            请生成一个高分回答，要求：
-            1. 回答要具体、有深度
-            2. 结合实际项目经验
-            3. 展示技术能力和解决问题的思路
-            4. 使用 STAR 法则或适当的技术框架
-            5. 回答长度控制在 300-500 字
+            【回答要求】
+            请给出一个真实自然的回答，像你真的在面试一样：
 
-            请直接输出回答内容，不要有多余解释。
-            """, company, position, questionType, question);
+            1. 语气要自然，不要太正式，像和朋友聊天
+            2. 用第一人称"我"，不要用"我们"或"本人"
+            3. 多说具体的细节，少说大道理
+            4. 可以带点个人经历，比如"之前我遇到过这种情况..."
+            5. 适当用点口语表达，比如"其实吧"、"说实话"
+            6. 回答长度200-400字即可
+            7. 不要用"第一、第二、第三"这种列举方式
+            8. 不要说"综上所述"、"总而言之"这种总结语
+
+            【示例风格】
+            不要这样："首先，我理解了这个问题的核心...其次，我采取了...最后，我..."
+            要这样："这个问题挺有意思的。之前我做项目的时候也遇到过...我当时的做法是...效果还不错，性能提升了..."
+
+            请直接给出回答，开头不要说"我会这样回答："，直接说内容。
+            """, company, position, question);
     }
 
     private String getFallbackMasterAnswer(String question) {

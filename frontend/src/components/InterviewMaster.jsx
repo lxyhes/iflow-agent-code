@@ -172,35 +172,17 @@ const InterviewMaster = ({ onClose }) => {
     setInput('');
 
     // 提取公司和职位信息
-    if (interviewStage === 'intro') {
-      // 尝试从用户输入中提取公司和职位
-      const companyMatch = userMessage.match(/(阿里|字节|腾讯|美团|百度|京东|拼多多|小米|华为|滴滴|快手|网易)/);
-      const positionMatch = userMessage.match(/(后端|前端|架构师|算法|测试|运维|产品|运营)/);
+    // 尝试从用户输入中提取公司和职位
+    const companyMatch = userMessage.match(/(阿里|字节|腾讯|美团|百度|京东|拼多多|小米|华为|滴滴|快手|网易)/);
+    const positionMatch = userMessage.match(/(后端|前端|架构师|算法|测试|运维|产品|运营)/);
 
-      if (companyMatch) setCompany(companyMatch[1]);
-      if (positionMatch) setPosition(positionMatch[1]);
+    if (companyMatch) setCompany(companyMatch[1]);
+    if (positionMatch) setPosition(positionMatch[1]);
 
-      // 检查是否包含面试题
-      const hasQuestion = userMessage.includes('？') || userMessage.includes('?') ||
-                         userMessage.length > 20;
-
-      if (hasQuestion) {
-        setInterviewStage('analyzing');
-        const questionType = identifyQuestionType(userMessage);
-        await generateMasterAnswer(userMessage, questionType, companyMatch?.[1] || '互联网公司', positionMatch?.[1] || '开发');
-      } else {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `好的，我了解到你要面试${companyMatch?.[1] || '互联网公司'}的${positionMatch?.[1] || '技术'}职位。\n\n现在请告诉我面试官问了什么问题？我会用最高手的回答策略帮你！`,
-          type: 'normal'
-        }]);
-      }
-    } else {
-      // 继续对话
-      setInterviewStage('analyzing');
-      const questionType = identifyQuestionType(userMessage);
-      await generateMasterAnswer(userMessage, questionType, company || '互联网公司', position || '开发');
-    }
+    // 直接调用 AI 生成回答，让 AI 判断如何响应
+    setInterviewStage('analyzing');
+    const questionType = identifyQuestionType(userMessage);
+    await generateMasterAnswer(userMessage, questionType, companyMatch?.[1] || company || '互联网公司', positionMatch?.[1] || position || '开发');
   };
 
   const handleKeyPress = (e) => {
