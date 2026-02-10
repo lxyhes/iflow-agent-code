@@ -1364,6 +1364,7 @@ const InterviewPreparation = ({ selectedProject }) => {
   const renderPractice = () => {
     // 多智能体面试模式
     if (multiAgentMode && multiAgentCandidateProfile) {
+      console.log('[面试] 渲染多智能体面试界面, profile:', multiAgentCandidateProfile);
       return (
         <div className="flex h-full min-h-0">
           <MultiAgentInterview
