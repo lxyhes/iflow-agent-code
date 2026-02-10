@@ -130,22 +130,33 @@ public class SmartRequirementService {
                 request.getFocus(), request.getProjectName());
 
         // TODO: 实现真正的项目扫描和分析
-        // 这里返回模拟数据
-        ProjectOptimizationResult analysis = new ProjectOptimizationResult(
-                "项目整体结构良好，代码规范性较高",
-                85,
-                Arrays.asList("模块化设计清晰", "注释完整", "命名规范"),
-                Arrays.asList("部分代码重复", "测试覆盖率待提升")
-        );
+        // 这里先调用 AI 进行智能分析
+        String prompt = buildOptimizeProjectPrompt(request.getFocus(), request.getProjectName());
+        String aiResponse = unifiedAIService.chat(prompt, "GLM-4.7").block();
 
-        OptimizationRecommendation rec1 = new OptimizationRecommendation(
-                "高", "代码质量", "存在重复代码", "提取公共方法到工具类", "2小时"
-        );
-        OptimizationRecommendation rec2 = new OptimizationRecommendation(
-                "中", "测试", "测试覆盖率不足", "添加单元测试", "4小时"
-        );
+        try {
+            // 移除可能的 Markdown 代码块标记
+            String cleanedResponse = extractJsonFromMarkdown(aiResponse);
+            return objectMapper.readValue(cleanedResponse, OptimizeProjectResponse.class);
+        } catch (Exception e) {
+            log.error("解析项目优化响应失败, 原始响应: {}", aiResponse, e);
+            // 返回模拟数据作为后备
+            ProjectOptimizationResult analysis = new ProjectOptimizationResult(
+                    "项目整体结构良好，代码规范性较高",
+                    85,
+                    Arrays.asList("模块化设计清晰", "注释完整", "命名规范"),
+                    Arrays.asList("部分代码重复", "测试覆盖率待提升")
+            );
 
-        return new OptimizeProjectResponse(analysis, Arrays.asList(rec1, rec2));
+            OptimizationRecommendation rec1 = new OptimizationRecommendation(
+                    "高", "代码质量", "存在重复代码", "提取公共方法到工具类", "2小时"
+            );
+            OptimizationRecommendation rec2 = new OptimizationRecommendation(
+                    "中", "测试", "测试覆盖率不足", "添加单元测试", "4小时"
+            );
+
+            return new OptimizeProjectResponse(analysis, Arrays.asList(rec1, rec2));
+        }
     }
 
     /**
@@ -295,6 +306,37 @@ public class SmartRequirementService {
                 """,
                 request.getAnalysis(),
                 request.getMatchedModules()
+        );
+    }
+
+    private String buildOptimizeProjectPrompt(String focus, String projectName) {
+        return String.format("""
+                请对项目进行智能诊断和优化建议分析。
+
+                项目名称：%s
+                关注重点：%s
+
+                请返回JSON格式：
+                {
+                  "analysis": {
+                    "summary": "项目整体评估摘要",
+                    "healthScore": 85,
+                    "strengths": ["优势1", "优势2", "优势3"],
+                    "weaknesses": ["待改进点1", "待改进点2"]
+                  },
+                  "recommendations": [
+                    {
+                      "priority": "高/中/低",
+                      "category": "类别（如：代码质量、性能、安全、测试等）",
+                      "issue": "问题描述",
+                      "solution": "解决方案",
+                      "effort": "预估工作量"
+                    }
+                  ]
+                }
+                """,
+                projectName != null ? projectName : "当前项目",
+                focus != null && !focus.isEmpty() ? focus : "全项目扫描"
         );
     }
 

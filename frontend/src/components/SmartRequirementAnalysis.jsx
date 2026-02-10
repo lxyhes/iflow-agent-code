@@ -52,7 +52,7 @@ import EffortEstimation from './visualizations/EffortEstimation';
 import { scopedKey } from '../utils/projectScope';
 
 const SmartRequirementAnalysis = ({ project }) => {
-  const { refreshTasks } = useTaskMaster();
+  const { refreshTasks, currentProject } = useTaskMaster();
   const [text, setText] = useState('');
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -236,13 +236,25 @@ const SmartRequirementAnalysis = ({ project }) => {
   };
 
   const handleAnalyze = async () => {
-    console.log('handleAnalyze called, analysisMode:', analysisMode);
+    console.log('handleAnalyze called, analysisMode:', analysisMode, 'project:', project, 'currentProject:', currentProject);
+    
+    // Use currentProject from TaskMaster context if project is not provided
+    const activeProject = project || currentProject;
+    
+    console.log('Active project:', activeProject);
     
     // Validation based on mode
     if (analysisMode === 'requirement' && !text.trim() && !image) {
       setError('Please enter text or upload an image.');
       return;
     }
+    
+    // Check project for project_optimization mode
+    if (analysisMode === 'project_optimization' && !activeProject) {
+      setError('请先选择一个项目才能进行智能诊断。');
+      return;
+    }
+    
     // For project optimization, text (focus) is optional but recommended
 
     setIsLoading(true);
@@ -256,12 +268,12 @@ const SmartRequirementAnalysis = ({ project }) => {
           // --- Project Optimization Flow ---
           console.log('Starting project optimization, payload:', {
               focus: text,
-              project_name: project?.name
+              project_name: activeProject?.name
           });
           
           const payload = {
               focus: text, // Use text input as focus area
-              project_name: project?.name
+              project_name: activeProject?.name
           };
           
           const res = await fetch('/api/smart-requirement/optimize-project', {
@@ -296,7 +308,7 @@ const SmartRequirementAnalysis = ({ project }) => {
           // Step 1: Analyze Requirement
           const payloadStep1 = {
             text: text,
-            project_name: project?.name,
+            project_name: activeProject?.name,
             image_path: image ? image.name : null 
           };
 
@@ -315,7 +327,7 @@ const SmartRequirementAnalysis = ({ project }) => {
           // Step 2: Match Modules
           const payloadStep2 = {
             keywords: analysis.keywords,
-            project_name: project?.name
+            project_name: activeProject?.name
           };
 
           const res2 = await fetch('/api/smart-requirement/step2-match', {
