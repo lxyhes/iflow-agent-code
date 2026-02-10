@@ -1112,24 +1112,22 @@ function AppContent() {
           isInputFocused={isInputFocused}
         />
       )}
-      {/* Quick Settings Panel - Only show on chat tab */}
-      {activeTab === 'chat' && (
-        <QuickSettingsPanel
-          isOpen={showQuickSettings}
-          onToggle={setShowQuickSettings}
-          autoExpandTools={autoExpandTools}
-          onAutoExpandChange={setAutoExpandTools}
-          showRawParameters={showRawParameters}
-          onShowRawParametersChange={setShowRawParameters}
-          showThinking={showThinking}
-          onShowThinkingChange={setShowThinking}
-          autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={setAutoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={setSendByCtrlEnter}
-          isMobile={isMobile}
-        />
-      )}
+      {/* Quick Settings Panel - Show on all tabs */}
+      <QuickSettingsPanel
+        isOpen={showQuickSettings}
+        onToggle={setShowQuickSettings}
+        autoExpandTools={autoExpandTools}
+        onAutoExpandChange={setAutoExpandTools}
+        showRawParameters={showRawParameters}
+        onShowRawParametersChange={setShowRawParameters}
+        showThinking={showThinking}
+        onShowThinkingChange={setShowThinking}
+        autoScrollToBottom={autoScrollToBottom}
+        onAutoScrollChange={setAutoScrollToBottom}
+        sendByCtrlEnter={sendByCtrlEnter}
+        onSendByCtrlEnterChange={setSendByCtrlEnter}
+        isMobile={isMobile}
+      />
 
       {/* Settings Modal */}
       <Settings
