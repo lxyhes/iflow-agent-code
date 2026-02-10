@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Database, Workflow, FileSearch, BrainCircuit, MessagesSquare, Github, FileText } from 'lucide-react';
+import { MoreHorizontal, Database, Workflow, FileSearch, BrainCircuit, MessagesSquare, Github, FileText, Server } from 'lucide-react';
 import Tooltip from './Tooltip';
 
 // Tab 配置
@@ -103,6 +103,13 @@ const SECONDARY_TABS = [
     icon: <MessagesSquare className="w-4 h-4" />,
     tooltip: 'Interview Preparation',
     description: '面试准备'
+  },
+  {
+    id: 'port-manager',
+    label: 'Ports',
+    icon: <Server className="w-4 h-4" />,
+    tooltip: 'Port Manager',
+    description: '端口管理器'
   }
 ];
 

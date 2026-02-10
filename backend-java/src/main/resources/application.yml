@@ -37,7 +37,9 @@ spring:
       max-request-size: 100MB
 
   mvc:
-    trailing-slash-match: true
+    trailing-slash-match: false
+    # 禁用默认静态资源处理，确保所有 /api 请求都由 DispatcherServlet 处理
+    static-path-pattern: /static/**
 
   # DevTools Configuration - 启用热加载
   devtools:

@@ -21,6 +21,7 @@ import Tooltip from './Tooltip';
 import IFlowModeSelector from './IFlowModeSelector';
 import IFlowModelSelector from './IFlowModelSelector';
 import SmartTabBar from './SmartTabBar';
+import PortManager from './PortManager';
 import { useTaskMaster } from '../contexts/TaskMasterContext';
 import { useTasksSettings } from '../contexts/TasksSettingsContext';
 import { api } from '../utils/api';
@@ -368,10 +369,11 @@ function MainContent({
                                                   activeTab === 'workflow' ? 'Workflow Editor' :
                                                       activeTab === 'interview' ? 'Interview Preparation' :
                                                           activeTab === 'smart-req' ? 'Smart Requirement Analysis' :
-                                                              'Project'}
+                                                              activeTab === 'port-manager' ? 'Port Manager' :
+                                                                  'Project'}
                         </h2>
                         <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {selectedProject.displayName}
+                          {activeTab === 'port-manager' ? 'System Port Management' : selectedProject.displayName}
                         </div>
                       </div>
                   )}
@@ -579,6 +581,15 @@ function MainContent({
                           selectedProject={selectedProject}
                           visible={activeTab === 'workflow'}
                       />
+                    </Suspense>
+                  </ErrorBoundary>
+                </div>
+            )}
+            {activeTab === 'port-manager' && (
+                <div className="h-full w-full overflow-hidden">
+                  <ErrorBoundary showDetails={true}>
+                    <Suspense fallback={null}>
+                      <PortManager />
                     </Suspense>
                   </ErrorBoundary>
                 </div>

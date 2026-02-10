@@ -31,6 +31,7 @@ import AIPersonaSelector from './components/AIPersonaSelector';
 import GlobalStatusBar from './components/GlobalStatusBar';
 import CommandPalette from './components/CommandPalette';
 import ApiKeySettings from './components/resume/ApiKeySettings';
+import PortManager from './components/PortManager';
 
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -55,7 +56,10 @@ function AppContent() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
+  const [activeTab, setActiveTab] = useState(() => {
+    // 从 localStorage 恢复 activeTab
+    return localStorage.getItem('activeTab') || 'chat';
+  });
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
@@ -69,6 +73,11 @@ function AppContent() {
   const [autoScrollToBottom, setAutoScrollToBottom] = useLocalStorage('autoScrollToBottom', true);
   const [sendByCtrlEnter, setSendByCtrlEnter] = useLocalStorage('sendByCtrlEnter', false);
   const [sidebarVisible, setSidebarVisible] = useLocalStorage('sidebarVisible', true);
+
+  // 保存 activeTab 到 localStorage
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
 
   // API Key Settings
   const [showApiKeySettings, setShowApiKeySettings] = useState(false);

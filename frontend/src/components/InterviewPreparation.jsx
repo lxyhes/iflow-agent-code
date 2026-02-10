@@ -70,8 +70,6 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [selectedCompany, setSelectedCompany] = useState(null); // 选中的公司
   const [selectedLevel, setSelectedLevel] = useState('middle'); // 选中的级别
   
-  // 多轮面试模式状态
-  const [multiRoundMode, setMultiRoundMode] = useState(false);
   const [currentRound, setCurrentRound] = useState(0);
   const [totalRounds] = useState(5);
   const [roundQuestions, setRoundQuestions] = useState([]);
@@ -145,11 +143,33 @@ const InterviewPreparation = ({ selectedProject }) => {
   const [resumePreviewBlockIndex, setResumePreviewBlockIndex] = useState(null);
 
   // 多智能体面试模式状态
-  const [multiAgentMode, setMultiAgentMode] = useState(false);
+  const [multiAgentMode, setMultiAgentMode] = useState(() => {
+    // 从 localStorage 恢复面试模式
+    const savedMode = localStorage.getItem('interview-mode');
+    return savedMode === 'multiAgent';
+  });
   const [multiAgentCandidateProfile, setMultiAgentCandidateProfile] = useState(null);
 
   // 招聘分析面板状态
   const [showJobAnalysis, setShowJobAnalysis] = useState(false);
+  
+  // 多轮面试模式状态
+  const [multiRoundMode, setMultiRoundMode] = useState(() => {
+    // 从 localStorage 恢复多轮面试模式
+    const savedMode = localStorage.getItem('interview-mode');
+    return savedMode === 'multiRound';
+  });
+  
+  // 保存面试模式到 localStorage
+  useEffect(() => {
+    if (multiAgentMode) {
+      localStorage.setItem('interview-mode', 'multiAgent');
+    } else if (multiRoundMode) {
+      localStorage.setItem('interview-mode', 'multiRound');
+    } else {
+      localStorage.setItem('interview-mode', 'normal');
+    }
+  }, [multiAgentMode, multiRoundMode]);
   
   // 从 localStorage 读取模型，与主聊天页面保持一致
   const [selectedModel, setSelectedModel] = useState(() => {

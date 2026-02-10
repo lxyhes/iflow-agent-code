@@ -39,12 +39,13 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 允许匿名访问所有 API
+                // 允许匿名访问所有 API - 放在最前面
                 .requestMatchers("/api/**").permitAll()
                 .requestMatchers("/stream").permitAll()  // 允许流式聊天端点
                 .requestMatchers("/shell").permitAll()   // 允许 WebSocket shell 端点
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/error").permitAll()
+                // 其他请求需要认证
                 .anyRequest().authenticated()
             )
             .httpBasic(httpBasic -> httpBasic.disable())
