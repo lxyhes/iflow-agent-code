@@ -236,6 +236,8 @@ const SmartRequirementAnalysis = ({ project }) => {
   };
 
   const handleAnalyze = async () => {
+    console.log('handleAnalyze called, analysisMode:', analysisMode);
+    
     // Validation based on mode
     if (analysisMode === 'requirement' && !text.trim() && !image) {
       setError('Please enter text or upload an image.');
@@ -252,6 +254,11 @@ const SmartRequirementAnalysis = ({ project }) => {
     try {
       if (analysisMode === 'project_optimization') {
           // --- Project Optimization Flow ---
+          console.log('Starting project optimization, payload:', {
+              focus: text,
+              project_name: project?.name
+          });
+          
           const payload = {
               focus: text, // Use text input as focus area
               project_name: project?.name
@@ -263,9 +270,13 @@ const SmartRequirementAnalysis = ({ project }) => {
               body: JSON.stringify(payload)
           });
           
+          console.log('optimize-project response status:', res.status);
+          
           if (!res.ok) throw new Error(`Optimization Analysis failed: ${res.statusText}`);
           const data = await res.json();
           const finalResult = data.result;
+          
+          console.log('optimize-project result:', finalResult);
           
           setResult(finalResult);
           setActiveTab('solution'); // Jump to report/solution directly
@@ -323,7 +334,7 @@ const SmartRequirementAnalysis = ({ project }) => {
               const resContext = await fetch('/api/smart-requirement/step2-5-context', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ matched_modules })
+                body: JSON.stringify({ matchedModules })
               });
               if (resContext.ok) {
                   const dataContext = await resContext.json();
@@ -338,7 +349,7 @@ const SmartRequirementAnalysis = ({ project }) => {
           // Step 3: Generate Solution
           const payloadStep3 = {
             analysis: analysis,
-            matched_modules: matched_modules
+            matchedModules: matched_modules
           };
 
           const res3 = await fetch('/api/smart-requirement/step3-solution', {
@@ -884,7 +895,7 @@ const SmartRequirementAnalysis = ({ project }) => {
               核心功能
             </h4>
             <ul className="space-y-2">
-              {analysis.key_features.map((feature, i) => (
+              {(analysis.keyFeatures || []).map((feature, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <span className="mt-1.5 w-1.5 h-1.5 bg-green-500 rounded-full flex-shrink-0" />
                   {feature}
@@ -898,7 +909,7 @@ const SmartRequirementAnalysis = ({ project }) => {
               技术约束
             </h4>
             <ul className="space-y-2">
-              {analysis.tech_constraints.map((constraint, i) => (
+              {(analysis.techConstraints || []).map((constraint, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                   <span className="mt-1.5 w-1.5 h-1.5 bg-amber-500 rounded-full flex-shrink-0" />
                   {constraint}
@@ -1701,6 +1712,7 @@ const SmartRequirementAnalysis = ({ project }) => {
               </button>
               )}
               <button
+                type="button"
                 onClick={handleAnalyze}
                 disabled={isLoading}
                 className={`px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-sm hover:shadow flex items-center gap-2 ${

@@ -112,10 +112,12 @@ aliyun:
 # Logging
 logging:
   level:
+    root: INFO
     com.iflow.agent: DEBUG
-    org.springframework.web: DEBUG
-    org.springframework.context: DEBUG
-    org.springframework.beans: DEBUG
+    org.springframework.web: INFO
+    org.springframework.boot: INFO
+    org.springframework.context: INFO
+    org.springframework.beans: INFO
   pattern:
     console: "%d{HH:mm:ss} [%level] %logger{36}: %msg%n"
 
