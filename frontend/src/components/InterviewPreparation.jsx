@@ -2436,13 +2436,13 @@ const InterviewPreparation = ({ selectedProject }) => {
     ));
 
     const overall = Math.floor(
-      (technicalScore + communicationScore + problemSolving + codeQualityScore + systemDesignScore) / 5
+      (technicalScore + communicationScore + problemSolvingScore + codeQualityScore + systemDesignScore) / 5
     );
 
     setScoreBreakdown({
       technical: technicalScore,
       communication: communicationScore,
-      problemSolving: problemSolving,
+      problemSolving: problemSolvingScore,
       codeQuality: codeQualityScore,
       systemDesign: systemDesignScore
     });
@@ -2455,7 +2455,7 @@ const InterviewPreparation = ({ selectedProject }) => {
       breakdown: {
         technical: technicalScore,
         communication: communicationScore,
-        problemSolving: problemSolving,
+        problemSolving: problemSolvingScore,
         codeQuality: codeQualityScore,
         systemDesign: systemDesignScore
       }
@@ -2776,6 +2776,7 @@ const InterviewPreparation = ({ selectedProject }) => {
   }, [currentInterviewId]);
 
   const handleSendMessage = async () => {
+    console.log('[面试] 发送消息:', chatInput);
     if (!chatInput.trim() || isChatLoading) return;
 
     // 如果是第一次发送消息，启动计时器
@@ -2789,6 +2790,7 @@ const InterviewPreparation = ({ selectedProject }) => {
     setIsChatLoading(true);
 
     try {
+      console.log('[面试] 开始发送请求...');
       // 构建面试上下文作为消息的一部分
       let interviewContext = `
 【面试模式】
@@ -2820,47 +2822,73 @@ ${chatOnlyMode ? '注意：你只能进行对话，不能使用任何工具修�
       // 使用 GET 请求，参数放在 URL 中，包含选中的模型
       const streamUrl = `/stream?message=${encodeURIComponent(fullMessage)}&cwd=${encodeURIComponent(selectedProject?.path || '')}&project=${encodeURIComponent(selectedProject?.name || '')}&persona=partner&model=${encodeURIComponent(selectedModel)}`;
 
+      console.log('[面试] 请求URL:', streamUrl);
       const response = await authenticatedFetch(streamUrl);
+      console.log('[面试] 响应状态:', response.status, response.ok);
 
       if (response.ok) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+        // 简化版本：直接显示所有收到的文本
+        let fullText = '';
         let aiResponse = '';
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        
+        try {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
           
-          buffer += decoder.decode(value, { stream: true });
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            console.log('[面试] 收到chunk:', chunk.substring(0, 100));
+          }
           
-          // 处理 SSE 格式的数据
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // 保留最后一个不完整的行
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'content' && data.content) {
-                  aiResponse += data.content;
-                  
-                  // 实时更新最后一条 AI 消息
-                  setChatMessages(prev => {
-                    const newMessages = [...prev];
-                    if (prev.length > 0 && prev[prev.length - 1].role === 'ai') {
-                      newMessages[newMessages.length - 1] = { role: 'ai', content: aiResponse };
-                    } else {
-                      newMessages.push({ role: 'ai', content: aiResponse });
-                    }
-                    return newMessages;
-                  });
-                }
-              } catch (e) {
-                // 忽略解析错误
+          console.log('[面试] 完整响应:', fullText);
+          
+          // 简单解析：提取所有 data: 后面的 JSON
+          const matches = fullText.match(/data:({.*?})/g) || [];
+          console.log('[面试] 找到', matches.length, '个data字段');
+          
+          for (const match of matches) {
+            try {
+              const jsonStr = match.replace('data:', '').trim();
+              const data = JSON.parse(jsonStr);
+              console.log('[面试] 解析成功:', data.type, data.content?.substring(0, 50) || '');
+              
+              if (data.type === 'content' && data.content) {
+                aiResponse += data.content;
+                console.log('[面试] 累计内容长度:', aiResponse.length);
               }
+            } catch (e) {
+              console.error('[面试] 解析失败:', match, e);
             }
           }
+          
+          if (aiResponse) {
+            console.log('[面试] 最终内容长度:', aiResponse.length);
+            setChatMessages(prev => {
+              const newMessages = [...prev];
+              if (prev.length > 0 && prev[prev.length - 1].role === 'ai') {
+                newMessages[newMessages.length - 1] = { role: 'ai', content: aiResponse };
+              } else {
+                newMessages.push({ role: 'ai', content: aiResponse });
+              }
+              return newMessages;
+            });
+          } else {
+            console.error('[面试] 没有解析到任何内容');
+            setChatMessages(prev => [...prev, { 
+              role: 'ai', 
+              content: '抱歉，无法解析AI的回复。原始响应: ' + fullText.substring(0, 200) 
+            }]);
+          }
+        } catch (error) {
+          console.error('[面试] 读取流失败:', error);
+          setChatMessages(prev => [...prev, { 
+            role: 'ai', 
+            content: '读取响应时出错: ' + error.message 
+          }]);
         }
       } else {
         console.error('Stream response error:', response.status);
