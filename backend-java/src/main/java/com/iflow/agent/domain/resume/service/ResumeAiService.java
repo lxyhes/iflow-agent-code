@@ -38,7 +38,7 @@ public interface ResumeAiService {
      * 根据AI诊断报告自动重写简历
      * 使用AI分析结果，自动优化简历内容，包括重写个人简介、优化工作经历描述、改进技能展示、提升整体表达
      */
-    Map<String, Object> rewriteResume(Resume resume, Map<String, Object> healthAnalysis);
+    Map<String, Object> rewriteResume(Resume resume, Map<String, Object> healthAnalysis, String model);
 
     /**
      * 获取 AI 生成历史记录

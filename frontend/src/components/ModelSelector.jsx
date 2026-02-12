@@ -24,8 +24,29 @@ const ModelSelector = ({
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const buttonRef = React.useRef(null);
 
-  // 可用的模型列表 - 使用真实的官方图标
+  // 可用的模型列表 - 与 Chat 模型保持一致
   const availableModels = [
+    { 
+      id: 'GLM-5', 
+      name: 'GLM-5', 
+      description: '最新模型', 
+      icon: '/icons/zhipu.svg',
+      fallbackIcon: '🌟'
+    },
+    { 
+      id: 'MiniMax-M2.5', 
+      name: 'MiniMax-M2.5', 
+      description: 'MiniMax 最新模型', 
+      icon: '/icons/minimax.svg',
+      fallbackIcon: '🚀'
+    },
+    { 
+      id: 'Kimi-K2.5', 
+      name: 'Kimi-K2.5', 
+      description: 'Kimi 最新模型', 
+      icon: '/icons/kimi.svg',
+      fallbackIcon: '💎'
+    },
     { 
       id: 'GLM-4.7', 
       name: 'GLM-4.7', 

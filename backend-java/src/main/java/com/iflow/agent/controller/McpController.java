@@ -93,4 +93,148 @@ public class McpController {
             ));
         }
     }
+
+    // ========== CLI 相关端点 ==========
+
+    /**
+     * 获取 CLI MCP 服务器列表
+     * GET /api/mcp/cli/list
+     */
+    @GetMapping("/cli/list")
+    public ResponseEntity<Map<String, Object>> getCliMcpServers() {
+        log.info("获取 CLI MCP 服务器列表");
+        
+        try {
+            List<Map<String, Object>> servers = mcpService.getMcpServers();
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "servers", servers
+            ));
+        } catch (Exception e) {
+            log.error("获取 CLI MCP 服务器失败", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "servers", List.of()
+            ));
+        }
+    }
+
+    /**
+     * 添加 MCP 服务器
+     * POST /api/mcp/cli/add
+     */
+    @PostMapping("/cli/add")
+    public ResponseEntity<Map<String, Object>> addMcpServer(@RequestBody Map<String, Object> request) {
+        String name = (String) request.get("name");
+        log.info("添加 MCP 服务器: {}", name);
+        
+        try {
+            boolean success = mcpService.addMcpServer(request);
+            
+            if (success) {
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "message", "MCP 服务器已添加: " + name
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "success", false,
+                        "error", "添加 MCP 服务器失败"
+                ));
+            }
+        } catch (Exception e) {
+            log.error("添加 MCP 服务器失败", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 通过 JSON 添加 MCP 服务器
+     * POST /api/mcp/cli/add-json
+     */
+    @PostMapping("/cli/add-json")
+    public ResponseEntity<Map<String, Object>> addMcpServerFromJson(@RequestBody Map<String, Object> request) {
+        String name = (String) request.get("name");
+        log.info("通过 JSON 添加 MCP 服务器: {}", name);
+        
+        try {
+            boolean success = mcpService.addMcpServer(request);
+            
+            if (success) {
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "message", "MCP 服务器已添加: " + name
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "success", false,
+                        "error", "添加 MCP 服务器失败"
+                ));
+            }
+        } catch (Exception e) {
+            log.error("通过 JSON 添加 MCP 服务器失败", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 读取 MCP 配置文件
+     * GET /api/mcp/config/read
+     */
+    @GetMapping("/config/read")
+    public ResponseEntity<Map<String, Object>> readMcpConfig() {
+        log.info("读取 MCP 配置文件");
+        
+        try {
+            Map<String, Object> config = mcpService.readMcpConfig();
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "config", config
+            ));
+        } catch (Exception e) {
+            log.error("读取 MCP 配置文件失败", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 删除 MCP 服务器
+     * DELETE /api/mcp/cli/{serverName}
+     */
+    @DeleteMapping("/cli/{serverName}")
+    public ResponseEntity<Map<String, Object>> removeMcpServer(@PathVariable String serverName) {
+        log.info("删除 MCP 服务器: {}", serverName);
+        
+        try {
+            boolean success = mcpService.removeMcpServer(serverName);
+            
+            if (success) {
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "message", "MCP 服务器已删除: " + serverName
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "success", false,
+                        "error", "删除 MCP 服务器失败"
+                ));
+            }
+        } catch (Exception e) {
+            log.error("删除 MCP 服务器失败", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
 }

@@ -253,7 +253,7 @@ public class ResumeController {
         log.info("重写简历: {}", id);
         Resume resume = resumeService.getResume(id)
                 .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
-        Map<String, Object> result = resumeAiService.rewriteResume(resume, request.getHealthAnalysis());
+        Map<String, Object> result = resumeAiService.rewriteResume(resume, request.getHealthAnalysis(), request.getModel());
         return ResponseEntity.ok(Map.of("success", true, "data", result));
     }
 
@@ -441,5 +441,6 @@ public class ResumeController {
     @lombok.Data
     public static class RewriteRequest {
         private Map<String, Object> healthAnalysis;
+        private String model;
     }
 }

@@ -380,6 +380,396 @@ public class GitController {
         }
     }
 
+    // ========== 新增的 Git 操作 ==========
+
+    /**
+     * 从远程获取更新
+     */
+    @PostMapping("/fetch")
+    public ResponseEntity<Map<String, Object>> fetch(@RequestParam(required = false) String project) {
+        log.info("Fetching from remote: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            List<String> output = executeGitCommand(projectPath, "fetch");
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Fetched from remote",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to fetch", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 拉取远程更改
+     */
+    @PostMapping("/pull")
+    public ResponseEntity<Map<String, Object>> pull(@RequestParam(required = false) String project) {
+        log.info("Pulling from remote: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            List<String> output = executeGitCommand(projectPath, "pull");
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Pulled from remote",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to pull", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 推送到远程
+     */
+    @PostMapping("/push")
+    public ResponseEntity<Map<String, Object>> push(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, String> request) {
+        log.info("Pushing to remote: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            List<String> output;
+            if (request != null && Boolean.TRUE.equals(Boolean.parseBoolean(request.get("force")))) {
+                output = executeGitCommand(projectPath, "push", "--force");
+            } else {
+                output = executeGitCommand(projectPath, "push");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Pushed to remote",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to push", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 发布分支到远程
+     */
+    @PostMapping("/publish")
+    public ResponseEntity<Map<String, Object>> publish(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, String> request) {
+        String projectPath = resolveProjectPath(project);
+        String branch = request != null ? request.get("branch") : null;
+
+        if (branch == null || branch.isEmpty()) {
+            branch = getCurrentBranch(projectPath);
+        }
+
+        log.info("Publishing branch {} to remote: {}", branch, project);
+
+        try {
+            List<String> output = executeGitCommand(projectPath, "push", "-u", "origin", branch);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Published branch to remote: " + branch,
+                    "branch", branch,
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to publish", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 丢弃本地更改
+     */
+    @PostMapping("/discard")
+    public ResponseEntity<Map<String, Object>> discard(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, String> request) {
+        log.info("Discarding changes: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            String filePath = request != null ? request.get("file") : null;
+
+            if (filePath != null && !filePath.isEmpty()) {
+                // 丢弃单个文件
+                executeGitCommand(projectPath, "checkout", "--", filePath);
+            } else {
+                // 丢弃所有更改
+                executeGitCommand(projectPath, "checkout", "--", ".");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", filePath != null ? "Discarded changes for: " + filePath : "Discarded all changes"
+            ));
+        } catch (Exception e) {
+            log.error("Failed to discard changes", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 删除未跟踪的文件
+     */
+    @PostMapping("/delete-untracked")
+    public ResponseEntity<Map<String, Object>> deleteUntracked(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, Boolean> request) {
+        log.info("Deleting untracked files: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            boolean includeIgnored = request != null && Boolean.TRUE.equals(request.get("includeIgnored"));
+
+            List<String> output;
+            if (includeIgnored) {
+                output = executeGitCommand(projectPath, "clean", "-fdx");
+            } else {
+                output = executeGitCommand(projectPath, "clean", "-fd");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Deleted untracked files",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to delete untracked files", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * AI 生成提交信息
+     */
+    @PostMapping("/generate-commit-message")
+    public ResponseEntity<Map<String, Object>> generateCommitMessage(@RequestParam(required = false) String project) {
+        log.info("Generating commit message for: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            // 获取差异摘要
+            List<String> statusOutput = executeGitCommand(projectPath, "status", "--short");
+            List<String> diffOutput = executeGitCommand(projectPath, "diff", "--stat");
+
+            // 简单的提交信息生成逻辑
+            StringBuilder message = new StringBuilder();
+
+            if (!statusOutput.isEmpty()) {
+                int modified = 0, added = 0, deleted = 0;
+
+                for (String line : statusOutput) {
+                    if (line.length() >= 2) {
+                        String status = line.substring(0, 2).trim();
+                        if (status.contains("M")) modified++;
+                        else if (status.contains("A") || status.contains("?")) added++;
+                        else if (status.contains("D")) deleted++;
+                    }
+                }
+
+                if (added > 0) message.append("添加 ").append(added).append(" 个文件");
+                if (modified > 0) {
+                    if (message.length() > 0) message.append(", ");
+                    message.append("修改 ").append(modified).append(" 个文件");
+                }
+                if (deleted > 0) {
+                    if (message.length() > 0) message.append(", ");
+                    message.append("删除 ").append(deleted).append(" 个文件");
+                }
+            }
+
+            if (message.length() == 0) {
+                message.append("更新代码");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", message.toString()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to generate commit message", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "更新代码"  // 默认消息
+            ));
+        }
+    }
+
+    /**
+     * 初始提交（用于新仓库）
+     */
+    @PostMapping("/initial-commit")
+    public ResponseEntity<Map<String, Object>> initialCommit(@RequestParam(required = false) String project) {
+        log.info("Creating initial commit for: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            // 检查是否已经有提交
+            try {
+                executeGitCommand(projectPath, "rev-parse", "HEAD");
+                return ResponseEntity.ok(Map.of(
+                        "success", false,
+                        "error", "Repository already has commits"
+                ));
+            } catch (Exception e) {
+                // 没有提交，继续
+            }
+
+            // 添加所有文件
+            executeGitCommand(projectPath, "add", ".");
+
+            // 创建初始提交
+            List<String> output = executeGitCommand(projectPath, "commit", "-m", "Initial commit");
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Initial commit created",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to create initial commit", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 获取提交差异
+     */
+    @GetMapping("/commit-diff")
+    public ResponseEntity<Map<String, Object>> getCommitDiff(
+            @RequestParam(required = false) String project,
+            @RequestParam(required = false) String hash) {
+        log.info("Getting commit diff: project={}, hash={}", project, hash);
+        String projectPath = resolveProjectPath(project);
+
+        if (hash == null || hash.isEmpty()) {
+            return ResponseEntity.ok(Map.of(
+                    "error", "Commit hash is required"
+            ));
+        }
+
+        try {
+            List<String> output = executeGitCommand(projectPath, "show", hash);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "diff", String.join("\n", output)
+            ));
+        } catch (Exception e) {
+            log.error("Failed to get commit diff", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 暂存更改
+     */
+    @PostMapping("/stash")
+    public ResponseEntity<Map<String, Object>> stash(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, String> request) {
+        log.info("Stashing changes: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            String message = request != null ? request.get("message") : null;
+
+            List<String> output;
+            if (message != null && !message.isEmpty()) {
+                output = executeGitCommand(projectPath, "stash", "push", "-m", message);
+            } else {
+                output = executeGitCommand(projectPath, "stash");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Changes stashed",
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to stash", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 重置更改
+     */
+    @PostMapping("/reset")
+    public ResponseEntity<Map<String, Object>> reset(
+            @RequestParam(required = false) String project,
+            @RequestBody(required = false) Map<String, String> request) {
+        log.info("Resetting changes: {}", project);
+        String projectPath = resolveProjectPath(project);
+
+        try {
+            String mode = request != null ? request.get("mode") : "soft";
+
+            List<String> output;
+            switch (mode) {
+                case "hard":
+                    output = executeGitCommand(projectPath, "reset", "--hard");
+                    break;
+                case "mixed":
+                    output = executeGitCommand(projectPath, "reset", "--mixed");
+                    break;
+                case "soft":
+                default:
+                    output = executeGitCommand(projectPath, "reset", "--soft");
+                    break;
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Reset completed: " + mode,
+                    "output", output
+            ));
+        } catch (Exception e) {
+            log.error("Failed to reset", e);
+            return ResponseEntity.ok(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
     // ========== 私有方法 ==========
 
     private List<String> executeGitCommand(String projectPath, String... args) throws Exception {

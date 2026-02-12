@@ -153,6 +153,156 @@ public class McpService {
         // 返回模拟的工具列表（实际需要通过 iFlow SDK 查询）
         return new ArrayList<>();
     }
+
+    /**
+     * 添加 MCP 服务器到配置文件
+     */
+    public boolean addMcpServer(Map<String, Object> serverData) {
+        String name = (String) serverData.get("name");
+        if (name == null || name.isEmpty()) {
+            log.error("MCP 服务器名称不能为空");
+            return false;
+        }
+
+        try {
+            Path configPath = getIFlowConfigPath();
+            
+            // 确保目录存在
+            Files.createDirectories(configPath.getParent());
+            
+            // 读取现有配置
+            Map<String, Object> config = new LinkedHashMap<>();
+            if (Files.exists(configPath)) {
+                String content = Files.readString(configPath);
+                config = objectMapper.readValue(content, LinkedHashMap.class);
+            }
+            
+            // 获取或创建 mcpServers 节点
+            Map<String, Object> mcpServers = (Map<String, Object>) config.computeIfAbsent(
+                    "mcpServers", k -> new LinkedHashMap<String, Object>());
+            
+            // 构建服务器配置
+            Map<String, Object> serverConfig = new LinkedHashMap<>();
+            String type = (String) serverData.getOrDefault("type", "stdio");
+            serverConfig.put("type", type);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> configData = (Map<String, Object>) serverData.get("config");
+            if (configData != null) {
+                if (configData.containsKey("command")) {
+                    serverConfig.put("command", configData.get("command"));
+                }
+                if (configData.containsKey("args")) {
+                    serverConfig.put("args", configData.get("args"));
+                }
+                if (configData.containsKey("env")) {
+                    serverConfig.put("env", configData.get("env"));
+                }
+                if (configData.containsKey("url")) {
+                    serverConfig.put("url", configData.get("url"));
+                }
+                if (configData.containsKey("headers")) {
+                    serverConfig.put("headers", configData.get("headers"));
+                }
+                if (configData.containsKey("timeout")) {
+                    serverConfig.put("timeout", configData.get("timeout"));
+                }
+            }
+            
+            // 直接从顶层属性读取
+            if (serverData.containsKey("command")) {
+                serverConfig.put("command", serverData.get("command"));
+            }
+            if (serverData.containsKey("args")) {
+                serverConfig.put("args", serverData.get("args"));
+            }
+            if (serverData.containsKey("env")) {
+                serverConfig.put("env", serverData.get("env"));
+            }
+            
+            mcpServers.put(name, serverConfig);
+            
+            // 保存配置
+            String jsonContent = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(config);
+            Files.writeString(configPath, jsonContent);
+            
+            // 更新缓存
+            syncMcpServers();
+            
+            log.info("已添加 MCP 服务器: {}", name);
+            return true;
+            
+        } catch (Exception e) {
+            log.error("添加 MCP 服务器失败", e);
+            return false;
+        }
+    }
+
+    /**
+     * 删除 MCP 服务器
+     */
+    public boolean removeMcpServer(String serverName) {
+        try {
+            Path configPath = getIFlowConfigPath();
+            
+            if (!Files.exists(configPath)) {
+                log.warn("配置文件不存在");
+                return false;
+            }
+            
+            String content = Files.readString(configPath);
+            Map<String, Object> config = objectMapper.readValue(content, LinkedHashMap.class);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> mcpServers = (Map<String, Object>) config.get("mcpServers");
+            
+            if (mcpServers == null || !mcpServers.containsKey(serverName)) {
+                log.warn("MCP 服务器不存在: {}", serverName);
+                return false;
+            }
+            
+            mcpServers.remove(serverName);
+            
+            // 保存配置
+            String jsonContent = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(config);
+            Files.writeString(configPath, jsonContent);
+            
+            // 更新缓存
+            syncMcpServers();
+            
+            log.info("已删除 MCP 服务器: {}", serverName);
+            return true;
+            
+        } catch (Exception e) {
+            log.error("删除 MCP 服务器失败", e);
+            return false;
+        }
+    }
+
+    /**
+     * 读取 MCP 配置文件
+     */
+    public Map<String, Object> readMcpConfig() {
+        try {
+            Path configPath = getIFlowConfigPath();
+            
+            if (!Files.exists(configPath)) {
+                return new LinkedHashMap<>();
+            }
+            
+            String content = Files.readString(configPath);
+            Map<String, Object> config = objectMapper.readValue(content, LinkedHashMap.class);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> mcpServers = (Map<String, Object>) config.get("mcpServers");
+            
+            return mcpServers != null ? mcpServers : new LinkedHashMap<>();
+            
+        } catch (Exception e) {
+            log.error("读取 MCP 配置失败", e);
+            return new LinkedHashMap<>();
+        }
+    }
     
     // ========== 辅助方法 ==========
     

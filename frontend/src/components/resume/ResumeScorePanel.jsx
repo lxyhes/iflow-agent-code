@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { resumeApi } from '../../services/resumeApi';
 import FunLoadingScreen from './FunLoadingScreen';
+import IFlowModelSelector from '../IFlowModelSelector';
+import ModelSelector from '../ModelSelector';
 
 const ResumeScorePanel = ({ resume, onResumeUpdate, onPreviewResume }) => {
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -41,6 +43,7 @@ const ResumeScorePanel = ({ resume, onResumeUpdate, onPreviewResume }) => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyType, setHistoryType] = useState('all'); // 'all', 'analyze', 'rewrite'
   const [applyingRewrite, setApplyingRewrite] = useState(false); // 防止重复提交
+  const [selectedModel, setSelectedModel] = useState('GLM-4.7');
 
   useEffect(() => {
     performAIAnalysis();
@@ -104,7 +107,7 @@ const loadAiHistory = async (type = null) => {
     setError(null);
 
     try {
-      const response = await resumeApi.rewriteResume(resume.id);
+      const response = await resumeApi.rewriteResume(resume.id, null, selectedModel);
       if (response.success) {
         setRewriteResult(response.data);
         setShowRewriteModal(true);
@@ -597,14 +600,21 @@ const loadAiHistory = async (type = null) => {
               {competitiveness.industry_ranking || '暂无评价'}
             </p>
             {/* 一键重写按钮 */}
-            <button
-              onClick={handleRewrite}
-              disabled={rewriting}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Wand2 className={`w-4 h-4 ${rewriting ? 'animate-spin' : ''}`} />
-              {rewriting ? 'AI 正在重写...' : '一键优化简历'}
-            </button>
+            <div className="flex items-center gap-3">
+              <ModelSelector
+                value={selectedModel}
+                onChange={setSelectedModel}
+                label="AI 模型"
+              />
+              <button
+                onClick={handleRewrite}
+                disabled={rewriting}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Wand2 className={`w-4 h-4 ${rewriting ? 'animate-spin' : ''}`} />
+                {rewriting ? 'AI 正在重写...' : '一键优化简历'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

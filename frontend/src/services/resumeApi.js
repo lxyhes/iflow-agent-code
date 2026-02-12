@@ -177,11 +177,15 @@ export const resumeApi = {
     return response.json();
   },
 
-  rewriteResume: async (resumeId, healthAnalysis = null) => {
+  rewriteResume: async (resumeId, healthAnalysis = null, model = null) => {
+    const body = { health_analysis: healthAnalysis };
+    if (model) {
+      body.model = model;
+    }
     const response = await authenticatedFetch(`${API_BASE}/${resumeId}/rewrite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ health_analysis: healthAnalysis }),
+      body: JSON.stringify(body),
     });
     return response.json();
   },

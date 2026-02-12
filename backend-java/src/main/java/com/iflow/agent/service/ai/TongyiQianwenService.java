@@ -53,15 +53,22 @@ public class TongyiQianwenService {
      * 简单的文本生成 - 优先使用 AI 工作台
      */
     public String generate(String prompt) {
-        log.debug("Generating text with prompt: {}", prompt.substring(0, Math.min(100, prompt.length())));
+        return generate(prompt, null);
+    }
+
+    /**
+     * 带模型指定的文本生成
+     */
+    public String generate(String prompt, String model) {
+        String effectiveModel = model != null && !model.isEmpty() ? model : DEFAULT_MODEL;
+        log.debug("Generating text with model: {} and prompt: {}", effectiveModel, prompt.substring(0, Math.min(100, prompt.length())));
 
         // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
-            // 使用流式查询并收集完整响应，避免同步查询的截断问题
             StringBuilder result = new StringBuilder();
-            iFlowService.queryStream(prompt, DEFAULT_MODEL)
+            iFlowService.queryStream(prompt, effectiveModel)
                     .doOnNext(result::append)
-                    .blockLast(); // 等待流完成
+                    .blockLast();
             return result.toString();
         }
 

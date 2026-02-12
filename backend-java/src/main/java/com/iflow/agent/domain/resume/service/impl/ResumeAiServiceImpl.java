@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ResumeAiServiceImpl implements ResumeAiService {
 
+    private static final String DEFAULT_MODEL = "GLM-4.7";
+
     private final TongyiQianwenService tongyiQianwenService;
     private final ObjectMapper objectMapper;
     private final ResumeAiHistoryRepository historyRepository;
@@ -835,16 +837,19 @@ public class ResumeAiServiceImpl implements ResumeAiService {
     }
 
     @Override
-    public Map<String, Object> rewriteResume(Resume resume, Map<String, Object> healthAnalysis) {
-        log.info("Rewriting resume: {}", resume.getId());
+    public Map<String, Object> rewriteResume(Resume resume, Map<String, Object> healthAnalysis, String model) {
+        log.info("Rewriting resume: {} with model: {}", resume.getId(), model);
 
         String prompt = buildRewritePrompt(resume, healthAnalysis);
-        String aiResponse = tongyiQianwenService.generate(prompt);
+        String aiResponse = tongyiQianwenService.generate(prompt, model);
         
         log.info("AI Response length: {}", aiResponse.length());
         log.debug("AI Response preview: {}", aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
         Map<String, Object> result = new HashMap<>();
+        
+        // 添加使用的模型信息
+        result.put("model", model != null ? model : DEFAULT_MODEL);
         
         // 解析AI响应
         Map<String, Object> parsedResponse = parseRewriteResponse(aiResponse);
