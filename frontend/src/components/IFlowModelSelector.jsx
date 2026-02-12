@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 const models = [
-  { id: 'GLM-4.7', label: 'GLM-4.7 (推荐)', icon: '✨' },
-  { id: 'AI 工作台-ROME-30BA3B', label: 'AI 工作台-ROME-30BA3B (预览版)', icon: '🔬' },
-  { id: 'DeepSeek-V3.2', label: 'DeepSeek-V3.2', icon: '🐋' },
-  { id: 'Qwen3-Coder-Plus', label: 'Qwen3-Coder-Plus', icon: '🤖' },
-  { id: 'Kimi-K2-Thinking', label: 'Kimi-K2-Thinking', icon: '🧠' },
-  { id: 'MiniMax-M2.1', label: 'MiniMax-M2.1', icon: '⚡' },
-  { id: 'Kimi-K2-0905', label: 'Kimi-K2-0905', icon: '📝' },
-  { id: 'Kimi-K2.5', label: 'Kimi-K2.5', icon: '🌟' }
+  { id: 'GLM-5', label: 'GLM-5 (最新)' },
+  { id: 'Kimi-K2.5', label: 'Kimi-K2.5' },
+  { id: 'GLM-4.7', label: 'GLM-4.7 (推荐)' },
+  { id: 'AI 工作台-ROME-30BA3B', label: 'AI 工作台-ROME-30BA3B (预览版)' },
+  { id: 'DeepSeek-V3.2', label: 'DeepSeek-V3.2' },
+  { id: 'Qwen3-Coder-Plus', label: 'Qwen3-Coder-Plus' },
+  { id: 'Kimi-K2-Thinking', label: 'Kimi-K2-Thinking' },
+  { id: 'MiniMax-M2.1', label: 'MiniMax-M2.1' },
+  { id: 'Kimi-K2-0905', label: 'Kimi-K2-0905' }
 ];
 
 const IFlowModelSelector = () => {
@@ -141,7 +142,6 @@ const IFlowModelSelector = () => {
         className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-colors shadow-sm"
         title="Select AI 工作台 Model"
       >
-        <span role="img" aria-label="icon">{currentModelInfo.icon}</span>
         <span className="hidden sm:inline font-bold">{currentModelInfo.label}</span>
         <svg className={`w-3 h-3 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path d="M19 9l-7 7-7-7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -174,10 +174,7 @@ const IFlowModelSelector = () => {
                       : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-base">{model.icon}</span>
-                    <span className="text-sm font-semibold">{model.label}</span>
-                  </div>
+                  <span className="text-sm font-semibold">{model.label}</span>
                   {currentModel === model.id && (
                     <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
                   )}
