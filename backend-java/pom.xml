@@ -49,30 +49,23 @@
     </repositories>
 
     <dependencies>
-        <!-- PTY Support for Terminal -->
+        <!-- PTY Support for Terminal - 使用最新版本 -->
         <dependency>
             <groupId>org.jetbrains.pty4j</groupId>
             <artifactId>pty4j</artifactId>
-            <version>0.12.25</version>
-            <exclusions>
-                <!-- purejavacomm is Windows-only and not in Maven Central -->
-                <exclusion>
-                    <groupId>org.jetbrains.pty4j</groupId>
-                    <artifactId>purejavacomm</artifactId>
-                </exclusion>
-            </exclusions>
+            <version>0.13.4</version>
         </dependency>
-        
-        <!-- JNA (Required for Pty4J) -->
+
+        <!-- JNA - 强制使用兼容版本 (5.12.0) 以解决 jtermios 依赖问题 -->
         <dependency>
             <groupId>net.java.dev.jna</groupId>
             <artifactId>jna</artifactId>
-            <version>5.13.0</version>
+            <version>5.12.1</version>
         </dependency>
         <dependency>
             <groupId>net.java.dev.jna</groupId>
             <artifactId>jna-platform</artifactId>
-            <version>5.13.0</version>
+            <version>5.12.1</version>
         </dependency>
 
         <!-- Spring Boot Starters -->
