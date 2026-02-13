@@ -1,5 +1,6 @@
 package com.iflow.agent.controller;
 
+import com.iflow.agent.config.ModelConfig;
 import com.iflow.agent.service.ai.IFlowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,7 @@ import java.util.concurrent.Executors;
 public class StreamController {
 
     private final IFlowService iFlowService;
+    private final ModelConfig modelConfig;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     /**
@@ -53,7 +55,7 @@ public class StreamController {
                 log.info("SSE: Sent start event");
 
                 // 使用 iFlow 进行流式查询，传递模型参数
-                String actualModel = model != null ? model : "glm-4";
+                String actualModel = modelConfig.resolveModel(model);
                 Flux<String> stream = iFlowService.queryStream(message, actualModel);
                 
                 stream.subscribe(

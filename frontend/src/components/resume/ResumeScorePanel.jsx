@@ -45,9 +45,7 @@ const ResumeScorePanel = ({ resume, onResumeUpdate, onPreviewResume }) => {
   const [applyingRewrite, setApplyingRewrite] = useState(false); // 防止重复提交
   const [selectedModel, setSelectedModel] = useState('GLM-4.7');
 
-  useEffect(() => {
-    performAIAnalysis();
-  }, [resume.id]);
+  // 移除自动分析 - 改为用户手动点击"开始分析"按钮
 
 const loadAiHistory = async (type = null) => {
     setHistoryLoading(true);
@@ -88,7 +86,7 @@ const loadAiHistory = async (type = null) => {
     setError(null);
 
     try {
-      const response = await resumeApi.aiAnalyzeResume(resume.id);
+      const response = await resumeApi.aiAnalyzeResume(resume.id, selectedModel);
       if (response.success) {
         setAiAnalysis(response.data);
       } else {
@@ -503,7 +501,34 @@ const loadAiHistory = async (type = null) => {
   }
 
   if (!aiAnalysis) {
-    return null;
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="text-center py-12">
+          <Brain className="w-16 h-16 text-purple-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            AI 简历评分
+          </h3>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            点击下方按钮开始 AI 深度分析，获取简历评分和改进建议
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <ModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              label="AI 模型"
+            />
+            <button
+              onClick={performAIAnalysis}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50"
+            >
+              <Brain className="w-5 h-5" />
+              {loading ? '分析中...' : '开始 AI 分析'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // 重写时的 loading 状态

@@ -1,6 +1,5 @@
 package com.iflow.agent.service.ai;
 
-import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.query.IFlowQuery;
 import com.iflow.agent.config.IFlowBackendConfig;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +21,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class IFlowService {
 
-    private final IFlowClient iFlowClient;
     private final IFlowBackendConfig backendConfig;
+    private final ApiKeyManager apiKeyManager;
+    private final IFlowClientManager iFlowClientManager;
 
     /**
      * 同步查询 - 最简单的方式
@@ -124,9 +124,17 @@ public class IFlowService {
         // 构建命令
         String iflowPath = System.getenv().getOrDefault("IFLOW_PATH", "iflow");
         String escapedMessage = message.replace("\"", "\\\"").replace("\n", "\\n");
+
+        // 获取 API Key
+        String apiKey = apiKeyManager.getApiKey();
+        String apiKeyParam = "";
+        if (apiKey != null && !apiKey.isEmpty()) {
+            apiKeyParam = String.format(" --api-key \"%s\"", apiKey);
+        }
+
         // 添加 temperature 参数以增加输出多样性（0.7 是一个平衡的值，既保持一致性又有一定的随机性）
-        String command = String.format("%s -p \"%s\" --model \"%s\" --temperature 0.7 -y",
-            iflowPath, escapedMessage, actualModel);
+        String command = String.format("%s -p \"%s\" --model \"%s\" --temperature 0.7%s -y",
+            iflowPath, escapedMessage, actualModel, apiKeyParam);
         
         log.info("Running AI 工作台 CLI with model {}: {}", actualModel, command);
         
@@ -208,24 +216,14 @@ public class IFlowService {
      * 检查 AI 工作台 连接状态
      */
     public boolean isConnected() {
-        try {
-            iFlowClient.connect().block();
-            return true;
-        } catch (Exception e) {
-            log.warn("AI 工作台 not connected: {}", e.getMessage());
-            return false;
-        }
+        return iFlowClientManager.isConnected();
     }
 
     /**
      * 关闭 AI 工作台 客户端
      */
     public void close() {
-        try {
-            iFlowClient.close();
-            log.info("AI 工作台 client closed");
-        } catch (Exception e) {
-            log.error("Error closing AI 工作台 client", e);
-        }
+        // 客户端由 IFlowClientManager 管理
+        log.info("IFlowService close called, client managed by IFlowClientManager");
     }
 }

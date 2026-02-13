@@ -35,10 +35,27 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
+        log.error("Runtime error: {}", e.getMessage());
+        
+        // 检查是否是 API Token 过期错误
+        if (e.getMessage() != null && e.getMessage().contains("API_TOKEN_EXPIRED")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                        "error", "API Token 已过期",
+                        "message", "iFlow API Token 已过期，请访问 https://platform.iflow.cn/docs/api-key-management 重置 Token",
+                        "code", "API_TOKEN_EXPIRED"
+                    ));
+        }
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGeneric(Exception e) {
         log.error("Unexpected error", e);
-        // 返回 JSON 格式的错误，避免 SSE 序列化问题
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .contentType(MediaType.APPLICATION_JSON)

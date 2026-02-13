@@ -1,5 +1,6 @@
 package com.iflow.agent.controller;
 
+import com.iflow.agent.config.ModelConfig;
 import com.iflow.agent.domain.resume.entity.*;
 import com.iflow.agent.domain.resume.service.ResumeAiService;
 import com.iflow.agent.domain.resume.service.ResumeService;
@@ -22,6 +23,7 @@ public class ResumeController {
 
     private final ResumeService resumeService;
     private final ResumeAiService resumeAiService;
+    private final ModelConfig modelConfig;
 
     // ========== 简历基本操作 ==========
 
@@ -213,11 +215,14 @@ public class ResumeController {
      * AI深度分析简历
      */
     @PostMapping("/{id}/ai-analyze")
-    public ResponseEntity<Map<String, Object>> aiAnalyzeResume(@PathVariable String id) {
-        log.info("AI分析简历: {}", id);
+    public ResponseEntity<Map<String, Object>> aiAnalyzeResume(
+            @PathVariable String id,
+            @RequestParam(required = false) String model) {
+        String actualModel = modelConfig.resolveModel(model);
+        log.info("AI分析简历: {}, 使用模型: {}", id, actualModel);
         Resume resume = resumeService.getResume(id)
                 .orElseThrow(() -> new IllegalArgumentException("Resume not found: " + id));
-        Map<String, Object> result = resumeAiService.aiAnalyzeResume(resume);
+        Map<String, Object> result = resumeAiService.aiAnalyzeResume(resume, actualModel);
         return ResponseEntity.ok(Map.of("success", true, "data", result));
     }
 

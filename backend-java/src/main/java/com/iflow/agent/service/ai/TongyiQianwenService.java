@@ -1,5 +1,6 @@
 package com.iflow.agent.service.ai;
 
+import com.iflow.agent.config.ModelConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
@@ -29,14 +30,17 @@ public class TongyiQianwenService {
     private final ChatModel chatModel;
     private final EmbeddingModel embeddingModel;
     private final IFlowService iFlowService;
+    private final ModelConfig modelConfig;
 
     public TongyiQianwenService(
             @Nullable ChatModel chatModel,
             @Nullable EmbeddingModel embeddingModel,
-            IFlowService iFlowService) {
+            IFlowService iFlowService,
+            ModelConfig modelConfig) {
         this.chatModel = chatModel;
         this.embeddingModel = embeddingModel;
         this.iFlowService = iFlowService;
+        this.modelConfig = modelConfig;
         
         if (chatModel == null) {
             log.warn("ChatModel not available - AI features will use AI SDK only");
@@ -45,9 +49,6 @@ public class TongyiQianwenService {
             log.warn("EmbeddingModel not available - embedding features disabled");
         }
     }
-
-    // 默认模型配置，可通过环境变量或配置文件覆盖
-    private static final String DEFAULT_MODEL = "GLM-4.7";
 
     /**
      * 简单的文本生成 - 优先使用 AI 工作台
@@ -60,16 +61,36 @@ public class TongyiQianwenService {
      * 带模型指定的文本生成
      */
     public String generate(String prompt, String model) {
-        String effectiveModel = model != null && !model.isEmpty() ? model : DEFAULT_MODEL;
+        String effectiveModel = modelConfig.resolveModel(model);
         log.debug("Generating text with model: {} and prompt: {}", effectiveModel, prompt.substring(0, Math.min(100, prompt.length())));
 
         // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
-            StringBuilder result = new StringBuilder();
-            iFlowService.queryStream(prompt, effectiveModel)
-                    .doOnNext(result::append)
-                    .blockLast();
-            return result.toString();
+            try {
+                StringBuilder result = new StringBuilder();
+                iFlowService.queryStream(prompt, effectiveModel)
+                        .doOnNext(result::append)
+                        .doOnError(error -> {
+                            log.error("iFlow query error: {}", error.getMessage());
+                        })
+                        .blockLast();
+                
+                String responseText = result.toString();
+                
+                // 检查是否返回了错误信息
+                if (responseText.contains("API Token") || responseText.contains("expired") || responseText.contains("过期")) {
+                    throw new RuntimeException("API_TOKEN_EXPIRED: iFlow API Token 已过期，请访问 https://platform.iflow.cn/docs/api-key-management 重置 Token");
+                }
+                
+                return responseText;
+            } catch (Exception e) {
+                String errorMessage = e.getMessage();
+                if (errorMessage != null && errorMessage.contains("API_TOKEN_EXPIRED")) {
+                    throw new RuntimeException(errorMessage);
+                }
+                log.error("iFlow query failed: {}", e.getMessage());
+                throw new RuntimeException("AI 服务调用失败: " + e.getMessage());
+            }
         }
 
         // 降级使用 Spring AI
@@ -145,7 +166,7 @@ public class TongyiQianwenService {
 
         // 优先使用 AI 工作台
         if (iFlowService.isConnected()) {
-            return iFlowService.queryStream(prompt, DEFAULT_MODEL);
+            return iFlowService.queryStream(prompt, modelConfig.getDefaultModel());
         }
 
         if (chatModel != null) {
@@ -169,7 +190,7 @@ public class TongyiQianwenService {
         // 优先使用 AI 工作台
         if (iFlowService.isConnected() && !messages.isEmpty()) {
             String lastMessage = messages.get(messages.size() - 1).getOrDefault("content", "");
-            return iFlowService.queryStream(lastMessage, DEFAULT_MODEL);
+            return iFlowService.queryStream(lastMessage, modelConfig.getDefaultModel());
         }
 
         if (chatModel != null) {
@@ -237,7 +258,7 @@ public class TongyiQianwenService {
         // 优先使用 AI 工作台（流式收集完整响应）
         if (iFlowService.isConnected()) {
             StringBuilder result = new StringBuilder();
-            iFlowService.queryStream(prompt, model != null ? model : DEFAULT_MODEL)
+            iFlowService.queryStream(prompt, modelConfig.resolveModel(model))
                     .doOnNext(result::append)
                     .blockLast();
             return result.toString();

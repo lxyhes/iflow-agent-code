@@ -13,8 +13,10 @@ public interface ResumeAiService {
     /**
      * AI深度分析简历
      * 使用AI对简历进行全面分析，包括整体质量评估、内容优化建议、行业对比分析、求职竞争力评估
+     * @param resume 简历对象
+     * @param model 使用的AI模型
      */
-    Map<String, Object> aiAnalyzeResume(Resume resume);
+    Map<String, Object> aiAnalyzeResume(Resume resume, String model);
 
     /**
      * AI简历健康度检查

@@ -14,7 +14,9 @@ import {
   Check,
   AlertCircle,
   Settings,
-  Trash2
+  Trash2,
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 
 const ApiKeySettings = ({ isOpen, onClose }) => {
@@ -22,23 +24,42 @@ const ApiKeySettings = ({ isOpen, onClose }) => {
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [keyStatus, setKeyStatus] = useState(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   // 加载已保存的API Key
   useEffect(() => {
     if (isOpen) {
       const savedKey = localStorage.getItem('iflow_api_key');
       if (savedKey) {
-        // 只显示前8位和后4位，中间用*代替
-        const maskedKey = savedKey.length > 12 
-          ? `${savedKey.substring(0, 8)}...${savedKey.substring(savedKey.length - 4)}`
-          : '已设置';
         setApiKey(savedKey);
       }
+      // 检测API Key状态
+      checkApiKeyStatus();
     }
   }, [isOpen]);
 
+  // 检测API Key状态
+  const checkApiKeyStatus = async () => {
+    setCheckingStatus(true);
+    try {
+      const response = await fetch('/api/iflow/api-key-status');
+      if (response.ok) {
+        const data = await response.json();
+        setKeyStatus(data);
+      } else {
+        setKeyStatus({ valid: false, status: 'error', message: '检测失败' });
+      }
+    } catch (error) {
+      console.error('Failed to check API key status:', error);
+      setKeyStatus({ valid: false, status: 'error', message: '无法连接到后端服务' });
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
   // 保存API Key
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!apiKey.trim()) {
       setError('请输入API Key');
       return;
@@ -50,7 +71,25 @@ const ApiKeySettings = ({ isOpen, onClose }) => {
     }
 
     try {
+      // 调用后端 API 动态更新 API Key
+      const response = await fetch('/api/iflow/api-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        setError(data.error || '保存失败');
+        return;
+      }
+
+      // 同时保存到 localStorage 作为备份
       localStorage.setItem('iflow_api_key', apiKey.trim());
+      
       setSaved(true);
       setError('');
       
@@ -59,29 +98,44 @@ const ApiKeySettings = ({ isOpen, onClose }) => {
         detail: { apiKey: apiKey.trim() }
       }));
 
+      // 重新检测状态
+      await checkApiKeyStatus();
+
       setTimeout(() => {
         setSaved(false);
         onClose();
       }, 1500);
     } catch (err) {
-      setError('保存失败，请重试');
+      setError('保存失败: ' + err.message);
     }
   };
 
   // 清除API Key
-  const handleClear = () => {
+  const handleClear = async () => {
     if (window.confirm('确定要清除已保存的API Key吗？')) {
-      localStorage.removeItem('iflow_api_key');
-      setApiKey('');
-      setSaved(true);
-      
-      window.dispatchEvent(new CustomEvent('apikey-changed', {
-        detail: { apiKey: null }
-      }));
+      try {
+        // 调用后端 API 清除动态 API Key
+        await fetch('/api/iflow/api-key', {
+          method: 'DELETE',
+        });
 
-      setTimeout(() => {
-        setSaved(false);
-      }, 1500);
+        localStorage.removeItem('iflow_api_key');
+        setApiKey('');
+        setSaved(true);
+        
+        window.dispatchEvent(new CustomEvent('apikey-changed', {
+          detail: { apiKey: null }
+        }));
+
+        // 重新检测状态
+        await checkApiKeyStatus();
+
+        setTimeout(() => {
+          setSaved(false);
+        }, 1500);
+      } catch (err) {
+        setError('清除失败: ' + err.message);
+      }
     }
   };
 
@@ -117,13 +171,64 @@ const ApiKeySettings = ({ isOpen, onClose }) => {
 
         {/* Content */}
         <div className="p-6 space-y-4">
+          {/* API Key 状态 */}
+          {keyStatus && (
+            <div className={`rounded-lg p-4 border ${
+              keyStatus.valid
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm font-medium ${
+                      keyStatus.valid
+                        ? 'text-green-900 dark:text-green-100'
+                        : 'text-red-900 dark:text-red-100'
+                    }`}>
+                      API Key 状态: {keyStatus.valid ? '正常' : keyStatus.status === 'expired' ? '已过期' : keyStatus.status === 'disconnected' ? '未连接' : '异常'}
+                    </p>
+                    <button
+                      onClick={checkApiKeyStatus}
+                      disabled={checkingStatus}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${checkingStatus ? 'animate-spin' : ''}`} />
+                      重新检测
+                    </button>
+                  </div>
+                  <p className={`text-xs mt-1 ${
+                    keyStatus.valid
+                      ? 'text-green-700 dark:text-green-300'
+                      : 'text-red-700 dark:text-red-300'
+                  }`}>
+                    {keyStatus.message}
+                  </p>
+                  {!keyStatus.valid && keyStatus.action === 'renew_token' && (
+                    <a
+                      href="https://platform.iflow.cn/docs/api-key-management"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      前往 iFlow 平台重置 Token
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 说明 */}
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <p className="text-sm text-blue-700 dark:text-blue-400">
               <strong>提示：</strong>API Key用于AI功能（智能描述生成、简历诊断等）。
-              Key将保存在您的浏览器本地存储中，不会上传到服务器。
+              输入新的 API Key 后点击保存，将立即生效，无需重启服务。
             </p>
           </div>
+
+
 
           {/* API Key输入 */}
           <div>

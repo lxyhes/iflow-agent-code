@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.iflow.agent.config.ModelConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -26,18 +27,22 @@ public class LLMService {
     @Value("${llm.base-url:https://api.iflow.cn/v1}")
     private String baseUrl;
 
-    @Value("${llm.default-model:glm-4}")
-    private String defaultModel;
+    private final ModelConfig modelConfig;
 
     @Value("${llm.default-temperature:0.7}")
     private double defaultTemperature;
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final com.iflow.agent.service.ai.ApiKeyManager apiKeyManager;
 
-    public LLMService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+    public LLMService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+                      com.iflow.agent.service.ai.ApiKeyManager apiKeyManager,
+                      ModelConfig modelConfig) {
         this.webClient = webClientBuilder.build();
         this.objectMapper = objectMapper;
+        this.apiKeyManager = apiKeyManager;
+        this.modelConfig = modelConfig;
     }
 
     public Mono<String> complete(List<Map<String, String>> messages, Double temperature, Integer maxTokens, String model) {
@@ -47,7 +52,7 @@ public class LLMService {
             return Mono.just("Error: API key not configured");
         }
 
-        String requestModel = model != null ? model : defaultModel;
+        String requestModel = modelConfig.resolveModel(model);
         Double requestTemp = temperature != null ? temperature : defaultTemperature;
 
         ObjectNode requestBody = objectMapper.createObjectNode();
@@ -117,7 +122,7 @@ public class LLMService {
             return Flux.just("Error: API key not configured");
         }
 
-        String requestModel = model != null ? model : defaultModel;
+        String requestModel = modelConfig.resolveModel(model);
         Double requestTemp = temperature != null ? temperature : defaultTemperature;
 
         ObjectNode requestBody = objectMapper.createObjectNode();
@@ -182,6 +187,15 @@ public class LLMService {
     }
 
     private String getApiKey() {
+        // 优先使用 ApiKeyManager（支持动态更新）
+        if (apiKeyManager != null) {
+            String key = apiKeyManager.getApiKey();
+            if (key != null && !key.isEmpty()) {
+                return key;
+            }
+        }
+        
+        // 回退到环境变量
         String key = System.getenv("IFLOW_API_KEY");
         if (key != null && !key.isEmpty()) {
             return key;

@@ -1,5 +1,6 @@
 package com.iflow.agent.domain.resume.service.impl;
 
+import com.iflow.agent.config.ModelConfig;
 import com.iflow.agent.domain.resume.entity.*;
 import com.iflow.agent.domain.resume.repository.ResumeAiHistoryRepository;
 import com.iflow.agent.domain.resume.service.ResumeAiService;
@@ -20,18 +21,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ResumeAiServiceImpl implements ResumeAiService {
 
-    private static final String DEFAULT_MODEL = "GLM-4.7";
-
     private final TongyiQianwenService tongyiQianwenService;
     private final ObjectMapper objectMapper;
     private final ResumeAiHistoryRepository historyRepository;
+    private final ModelConfig modelConfig;
 
     @Override
-    public Map<String, Object> aiAnalyzeResume(Resume resume) {
-        log.info("AI analyzing resume: {}", resume.getId());
+    public Map<String, Object> aiAnalyzeResume(Resume resume, String model) {
+        log.info("AI analyzing resume: {} with model: {}", resume.getId(), model);
 
         String prompt = buildAiAnalyzePrompt(resume);
-        String aiResponse = tongyiQianwenService.generate(prompt);
+        String aiResponse = tongyiQianwenService.generate(prompt, model);
         log.info("AI Response length: {}, preview: {}", aiResponse.length(), 
                 aiResponse.substring(0, Math.min(500, aiResponse.length())));
 
@@ -87,7 +87,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("timestamp", System.currentTimeMillis());
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result, model);
 
             return result;
 
@@ -103,7 +103,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
                 partialResult.put("error", true);
                 partialResult.put("error_message", "AI 返回数据不完整，显示部分结果");
                 partialResult.put("timestamp", System.currentTimeMillis());
-                saveAiHistory(resume.getId(), "analyze", aiResponse, partialResult);
+                saveAiHistory(resume.getId(), "analyze", aiResponse, partialResult, model);
                 return partialResult;
             }
 
@@ -120,7 +120,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("timestamp", System.currentTimeMillis());
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result, model);
 
             return result;
         }
@@ -242,7 +242,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("industry_benchmark", industryBenchmark);
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "health_check", aiResponse, result);
+            saveAiHistory(resume.getId(), "health_check", aiResponse, result, null);
 
             return result;
 
@@ -272,7 +272,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("industry_benchmark", Map.of("percentile", 70, "comparison", "您的简历表现良好"));
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "health_check", aiResponse, result);
+            saveAiHistory(resume.getId(), "health_check", aiResponse, result, null);
 
             return result;
         }
@@ -406,7 +406,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("ats_compatibility", atsCompatibility);
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "layout_check", aiResponse, result);
+            saveAiHistory(resume.getId(), "layout_check", aiResponse, result, null);
 
             return result;
 
@@ -443,7 +443,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("ats_compatibility", atsCompatibility);
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "layout_check", aiResponse, result);
+            saveAiHistory(resume.getId(), "layout_check", aiResponse, result, null);
 
             return result;
         }
@@ -495,7 +495,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
             result.put("timestamp", System.currentTimeMillis());
 
             // 保存历史记录
-            saveAiHistory(resume.getId(), "analyze", aiResponse, result);
+            saveAiHistory(resume.getId(), "analyze", aiResponse, result, null);
 
             return result;
 
@@ -849,7 +849,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         Map<String, Object> result = new HashMap<>();
         
         // 添加使用的模型信息
-        result.put("model", model != null ? model : DEFAULT_MODEL);
+        result.put("model", modelConfig.resolveModel(model));
         
         // 解析AI响应
         Map<String, Object> parsedResponse = parseRewriteResponse(aiResponse);
@@ -955,7 +955,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
         log.info("Final result keys: {}", result.keySet());
 
         // 保存历史记录
-        saveAiHistory(resume.getId(), "rewrite", aiResponse, result);
+        saveAiHistory(resume.getId(), "rewrite", aiResponse, result, model);
 
         return result;
     }
@@ -1779,7 +1779,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
     /**
      * 保存 AI 生成历史记录
      */
-    private void saveAiHistory(String resumeId, String type, String aiResponse, Map<String, Object> parsedData) {
+    private void saveAiHistory(String resumeId, String type, String aiResponse, Map<String, Object> parsedData, String model) {
         try {
             String parsedDataJson = objectMapper.writeValueAsString(parsedData);
             
@@ -1788,7 +1788,7 @@ public class ResumeAiServiceImpl implements ResumeAiService {
                     .type(type)
                     .aiResponse(aiResponse)
                     .parsedData(parsedDataJson)
-                    .model("glm-4")
+                    .model(modelConfig.resolveModel(model))
                     .build();
             
             historyRepository.save(history);

@@ -169,8 +169,12 @@ export const resumeApi = {
   },
 
   // AI 功能
-  aiAnalyzeResume: async (resumeId) => {
-    const response = await authenticatedFetch(`${API_BASE}/${resumeId}/ai-analyze`, {
+  aiAnalyzeResume: async (resumeId, model = null) => {
+    let url = `${API_BASE}/${resumeId}/ai-analyze`;
+    if (model) {
+      url += `?model=${encodeURIComponent(model)}`;
+    }
+    const response = await authenticatedFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });

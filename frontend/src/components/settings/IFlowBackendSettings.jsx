@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Server, Terminal, Info, Save, AlertCircle } from 'lucide-react';
+import { Server, Terminal, Info, Save, AlertCircle, CheckCircle, XCircle, RefreshCw, ExternalLink } from 'lucide-react';
 
 const IFlowBackendSettings = () => {
   const [backendMode, setBackendMode] = useState(() => {
@@ -13,9 +13,11 @@ const IFlowBackendSettings = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('glm-4.7');
+  const [selectedModel, setSelectedModel] = useState('minimax2.5');
   const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [processStatus, setProcessStatus] = useState({ running: false, loading: false });
+  const [apiKeyStatus, setApiKeyStatus] = useState(null);
+  const [checkingKeyStatus, setCheckingKeyStatus] = useState(false);
 
   const availableModels = [
     { id: 'glm-4', name: 'GLM-4', description: '基础模型' },
@@ -165,6 +167,25 @@ const IFlowBackendSettings = () => {
     }
   };
 
+  // 检测 API Key 状态
+  const checkApiKeyStatus = async () => {
+    setCheckingKeyStatus(true);
+    try {
+      const response = await fetch('/api/iflow/api-key-status');
+      if (response.ok) {
+        const data = await response.json();
+        setApiKeyStatus(data);
+      } else {
+        setApiKeyStatus({ valid: false, status: 'error', message: '检测失败' });
+      }
+    } catch (error) {
+      console.error('Failed to check API key status:', error);
+      setApiKeyStatus({ valid: false, status: 'error', message: '检测失败' });
+    } finally {
+      setCheckingKeyStatus(false);
+    }
+  };
+
   useEffect(() => {
     // 从 localStorage 加载配置
     const savedMode = localStorage.getItem('iflow-backend-mode');
@@ -178,6 +199,9 @@ const IFlowBackendSettings = () => {
     // 检查进程状态
     checkProcessStatus();
 
+    // 检测 API Key 状态
+    checkApiKeyStatus();
+
     // 定期检查进程状态（每 10 秒）
     const interval = setInterval(checkProcessStatus, 10000);
     return () => clearInterval(interval);
@@ -185,6 +209,60 @@ const IFlowBackendSettings = () => {
 
   return (
     <div className="space-y-6">
+      {/* API Key 状态提示 */}
+      {apiKeyStatus && (
+        <div className={`rounded-lg p-4 border ${
+          apiKeyStatus.valid 
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+            : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            {apiKeyStatus.valid ? (
+              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-medium ${
+                  apiKeyStatus.valid 
+                    ? 'text-green-900 dark:text-green-100' 
+                    : 'text-red-900 dark:text-red-100'
+                }`}>
+                  API Key 状态: {apiKeyStatus.valid ? '正常' : apiKeyStatus.status === 'expired' ? '已过期' : apiKeyStatus.status === 'disconnected' ? '未连接' : '异常'}
+                </p>
+                <button
+                  onClick={checkApiKeyStatus}
+                  disabled={checkingKeyStatus}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <RefreshCw className={`w-3 h-3 ${checkingKeyStatus ? 'animate-spin' : ''}`} />
+                  重新检测
+                </button>
+              </div>
+              <p className={`text-xs mt-1 ${
+                apiKeyStatus.valid 
+                  ? 'text-green-700 dark:text-green-300' 
+                  : 'text-red-700 dark:text-red-300'
+              }`}>
+                {apiKeyStatus.message}
+              </p>
+              {!apiKeyStatus.valid && apiKeyStatus.action === 'renew_token' && (
+                <a
+                  href="https://platform.iflow.cn/docs/api-key-management"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  前往 iFlow 平台重置 Token
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
           AI 工作台 后端模式
