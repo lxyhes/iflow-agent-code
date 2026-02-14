@@ -263,58 +263,58 @@ const PromptSuggestions = ({
   }
 
   return (
-    <div 
+    <div
       className={cn(
-        'w-full transition-all duration-300 flex-shrink-0',
-        isExpanded ? 'opacity-100 translate-y-0 max-h-[300px]' : 'opacity-0 -translate-y-2 h-0 overflow-hidden'
+        'w-full transition-all duration-300 flex-shrink-0 relative',
+        isExpanded ? 'opacity-100 translate-y-0 max-h-[200px]' : 'opacity-0 -translate-y-2 h-0 overflow-hidden'
       )}
-      style={{ zIndex: 10 }}
+      style={{ zIndex: 1 }}
     >
-      <div className="bg-gradient-to-r from-purple-50 via-blue-50 to-indigo-50 dark:from-purple-950/30 dark:via-blue-950/30 dark:to-indigo-950/30 border border-purple-200/50 dark:border-purple-800/50 rounded-xl p-4 mb-4 shadow-lg shadow-purple-500/5 overflow-y-auto max-h-[300px]">
+      <div className="bg-gradient-to-r from-purple-50/80 via-blue-50/80 to-indigo-50/80 dark:from-purple-950/15 dark:via-blue-950/15 dark:to-indigo-950/15 border border-purple-200/40 dark:border-purple-800/40 rounded-lg p-2 mb-2 shadow-sm overflow-y-auto max-h-[200px] backdrop-blur-sm">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center shadow-md">
-              <Lightbulb className="w-3.5 h-3.5 text-white" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 bg-gradient-to-br from-purple-500 to-blue-500 rounded-md flex items-center justify-center shadow-sm">
+              <Lightbulb className="w-3 h-3 text-white" />
             </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
               接下来可以尝试
             </span>
             {isGenerating && (
-              <RefreshCw className="w-3 h-3 text-gray-400 animate-spin" />
+              <RefreshCw className="w-2.5 h-2.5 text-gray-400 animate-spin" />
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <button
               onClick={handleRefresh}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded transition-colors"
               title="刷新建议"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3 h-3" />
             </button>
             <button
               onClick={() => setIsExpanded(false)}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded transition-colors"
               title="隐藏建议"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           </div>
         </div>
 
         {/* 建议列表 */}
-        <div className="space-y-2">
+        <div className="space-y-1">
           {suggestions.map((suggestion, index) => (
             <button
               key={index}
               onClick={() => handleApplySuggestion(suggestion)}
-              className="w-full text-left px-4 py-3 bg-white/70 dark:bg-gray-800/70 hover:bg-white/90 dark:hover:bg-gray-800/90 border border-gray-200/60 dark:border-gray-700/60 rounded-lg transition-all duration-200 group flex items-start gap-3 hover:shadow-md hover:border-purple-300/50 dark:hover:border-purple-700/50"
+              className="w-full text-left px-2.5 py-1.5 bg-white/60 dark:bg-gray-800/60 hover:bg-white/80 dark:hover:bg-gray-800/80 border border-gray-200/50 dark:border-gray-700/50 rounded-md transition-all duration-200 group flex items-center gap-2 hover:border-purple-300/50 dark:hover:border-purple-700/50"
             >
-              <Sparkles className="w-4 h-4 text-purple-500 flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-              <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors flex-1">
+              <Sparkles className="w-3 h-3 text-purple-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+              <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 transition-colors flex-1 truncate">
                 {suggestion}
               </span>
-              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-purple-500 group-hover:translate-x-1 flex-shrink-0 mt-0.5 ml-auto transition-all" />
+              <ChevronRight className="w-3 h-3 text-gray-400 group-hover:text-purple-500 group-hover:translate-x-0.5 flex-shrink-0 transition-all" />
             </button>
           ))}
         </div>

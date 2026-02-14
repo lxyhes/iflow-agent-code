@@ -15,7 +15,9 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.Map;
@@ -144,6 +146,12 @@ public class IFlowClientManager {
             // 同时更新环境变量作为备用
             updateEnvironmentApiKey(apiKey);
 
+            // 先停止现有的 iFlow 进程（防止 SDK 连接到旧进程）
+            stopExistingIflowProcess();
+
+            // 等待进程完全停止
+            Thread.sleep(1000);
+
             // 构建选项
             IFlowOptions options = IFlowOptions.builder()
                     .url(url)
@@ -173,44 +181,89 @@ public class IFlowClientManager {
     }
 
     /**
+     * 停止现有的 iFlow 进程（防止 SDK 连接到旧 Token 的进程）
+     * 只杀掉 iflow.js 相关的 Node 进程，不杀掉其他进程
+     */
+    private void stopExistingIflowProcess() {
+        log.info("Stopping existing iFlow process before creating new client...");
+        try {
+            // 只杀掉运行 iflow.js 的 Node 进程
+            // 通过 ps 命令找到包含 iflow.js 的进程
+            ProcessBuilder findPb = new ProcessBuilder("bash", "-c",
+                "ps aux | grep 'iflow.js' | grep -v grep | awk '{print $2}'");
+            findPb.redirectErrorStream(true);
+            Process findProcess = findPb.start();
+            
+            BufferedReader reader = new BufferedReader(new InputStreamReader(findProcess.getInputStream()));
+            StringBuilder pids = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty()) {
+                    pids.append(line).append(" ");
+                }
+            }
+            findProcess.waitFor();
+            
+            String pidList = pids.toString().trim();
+            if (!pidList.isEmpty()) {
+                log.info("Found iflow processes to kill: {}", pidList);
+                // 只杀掉找到的 iflow.js 进程
+                ProcessBuilder killPb = new ProcessBuilder("bash", "-c",
+                    "kill -9 " + pidList);
+                killPb.redirectErrorStream(true);
+                Process killProcess = killPb.start();
+                killProcess.waitFor();
+                log.info("Killed iflow processes successfully");
+            } else {
+                log.info("No iflow process found");
+            }
+            
+            // 等待进程停止
+            Thread.sleep(1000);
+            
+        } catch (Exception e) {
+            log.warn("Error stopping existing iFlow process: {}", e.getMessage());
+        }
+    }
+
+    /**
      * 重新初始化客户端（在更新 API Key 后调用）
      */
     public void reinitialize(String apiKey) {
         log.info("Reinitializing iFlow client due to API Key change");
         
-        // 1. 停止旧的 iFlow CLI 进程
-        IFlowProcessManager oldProcessManager = processManagerRef.get();
-        if (oldProcessManager != null) {
-            try {
-                log.info("Stopping old iFlow CLI process...");
-                CompletableFuture<Void> stopFuture = oldProcessManager.stopProcess();
-                stopFuture.get(); // 等待进程停止
-                log.info("Old iFlow CLI process stopped successfully");
-            } catch (Exception e) {
-                log.warn("Error stopping old iFlow CLI process: {}", e.getMessage());
-            }
-        }
-
-        // 2. 更新 iflow 配置文件（这是关键步骤，让新的 API Key 真正生效）
+        // 1. 更新 iflow 配置文件（这是关键步骤，让新的 API Key 真正生效）
         updateIflowConfigFile(apiKey);
 
-        // 3. 更新环境变量（作为备用）
+        // 2. 更新环境变量（作为备用）
         updateEnvironmentApiKey(apiKey);
 
-        // 4. 重新创建客户端（会自动启动新的 iFlow CLI 进程）
+        // 3. 重新创建客户端（会自动停止旧进程并启动新的 iFlow CLI 进程）
         createClient();
+    }
 
-        // 5. 确保新进程正在运行
-        IFlowProcessManager newProcessManager = processManagerRef.get();
-        if (newProcessManager != null) {
-            try {
-                log.info("Ensuring new iFlow CLI process is running...");
-                CompletableFuture<Integer> ensureFuture = newProcessManager.ensureProcessRunning();
-                Integer port = ensureFuture.get();
-                log.info("New iFlow CLI process started on port: {}", port);
-            } catch (Exception e) {
-                log.error("Error ensuring iFlow CLI process is running: {}", e.getMessage(), e);
+    /**
+     * 在 SDK 查询前调用，确保停止现有进程
+     * 防止 SDK 连接到使用旧 Token 的 iFlow 进程
+     */
+    public void stopAndRecreateIfNeeded() {
+        // 检查是否有 iflow.js 进程在运行
+        try {
+            ProcessBuilder checkPb = new ProcessBuilder("bash", "-c",
+                "ps aux | grep 'iflow.js' | grep -v grep | wc -l");
+            checkPb.redirectErrorStream(true);
+            Process checkProcess = checkPb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(checkProcess.getInputStream()));
+            String count = reader.readLine();
+            checkProcess.waitFor();
+            
+            if (count != null && !count.trim().equals("0")) {
+                log.info("Found {} iflow process(es) running, stopping before SDK query", count.trim());
+                stopExistingIflowProcess();
             }
+        } catch (Exception e) {
+            log.warn("Error checking iflow processes: {}", e.getMessage());
         }
     }
 

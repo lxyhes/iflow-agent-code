@@ -7,11 +7,11 @@ import React, { memo, useRef, useEffect, useState } from 'react';
 import UserMessage from './UserMessage';
 import AssistantMessage from './AssistantMessage';
 
-const MessageComponent = memo(({ 
-  message, 
-  index, 
-  prevMessage, 
-  autoExpandTools, 
+const MessageComponent = memo(({
+  message,
+  index,
+  prevMessage,
+  autoExpandTools,
   showThinking,
   selectedProject,
   onEditMessage,
@@ -27,7 +27,10 @@ const MessageComponent = memo(({
   copiedMessageId,
   regeneratingMessageId,
   favoritedMessages,
-  isLoading
+  isLoading,
+  isLastMessage = false,
+  allMessages = [],
+  onApplySuggestion
 }) => {
   // 禁用消息分组,让每条消息都独立显示,避免消息挤在一起
   const isGrouped = false;
@@ -86,9 +89,9 @@ const MessageComponent = memo(({
           isLoading={isLoading}
         />
       ) : (
-        <AssistantMessage 
-          message={message} 
-          isGrouped={isGrouped} 
+        <AssistantMessage
+          message={message}
+          isGrouped={isGrouped}
           showThinking={showThinking}
           onCopyMessage={onCopyMessage}
           onEditMessage={onEditMessage}
@@ -104,6 +107,10 @@ const MessageComponent = memo(({
           regeneratingMessageId={regeneratingMessageId}
           favoritedMessages={favoritedMessages}
           isLoading={isLoading}
+          isLastMessage={isLastMessage}
+          allMessages={allMessages}
+          onApplySuggestion={onApplySuggestion}
+          selectedProject={selectedProject}
         />
       )}
     </div>

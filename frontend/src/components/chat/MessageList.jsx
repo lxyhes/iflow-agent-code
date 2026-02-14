@@ -19,7 +19,8 @@ const MessageList = memo(({
   onFileOpen,
   onShowSettings,
   messageActions,
-  provider = 'iflow'
+  provider = 'iflow',
+  onApplySuggestion
 }) => {
   const pinnedToBottomRef = useRef(true);
   const lastScrollAtRef = useRef(0);
@@ -138,6 +139,8 @@ const MessageList = memo(({
               return <UsageLimitBanner key={index} text={message.content} />;
             }
 
+            const isLastMessage = index === sortedMessages.length - 1;
+
             return (
               <MessageComponent
                 key={index}
@@ -164,6 +167,9 @@ const MessageList = memo(({
                 regeneratingMessageId={messageActions.regeneratingMessageId}
                 favoritedMessages={messageActions.favoritedMessages}
                 isLoading={isLoading}
+                isLastMessage={isLastMessage}
+                allMessages={sortedMessages}
+                onApplySuggestion={onApplySuggestion}
               />
             );
           })}

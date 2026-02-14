@@ -75,6 +75,10 @@ public class IFlowService {
     private Flux<String> queryStreamViaSDK(String message) {
         log.debug("AI SDK stream query: {}", message);
 
+        // 在 SDK 查询前，确保使用最新的 API Key
+        // 先停止现有进程，防止连接到旧 Token 的进程
+        iFlowClientManager.stopAndRecreateIfNeeded();
+
         return Flux.create(sink -> {
             long startTime = System.currentTimeMillis();
             try {

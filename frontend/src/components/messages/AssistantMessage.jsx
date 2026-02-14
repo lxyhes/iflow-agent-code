@@ -11,6 +11,7 @@ import MarkdownRenderer from '../markdown/MarkdownRenderer';
 import ThinkingBlock from '../markdown/ThinkingBlock';
 import ToolUsageCard from './ToolUsageCard';
 import WorkflowTemplateCards from '../workflow/WorkflowTemplateCards';
+import MessageSuggestions from '../chat/MessageSuggestions';
 
 const autoParagraphize = (text) => {
   const s = String(text || '');
@@ -129,9 +130,9 @@ const TypedMarkdown = ({ content, isStreaming }) => {
   );
 };
 
-const AssistantMessage = ({ 
-  message, 
-  isGrouped, 
+const AssistantMessage = ({
+  message,
+  isGrouped,
   showThinking,
   onCopyMessage,
   onEditMessage,
@@ -146,7 +147,11 @@ const AssistantMessage = ({
   copiedMessageId,
   regeneratingMessageId,
   favoritedMessages,
-  isLoading
+  isLoading,
+  isLastMessage = false,
+  allMessages = [],
+  onApplySuggestion,
+  selectedProject
 }) => {
   const provider = localStorage.getItem('selected-provider') || 'iflow';
   const [showMenu, setShowMenu] = useState(false);
@@ -417,6 +422,16 @@ const AssistantMessage = ({
               删除
             </button>
           </div>
+        )}
+
+        {/* 💡 智能提示词建议 - 只在最后一条AI消息显示 */}
+        {isLastMessage && !message.isStreaming && (
+          <MessageSuggestions
+            messages={allMessages}
+            selectedProject={selectedProject}
+            onApplySuggestion={onApplySuggestion}
+            isLastMessage={isLastMessage}
+          />
         )}
       </div>
     </div>

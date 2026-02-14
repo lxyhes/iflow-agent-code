@@ -48,7 +48,6 @@ import ChatInput from './chat/ChatInput';
 import ChatToolbar from './chat/ChatToolbar';
 import EmptyState from './chat/EmptyState';
 import MessageList from './chat/MessageList';
-import PromptSuggestions from './chat/PromptSuggestions';
 
 /**
  * 🎨 极简布局的 Chat 界面
@@ -751,22 +750,13 @@ const ChatInterfaceMinimal = memo(({
             onShowSettings={onShowSettings}
             messageActions={messageActions}
             provider={chatState.provider}
+            onApplySuggestion={(suggestion) => {
+              inputState.setInput(suggestion);
+              inputState.textareaRef.current?.focus();
+            }}
           />
         )}
       </div>
-
-      {/* ============================================
-          💡 智能提示词建议（独立区域）
-      ============================================ */}
-      <PromptSuggestions
-        messages={chatState.chatMessages}
-        selectedProject={selectedProject}
-        onApplySuggestion={(suggestion) => {
-          inputState.setInput(suggestion);
-          inputState.textareaRef.current?.focus();
-        }}
-        isLoading={chatState.isLoading}
-      />
 
       {/* ============================================
           ⌨️ 输入区域
