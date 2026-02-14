@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitBranch, Download, Copy, Check, Settings, Play, Code, Server, Zap, FileText, X } from 'lucide-react';
+import { GitBranch, Download, Copy, Check, Settings, Play, Code, Server, Zap, FileText, X, FolderPlus, CheckCircle } from 'lucide-react';
 
 const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
   const [platforms, setPlatforms] = useState([]);
@@ -18,6 +18,8 @@ const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
   const [copiedFile, setCopiedFile] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customConfig, setCustomConfig] = useState({});
+  const [appliedToProject, setAppliedToProject] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   // 获取支持的列表
   const fetchSupported = useCallback(async () => {
@@ -121,6 +123,51 @@ const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
     Object.entries(generatedFiles).forEach(([fileName, content]) => {
       handleDownload(fileName, content);
     });
+  };
+
+  // 应用到项目
+  const handleApplyToProject = async () => {
+    if (!projectPath) {
+      setError('未指定项目路径，请先选择项目');
+      return;
+    }
+
+    if (Object.keys(generatedFiles).length === 0) {
+      setError('请先生成配置');
+      return;
+    }
+
+    setApplying(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/cicd/apply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          platform: selectedPlatform,
+          project_type: selectedProjectType,
+          project_name: customProjectName,
+          project_path: projectPath,
+          config: customConfig
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.message || '应用配置失败');
+      }
+
+      setAppliedToProject(true);
+      setTimeout(() => setAppliedToProject(false), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApplying(false);
+    }
   };
 
   // 获取平台图标
@@ -289,13 +336,43 @@ const CICDGenerator = ({ visible, onClose, projectPath, projectName }) => {
             <div className="mt-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium text-white">生成的配置文件</h3>
-                <button
-                  onClick={handleDownloadAll}
-                  className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-                >
-                  <Download className="w-4 h-4" />
-                  下载全部
-                </button>
+                <div className="flex items-center gap-2">
+                  {projectPath && (
+                    <button
+                      onClick={handleApplyToProject}
+                      disabled={applying}
+                      className={`text-sm transition-colors flex items-center gap-1 px-3 py-1.5 rounded-lg ${
+                        appliedToProject
+                          ? 'text-green-400 bg-green-400/10'
+                          : 'text-blue-400 hover:text-blue-300 hover:bg-blue-400/10'
+                      }`}
+                    >
+                      {applying ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                          应用中...
+                        </>
+                      ) : appliedToProject ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          已应用
+                        </>
+                      ) : (
+                        <>
+                          <FolderPlus className="w-4 h-4" />
+                          应用到项目
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleDownloadAll}
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-400/10"
+                  >
+                    <Download className="w-4 h-4" />
+                    下载全部
+                  </button>
+                </div>
               </div>
 
               {Object.entries(generatedFiles).map(([fileName, content]) => (

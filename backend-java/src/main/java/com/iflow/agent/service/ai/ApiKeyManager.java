@@ -1,5 +1,7 @@
 package com.iflow.agent.service.ai;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,12 +9,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.io.File;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * API Key 管理器
  * 支持动态更新 API Key，无需重启服务
  * 支持持久化 Token，重启后自动加载
+ * 支持读取终端 iflow 配置文件
  */
 @Slf4j
 @Component
@@ -26,8 +30,10 @@ public class ApiKeyManager {
     private String configApiKey;
 
     private final AtomicReference<String> dynamicApiKey = new AtomicReference<>();
+    private final AtomicReference<String> terminalApiKey = new AtomicReference<>();
     private final ApplicationEventPublisher eventPublisher;
     private final TokenPersistenceService tokenPersistenceService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
     public void init() {
@@ -38,11 +44,42 @@ public class ApiKeyManager {
             dynamicApiKey.set(persistedToken);
             log.info("Persisted API Key loaded successfully");
         }
+        
+        // 加载终端 iflow 配置
+        loadTerminalApiKey();
+    }
+    
+    /**
+     * 从终端 iflow 配置文件读取 API Key
+     */
+    private void loadTerminalApiKey() {
+        try {
+            String homeDir = System.getProperty("user.home");
+            File settingsFile = new File(homeDir, ".iflow/settings.json");
+            
+            if (settingsFile.exists()) {
+                JsonNode root = objectMapper.readTree(settingsFile);
+                JsonNode apiKeyNode = root.get("apiKey");
+                
+                if (apiKeyNode != null && !apiKeyNode.asText().isEmpty()) {
+                    String key = apiKeyNode.asText();
+                    terminalApiKey.set(key);
+                    log.info("Loaded API Key from terminal iflow config: {}...", 
+                        key.substring(0, Math.min(8, key.length())));
+                } else {
+                    log.debug("No apiKey found in terminal iflow config");
+                }
+            } else {
+                log.debug("Terminal iflow config file not found: {}", settingsFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load API Key from terminal iflow config: {}", e.getMessage());
+        }
     }
 
     /**
      * 获取当前有效的 API Key
-     * 优先级：动态设置 > 环境变量 > 配置文件
+     * 优先级：动态设置 > 环境变量 > 配置文件 > 终端 iflow 配置
      */
     public String getApiKey() {
         // 1. 优先使用动态设置的 Key
@@ -57,13 +94,19 @@ public class ApiKeyManager {
             return env;
         }
 
-        // 3. 最后使用配置文件
+        // 3. 使用配置文件
         if (envApiKey != null && !envApiKey.isEmpty()) {
             return envApiKey;
         }
 
         if (configApiKey != null && !configApiKey.isEmpty()) {
             return configApiKey;
+        }
+        
+        // 4. 最后使用终端 iflow 配置的 Key
+        String terminal = terminalApiKey.get();
+        if (terminal != null && !terminal.isEmpty()) {
+            return terminal;
         }
 
         return "";

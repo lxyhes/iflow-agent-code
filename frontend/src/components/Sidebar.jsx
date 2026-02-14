@@ -1617,16 +1617,7 @@ function Sidebar({
             </button>
           </div>
 
-          {/* Desktop API Key Settings */}
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('show-apikey-settings'))}
-            className="hidden md:flex w-full group items-center gap-3 p-3 h-auto font-normal text-left text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 dark:hover:from-blue-900/20 dark:hover:to-blue-900/30 border border-transparent hover:border-blue-200 dark:hover:border-blue-800 rounded-xl transition-all duration-200 mb-2"
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-200 to-blue-300 dark:from-blue-700 dark:to-blue-600 flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow duration-200">
-              <Key className="w-4 h-4 text-blue-600 dark:text-blue-300" />
-            </div>
-            <span className="text-sm font-medium">API Key</span>
-          </button>
+
 
           {/* Desktop Settings */}
           <button
