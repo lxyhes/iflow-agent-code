@@ -193,11 +193,22 @@ public class ApiKeyManager {
             }
         }
 
+        // 确定 API Key 来源
+        String source;
+        if (dynamicApiKey.get() != null) {
+            source = "dynamic";
+        } else if (System.getenv("IFLOW_API_KEY") != null) {
+            source = "environment";
+        } else if (terminalApiKey.get() != null) {
+            source = "terminal";  // 从 iFlow 终端配置读取
+        } else {
+            source = "config";
+        }
+
         return ApiKeyStatus.builder()
                 .configured(configured)
                 .maskedKey(maskedKey)
-                .source(dynamicApiKey.get() != null ? "dynamic" : 
-                        System.getenv("IFLOW_API_KEY") != null ? "environment" : "config")
+                .source(source)
                 .build();
     }
 

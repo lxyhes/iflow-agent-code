@@ -92,16 +92,13 @@ public class IFlowController {
             }
 
             // 尝试发送一个简单的查询来验证 API Key 是否有效
+            // 使用同步查询更简单可靠
             String testMessage = "Hello";
-            StringBuilder response = new StringBuilder();
+            String responseText;
             
             try {
-                iFlowService.queryStream(testMessage, modelConfig.getDefaultModel())
-                        .doOnNext(response::append)
-                        .doOnError(error -> {
-                            log.error("API Key 检测失败: {}", error.getMessage());
-                        })
-                        .blockLast();
+                responseText = iFlowService.querySync(testMessage);
+                log.info("API Key 检测响应: {}", responseText);
             } catch (Exception e) {
                 log.error("API Key 检测异常: {}", e.getMessage());
                 String errorMsg = e.getMessage();
@@ -113,23 +110,46 @@ public class IFlowController {
                             "action", "renew_token"
                     ));
                 }
+                return ResponseEntity.ok(Map.of(
+                        "valid", false,
+                        "status", "error",
+                        "message", "检测失败: " + e.getMessage(),
+                        "action", "retry"
+                ));
             }
-
-            String responseText = response.toString();
-            log.info("API Key 检测响应: {}", responseText);
             
             // 检查是否返回了错误信息
-            if (responseText.contains("API Token") || responseText.contains("过期") || responseText.contains("expired") || responseText.contains("已过期")) {
+            if (responseText == null) {
+                return ResponseEntity.ok(Map.of(
+                        "valid", false,
+                        "status", "error",
+                        "message", "API 返回空响应，请检查 Token 是否有效",
+                        "action", "renew_token"
+                ));
+            }
+            
+            // 检查是否包含错误关键词（包括 SDK 返回的错误格式 "Error: xxx"）
+            String lowerResponse = responseText.toLowerCase();
+            if (responseText.contains("API Token") || responseText.contains("过期") || 
+                responseText.contains("expired") || responseText.contains("已过期") ||
+                responseText.startsWith("Error:") || 
+                lowerResponse.contains("internal error") ||
+                lowerResponse.contains("api token")) {
+                // 提取更具体的错误信息
+                String errorDetail = responseText.startsWith("Error:") 
+                    ? responseText.substring(6).trim() 
+                    : responseText;
+                
                 return ResponseEntity.ok(Map.of(
                         "valid", false,
                         "status", "expired",
-                        "message", "API Token 已过期，请访问 https://platform.iflow.cn/docs/api-key-management 重置 Token",
+                        "message", "API Token 已过期或无效: " + errorDetail + "。请访问 https://platform.iflow.cn/docs/api-key-management 重置 Token",
                         "action", "renew_token"
                 ));
             }
 
             // 如果返回内容为空或很短，可能也是问题
-            if (responseText.trim().isEmpty() || responseText.length() < 5) {
+            if (responseText.trim().isEmpty() || responseText.length() < 3) {
                 return ResponseEntity.ok(Map.of(
                         "valid", false,
                         "status", "error",

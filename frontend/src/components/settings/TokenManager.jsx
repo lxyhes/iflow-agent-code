@@ -19,6 +19,7 @@ const TokenManager = () => {
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [keyStatus, setKeyStatus] = useState(null);
     const [checkingStatus, setCheckingStatus] = useState(false);
+    const [apiKeySource, setApiKeySource] = useState(''); // 'terminal' | 'dynamic' | 'environment' | 'config'
 
     // 加载 Token 概览
     const loadOverview = async () => {
@@ -100,6 +101,7 @@ const TokenManager = () => {
             // 重新检测状态
             await checkApiKeyStatus();
             await loadOverview();
+            await loadApiKeyInfo();
 
             setTimeout(() => {
                 setSaveSuccess(false);
@@ -129,6 +131,7 @@ const TokenManager = () => {
 
                 await checkApiKeyStatus();
                 await loadOverview();
+                await loadApiKeyInfo();
 
                 setTimeout(() => {
                     setSaveSuccess(false);
@@ -200,6 +203,28 @@ const TokenManager = () => {
         }
     };
 
+    // 加载当前 API Key 信息（从后端获取）
+    const loadApiKeyInfo = async () => {
+        try {
+            const response = await fetch('/api/iflow/api-key-info');
+            if (response.ok) {
+                const data = await response.json();
+                // 如果后端配置了 API Key，显示脱敏后的 Key
+                if (data.configured && data.maskedKey) {
+                    // 只显示脱敏的 Key 作为提示，不显示完整 Key
+                    setApiKey(data.maskedKey);
+                    setApiKeySource(data.source || 'unknown');
+                } else {
+                    // 如果没有配置，清空显示
+                    setApiKey('');
+                    setApiKeySource('');
+                }
+            }
+        } catch (err) {
+            console.error('加载 API Key 信息失败:', err);
+        }
+    };
+
     // 处理 iFlow OAuth 登录
     const handleIFlowLogin = async () => {
         try {
@@ -229,12 +254,7 @@ const TokenManager = () => {
         loadOverview();
         loadOAuthStatus();
         checkApiKeyStatus();
-        
-        // 加载已保存的 API Key
-        const savedKey = localStorage.getItem('iflow_api_key');
-        if (savedKey) {
-            setApiKey(savedKey);
-        }
+        loadApiKeyInfo();
         
         // 每 5 分钟自动刷新一次状态
         const interval = setInterval(() => {
@@ -413,16 +433,22 @@ const TokenManager = () => {
                                         {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
                                 </div>
-                                {localStorage.getItem('iflow_api_key') && (
+                                {/* 显示 API Key 来源信息 */}
+                                {apiKeySource && (
                                     <p className="mt-1 text-xs text-gray-500">
-                                        已保存 API Key，输入新值将覆盖原有设置
+                                        {apiKeySource === 'terminal' && '✓ 已从 iFlow 终端配置读取'}
+                                        {apiKeySource === 'dynamic' && '✓ 已设置动态 API Key'}
+                                        {apiKeySource === 'environment' && '✓ 已从环境变量读取'}
+                                        {apiKeySource === 'config' && '✓ 已从配置文件读取'}
+                                        {apiKeySource === 'unknown' && '✓ 已配置 API Key'}
+                                        ，输入新值将覆盖原有设置
                                     </p>
                                 )}
                             </div>
 
                             {/* 按钮组 */}
                             <div className="flex items-center justify-between">
-                                {localStorage.getItem('iflow_api_key') && (
+                                {(apiKeySource === 'dynamic' || apiKeySource === 'terminal' || apiKeySource === 'environment' || apiKeySource === 'config') && (
                                     <button
                                         onClick={handleClearApiKey}
                                         className="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"

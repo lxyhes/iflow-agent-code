@@ -95,14 +95,16 @@ public class IFlowProcessManager {
 
     /**
      * 停止 iFlow CLI 进程
+     * 注意：只杀掉 iflow 进程，不要杀掉其他占用 8090 端口的进程（如 Java 客户端）
      */
     private void stopIFlowProcess() {
         log.info("Stopping iFlow CLI process...");
 
         try {
-            // 查找占用默认端口的进程
+            // 查找 iflow 进程（通过进程名过滤，避免杀掉 Java 等客户端）
+            // 使用 ps 查找包含 iflow 的进程，然后过滤掉 grep 本身
             ProcessBuilder pb = new ProcessBuilder("sh", "-c", 
-                "lsof -ti:" + DEFAULT_PORT);
+                "ps aux | grep -i 'iflow.*acp\\|iflow.*8090' | grep -v grep | awk '{print $2}'");
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
@@ -113,14 +115,17 @@ public class IFlowProcessManager {
             String line;
             StringBuilder pids = new StringBuilder();
             while ((line = reader.readLine()) != null) {
-                pids.append(line).append(" ");
+                line = line.trim();
+                if (!line.isEmpty()) {
+                    pids.append(line).append(" ");
+                }
             }
 
             process.waitFor();
 
             String pidList = pids.toString().trim();
             if (!pidList.isEmpty()) {
-                // 杀掉进程
+                // 杀掉 iflow 进程
                 String killCommand = "kill -9 " + pidList;
                 log.info("Killing iFlow processes: {}", killCommand);
                 
@@ -131,7 +136,7 @@ public class IFlowProcessManager {
                 
                 log.info("iFlow process stopped");
             } else {
-                log.info("No iFlow process found running on port {}", DEFAULT_PORT);
+                log.info("No iFlow process found");
             }
 
         } catch (Exception e) {
