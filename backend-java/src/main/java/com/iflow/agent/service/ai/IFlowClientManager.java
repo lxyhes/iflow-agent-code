@@ -4,6 +4,7 @@ import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.process.IFlowProcessManager;
 import cn.iflow.sdk.types.config.IFlowOptions;
 import cn.iflow.sdk.types.enums.PermissionMode;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class IFlowClientManager {
 
     @Value("${iflow.sdk.url:ws://localhost:8090/acp}")
@@ -40,19 +42,16 @@ public class IFlowClientManager {
 
     private final AtomicReference<IFlowClient> clientRef = new AtomicReference<>();
     private final AtomicReference<IFlowProcessManager> processManagerRef = new AtomicReference<>();
-
-    public IFlowClientManager() {
-    }
+    private final ApiKeyManager apiKeyManager;
 
     @PostConstruct
     public void init() {
-        // 设置初始 API Key 到环境变量（从系统环境变量读取）
-        updateEnvironmentApiKey(System.getenv("IFLOW_API_KEY"));
         createClient();
     }
 
     /**
      * 更新环境变量中的 API Key
+     * 注意：通过反射修改环境变量不可靠，仅作为备用方案
      */
     private void updateEnvironmentApiKey(String apiKey) {
         if (apiKey != null && !apiKey.isEmpty()) {
@@ -87,8 +86,11 @@ public class IFlowClientManager {
                 }
             }
 
-            // 从环境变量获取 API Key
-            String apiKey = System.getenv("IFLOW_API_KEY");
+            // 直接从 ApiKeyManager 获取 API Key（优先使用动态设置的）
+            String apiKey = apiKeyManager.getApiKey();
+
+            // 同时更新环境变量作为备用
+            updateEnvironmentApiKey(apiKey);
 
             // 构建选项
             IFlowOptions options = IFlowOptions.builder()
@@ -99,7 +101,7 @@ public class IFlowClientManager {
                     .build();
 
             if (apiKey != null && !apiKey.isEmpty()) {
-                log.info("Creating iFlow client with API Key: {}...", apiKey.substring(0, Math.min(8, apiKey.length())));
+                log.info("Creating iFlow client with API Key from ApiKeyManager: {}...", apiKey.substring(0, Math.min(8, apiKey.length())));
             } else {
                 log.info("Creating iFlow client without explicit API Key");
             }

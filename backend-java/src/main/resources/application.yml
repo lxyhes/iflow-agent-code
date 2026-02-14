@@ -92,6 +92,18 @@ iflow:
     timeout-seconds: 120
     # 权限模式: AUTO（SDK 1.0.4-fix 仅支持 AUTO 模式）
     permission-mode: AUTO
+  # OAuth2 登录配置
+  oauth:
+    # iFlow 平台分配的客户端 ID
+    client-id: ${IFLOW_OAUTH_CLIENT_ID:10009311001}
+    # iFlow 平台分配的客户端密钥（如果有）
+    client-secret: ${IFLOW_OAUTH_CLIENT_SECRET:}
+    # 授权端点
+    authorization-uri: https://iflow.cn/oauth
+    # Token 交换端点
+    token-uri: https://iflow.cn/api/oauth/token
+    # 回调地址，必须与 iFlow 平台配置一致
+    redirect-uri: ${IFLOW_OAUTH_REDIRECT_URI:http://localhost:8080/api/iflow/oauth/callback}
 
 # AgentScope Configuration - 面试功能（可选）
 # 如需使用 AgentScope 面试功能，请配置 API key

@@ -40,6 +40,7 @@ import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { WebSocketProvider, useWebSocketContext } from './contexts/WebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import IFlowOAuthCallback from './components/IFlowOAuthCallback';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import useLocalStorage from './hooks/useLocalStorage';
 import { api, authenticatedFetch } from './utils/api';
@@ -64,8 +65,16 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(() => {
+    // 从 localStorage 恢复 settings 的打开状态
+    return localStorage.getItem('showSettings') === 'true';
+  });
   const [settingsInitialTab, setSettingsInitialTab] = useState('tools');
+
+  // 保存 settings 打开状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem('showSettings', showSettings.toString());
+  }, [showSettings]);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useLocalStorage('autoExpandTools', false);
   const [showRawParameters, setShowRawParameters] = useLocalStorage('showRawParameters', false);
@@ -1180,6 +1189,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<AppContent />} />
                       <Route path="/session/:sessionId" element={<AppContent />} />
+                      <Route path="/oauth2callback" element={<IFlowOAuthCallback />} />
                     </Routes>
                   </Router>
                 </ProtectedRoute>

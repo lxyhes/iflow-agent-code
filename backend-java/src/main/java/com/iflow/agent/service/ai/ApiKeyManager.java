@@ -1,19 +1,22 @@
 package com.iflow.agent.service.ai;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * API Key 管理器
  * 支持动态更新 API Key，无需重启服务
+ * 支持持久化 Token，重启后自动加载
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ApiKeyManager {
 
     @Value("${IFLOW_API_KEY:}")
@@ -24,9 +27,17 @@ public class ApiKeyManager {
 
     private final AtomicReference<String> dynamicApiKey = new AtomicReference<>();
     private final ApplicationEventPublisher eventPublisher;
+    private final TokenPersistenceService tokenPersistenceService;
 
-    public ApiKeyManager(ApplicationEventPublisher eventPublisher) {
-        this.eventPublisher = eventPublisher;
+    @PostConstruct
+    public void init() {
+        // 启动时自动加载持久化的 Token
+        String persistedToken = tokenPersistenceService.loadToken();
+        if (persistedToken != null && !persistedToken.isEmpty()) {
+            log.info("Loading persisted API Key from file...");
+            dynamicApiKey.set(persistedToken);
+            log.info("Persisted API Key loaded successfully");
+        }
     }
 
     /**
@@ -61,6 +72,7 @@ public class ApiKeyManager {
     /**
      * 动态设置 API Key
      * 设置后会立即生效，无需重启服务
+     * 同时保存到持久化文件，重启后自动加载
      */
     public void setApiKey(String apiKey) {
         if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -70,7 +82,11 @@ public class ApiKeyManager {
         String trimmed = apiKey.trim();
         String oldKey = dynamicApiKey.get();
         dynamicApiKey.set(trimmed);
-        log.info("API Key updated dynamically. New key starts with: {}...",
+
+        // 保存到持久化文件
+        tokenPersistenceService.saveToken(trimmed);
+
+        log.info("API Key updated dynamically and persisted. New key starts with: {}...",
                 trimmed.substring(0, Math.min(8, trimmed.length())));
 
         // 如果 API Key 发生变化，发布事件通知重新初始化 iFlow 客户端
@@ -99,10 +115,12 @@ public class ApiKeyManager {
     /**
      * 清除动态设置的 API Key
      * 清除后会回退到环境变量或配置文件中的 Key
+     * 同时删除持久化文件
      */
     public void clearDynamicApiKey() {
         dynamicApiKey.set(null);
-        log.info("Dynamic API Key cleared, will use env/config key");
+        tokenPersistenceService.deleteToken();
+        log.info("Dynamic API Key cleared and persisted file deleted, will use env/config key");
     }
 
     /**

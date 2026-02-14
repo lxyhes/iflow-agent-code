@@ -14,6 +14,7 @@ import ProjectTemplateGenerator from './ProjectTemplateGenerator';
 import CICDGenerator from './CICDGenerator';
 import CollaborationPanel from './CollaborationPanel';
 import IFlowBackendSettings from './settings/IFlowBackendSettings';
+import TokenManager from './settings/TokenManager';
 import { authenticatedFetch } from '../utils/api';
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
@@ -51,7 +52,10 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
   const [mcpTestResults, setMcpTestResults] = useState({});
   const [mcpServerTools, setMcpServerTools] = useState({});
   const [mcpToolsLoading, setMcpToolsLoading] = useState({});
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTab] = useState(() => {
+    // 从 localStorage 恢复上次保存的 settings tab
+    return localStorage.getItem('settingsActiveTab') || initialTab;
+  });
   const [jsonValidationError, setJsonValidationError] = useState('');
   const [codeStyleProfile, setCodeStyleProfile] = useState(null);
   const [analyzingStyle, setAnalyzingStyle] = useState(false);
@@ -387,9 +391,15 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
       loadSettings();
       checkClaudeAuthStatus();
       checkCursorAuthStatus();
-      setActiveTab(initialTab);
+      // 不再强制重置为 initialTab，保持用户上次选择的 tab
+      // 只有在首次打开时才使用 initialTab（通过 useState 的初始化逻辑处理）
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen]);
+
+  // 保存当前 settings tab 到 localStorage
+  useEffect(() => {
+    localStorage.setItem('settingsActiveTab', activeTab);
+  }, [activeTab]);
 
   // Persist code editor settings to localStorage
   useEffect(() => {
@@ -2722,6 +2732,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
             {/* API & Tokens Tab */}
             {activeTab === 'api' && (
               <div className="space-y-6 md:space-y-8">
+                <TokenManager />
                 <CredentialsSettings />
               </div>
             )}
@@ -2757,7 +2768,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'tools' }) {
                   <Button
                     onClick={() => {
                       setShowCICDGenerator(true);
-                      setCurrentProjectPath(selectedProject?.path || '');
+                      setCurrentProjectPath(selectedProject?.fullPath || selectedProject?.path || '');
                     }}
                     className="bg-green-600 hover:bg-green-700"
                   >
