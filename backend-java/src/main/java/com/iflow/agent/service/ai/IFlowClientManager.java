@@ -4,6 +4,9 @@ import cn.iflow.sdk.core.IFlowClient;
 import cn.iflow.sdk.process.IFlowProcessManager;
 import cn.iflow.sdk.types.config.IFlowOptions;
 import cn.iflow.sdk.types.enums.PermissionMode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.File;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.Map;
@@ -43,6 +47,7 @@ public class IFlowClientManager {
     private final AtomicReference<IFlowClient> clientRef = new AtomicReference<>();
     private final AtomicReference<IFlowProcessManager> processManagerRef = new AtomicReference<>();
     private final ApiKeyManager apiKeyManager;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
     public void init() {
@@ -71,6 +76,50 @@ public class IFlowClientManager {
     }
 
     /**
+     * 更新 iflow CLI 配置文件中的 API Key
+     * 这是让 API Key 真正生效的关键步骤
+     */
+    private void updateIflowConfigFile(String apiKey) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            return;
+        }
+        
+        try {
+            String homeDir = System.getProperty("user.home");
+            File settingsFile = new File(homeDir, ".iflow/settings.json");
+            
+            if (!settingsFile.exists()) {
+                log.warn("iflow settings file not found: {}", settingsFile.getAbsolutePath());
+                return;
+            }
+            
+            // 读取现有配置
+            JsonNode root = objectMapper.readTree(settingsFile);
+            if (!(root instanceof ObjectNode)) {
+                log.warn("Invalid iflow settings file format");
+                return;
+            }
+            
+            ObjectNode config = (ObjectNode) root;
+            
+            // 更新 API Key
+            config.put("apiKey", apiKey);
+            // 同时更新 searchApiKey（如果存在）
+            if (config.has("searchApiKey")) {
+                config.put("searchApiKey", apiKey);
+            }
+            
+            // 写回文件
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(settingsFile, config);
+            
+            log.info("Updated iflow settings file with new API Key: {}...", 
+                apiKey.substring(0, Math.min(8, apiKey.length())));
+        } catch (Exception e) {
+            log.error("Failed to update iflow config file: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
      * 创建新的 iFlow 客户端
      */
     private void createClient() {
@@ -88,6 +137,9 @@ public class IFlowClientManager {
 
             // 直接从 ApiKeyManager 获取 API Key（优先使用动态设置的）
             String apiKey = apiKeyManager.getApiKey();
+
+            // 更新 iflow 配置文件（确保 CLI 使用正确的 API Key）
+            updateIflowConfigFile(apiKey);
 
             // 同时更新环境变量作为备用
             updateEnvironmentApiKey(apiKey);
@@ -139,13 +191,16 @@ public class IFlowClientManager {
             }
         }
 
-        // 2. 更新环境变量
+        // 2. 更新 iflow 配置文件（这是关键步骤，让新的 API Key 真正生效）
+        updateIflowConfigFile(apiKey);
+
+        // 3. 更新环境变量（作为备用）
         updateEnvironmentApiKey(apiKey);
 
-        // 3. 重新创建客户端（会自动启动新的 iFlow CLI 进程）
+        // 4. 重新创建客户端（会自动启动新的 iFlow CLI 进程）
         createClient();
 
-        // 4. 确保新进程正在运行
+        // 5. 确保新进程正在运行
         IFlowProcessManager newProcessManager = processManagerRef.get();
         if (newProcessManager != null) {
             try {
