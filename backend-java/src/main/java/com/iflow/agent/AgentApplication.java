@@ -17,7 +17,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "com.iflow.agent.domain.database.repository",
     "com.iflow.agent.domain.document.repository",
     "com.iflow.agent.domain.interview.repository",
-    "com.iflow.agent.domain.resume.repository"
+    "com.iflow.agent.domain.resume.repository",
+    "com.iflow.agent.domain.project.repository",
+    "com.iflow.agent.domain.command.repository"
 })
 @EnableAsync
 @EnableScheduling  // 启用定时任务支持
