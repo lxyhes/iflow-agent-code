@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 工作流执行仓储
  */
-@Repository
+@Repository("domainWorkflowExecutionRepository")
 public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecution, String> {
 
     List<WorkflowExecution> findByWorkflowIdOrderByCreatedAtDesc(String workflowId);

@@ -3,6 +3,20 @@ server:
   tomcat:
     basedir: ./tomcat-work
 
+# WebUI 配置
+webui:
+  enabled: true
+  host: 0.0.0.0
+  port: 5173
+  remote-access: true
+  ip-whitelist: []
+  session-timeout: 3600000
+  max-concurrent-sessions: 10
+  https-enabled: false
+  pwa-enabled: true
+  app-name: AI 工作台
+  app-description: 智能开发助手平台
+
 spring:
   autoconfigure:
     exclude:
@@ -29,6 +43,8 @@ spring:
       hibernate:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         format_sql: true
+    repositories:
+      enabled: true
 
   servlet:
     multipart:

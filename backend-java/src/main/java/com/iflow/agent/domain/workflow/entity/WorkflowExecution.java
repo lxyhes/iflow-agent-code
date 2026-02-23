@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * 工作流执行实体
  */
-@Entity
+@Entity(name = "DomainWorkflowExecution")
 @Table(name = "workflow_executions")
 @Data
 @Builder

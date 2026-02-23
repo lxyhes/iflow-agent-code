@@ -5,7 +5,7 @@ import com.iflow.agent.domain.document.repository.DocumentVersionRepository;
 import com.iflow.agent.domain.interview.repository.InterviewSessionRepository;
 import com.iflow.agent.domain.interview.repository.PracticeSessionRepository;
 import com.iflow.agent.domain.resume.repository.ResumeRepository;
-import com.iflow.agent.domain.workflow.repository.WorkflowExecutionRepository;
+import com.iflow.agent.repository.WorkflowExecutionRepository;
 import com.iflow.agent.domain.workflow.repository.WorkflowRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
